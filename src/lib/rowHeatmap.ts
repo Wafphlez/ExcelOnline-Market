@@ -58,8 +58,8 @@ export function marginPercentCellStyle(
     rgb = [...M_CYAN] as [number, number, number]
   }
   return {
-    background: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.52)`,
-    color: 'rgb(15, 23, 42)',
+    background: `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.48)`,
+    color: 'rgb(8, 9, 11)',
   }
 }
 
@@ -92,11 +92,11 @@ export function profitabilityRowBackground(
 
   const score = 0.5 * marginPart + 0.5 * turnPart
 
-  const r0 = 127
-  const g0 = 29
-  const b0 = 29
-  const r1 = 22
-  const g1 = 101
+  const r0 = 112
+  const g0 = 36
+  const b0 = 32
+  const r1 = 28
+  const g1 = 88
   const b1 = 52
   const r = lerp(r0, r1, score)
   const g = lerp(g0, g1, score)

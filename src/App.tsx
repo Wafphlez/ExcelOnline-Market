@@ -15,7 +15,13 @@ import {
   saveFiltersToDevFile,
   writeFiltersToLocalStorage,
 } from './lib/filterPersistence'
-import { applyPreset, clearFilters, PRESETS } from './lib/presets'
+import {
+  applyAllPresets,
+  applyPreset,
+  clearFilters,
+  PRESET_ALL_ID,
+  PRESETS,
+} from './lib/presets'
 import type { MarketRow } from './types/market'
 
 const LS_PRICE_MLN = 'excelMarket_highPriceMln'
@@ -219,6 +225,11 @@ function App() {
     setColumnFilters((prev) => applyPreset(prev, p))
   }, [])
 
+  const onApplyAllPresets = useCallback(() => {
+    setActivePreset(PRESET_ALL_ID)
+    setColumnFilters(applyAllPresets())
+  }, [])
+
   const onResetFilters = useCallback(() => {
     setActivePreset(null)
     setColumnFilters(clearFilters())
@@ -226,42 +237,58 @@ function App() {
 
   const hint = useMemo(
     () => (
-      <p className="text-xs text-eve-muted">
-        <strong className="text-eve-text">Маржа, %</strong> — после broker
+      <p className="text-xs leading-relaxed text-eve-muted">
+        <strong className="text-eve-bright/95">Маржа, %</strong> — после broker
         (buy) и sales tax + broker (sell), к list ask.{' '}
-        <strong className="text-eve-text">Спред, ISK</strong> — ask
-        − bid (без комиссий). <strong className="text-eve-text">Оборот</strong> в файле в
-        млн ISK, в таблице — полные ISK.         Цвет строки: невыгодно (красный) → выгодно (зелёный) по марже (от
-        20%) и обороту. «Средняя в спреде» — полоска bid→ask с центром в
-        0,5. «Выгодность входа» — 0–100 по абсолютным порогам (маржа, оборот,
-        спред); при 0 сделок или 0 оборота балл занижен. Дорогая единица
-        (цена выше порога, млн ISK) — меньше вклад маржи в оценку и бледнее
-        фон маржи/строки.
+        <strong className="text-eve-bright/95">Спред, ISK</strong> — ask
+        − bid (без комиссий). <strong className="text-eve-bright/95">Оборот</strong> в файле в
+        млн ISK, в таблице — полные ISK. Ячейка «Маржа» подсвечивается по величине
+        маржи. «Средняя в спреде» — полоска buy→sell с центром в 0,5. «Выгодность
+        входа» — шкала 0–100 % (полоска в ячейке) по абсолютным порогам (маржа,
+        оборот, спред); при 0 сделок или 0 оборота балл занижен. Дорогая единица
+        (цена выше порога, млн ISK) — меньше вклад маржи в оценку и бледнее фон
+        ячейки маржи.
       </p>
     ),
     []
   )
 
   return (
-    <div className="min-h-screen bg-eve-bg text-eve-text">
+    <div className="min-h-screen eve-ui-root text-eve-text">
       <div className="mx-auto max-w-[1600px] px-4 py-6">
         <header className="mb-6">
-          <h1 className="text-lg font-semibold text-eve-text sm:text-xl">
-            Рынок · выгрузка
+          <div className="eve-chrome-top mb-4 max-w-md" aria-hidden />
+          <h1 className="font-eve text-xl font-bold uppercase tracking-[0.18em] text-eve-bright sm:text-2xl">
+            Рынок — выгрузка
           </h1>
-          <p className="mt-1 text-sm text-eve-muted">
-            Загрузите Excel с рынком (New Eden), настройте фильтры и сортировку
-            по марже, спреду в ISK и обороту.
+          <p className="eve-kicker mt-2 max-w-2xl leading-relaxed">
+            New Eden · Excel с рынком · фильтры и сортировка по марже, спреду в
+            ISK и обороту
           </p>
         </header>
 
-        <ExportBar onLoadBuffer={loadFromBuffer} disabled={loading} />
-
-        <FileDropzone onFile={onFile} disabled={loading} />
+        <div className="eve-panel mb-4 overflow-hidden">
+          <div className="divide-y divide-eve-border/50">
+            <div className="p-3 sm:p-4">
+              <h2 className="eve-section-title mb-3">Локальный Excel</h2>
+              <FileDropzone
+                onFile={onFile}
+                disabled={loading}
+                embedded
+              />
+            </div>
+            <div className="p-3 sm:p-4">
+              <ExportBar
+                onLoadBuffer={loadFromBuffer}
+                disabled={loading}
+              />
+            </div>
+          </div>
+        </div>
 
         {error && (
           <div
-            className="mt-4 rounded border border-eve-danger/60 bg-eve-elevated px-3 py-2 text-sm text-eve-danger"
+            className="eve-panel mt-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
             role="alert"
           >
             {error}
@@ -270,10 +297,10 @@ function App() {
 
         {rows !== null && fileLabel && (
           <>
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-eve-border pb-3">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-eve-accent/20 pb-3">
               <span className="text-sm text-eve-muted">
                 {fileLabel} ·{' '}
-                <span className="tabular-nums text-eve-text">
+                <span className="tabular-nums text-eve-bright">
                   {rows.length} строк
                 </span>
               </span>
@@ -283,10 +310,10 @@ function App() {
                     key={p.id}
                     type="button"
                     onClick={() => onPreset(p.id)}
-                    className={`rounded border px-2 py-1 text-xs ${
+                    className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
                       activePreset === p.id
-                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent'
-                        : 'border-eve-border text-eve-muted hover:border-eve-accent/50 hover:text-eve-text'
+                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                        : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
                     }`}
                   >
                     {p.label}
@@ -294,8 +321,19 @@ function App() {
                 ))}
                 <button
                   type="button"
+                  onClick={onApplyAllPresets}
+                  className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    activePreset === PRESET_ALL_ID
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                      : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+                  }`}
+                >
+                  Применить все
+                </button>
+                <button
+                  type="button"
                   onClick={onResetFilters}
-                  className="rounded border border-eve-border px-2 py-1 text-xs text-eve-muted hover:text-eve-text"
+                  className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted hover:border-eve-muted/50 hover:text-eve-bright"
                 >
                   Сбросить фильтры
                 </button>
@@ -305,14 +343,14 @@ function App() {
               <label className="flex flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:items-center">
                 <span className="max-w-[20rem]">
                   Порог цены 1 ед. (млн ISK): выше — снижается выгодность
-                  (маржа в оценке, цвет строки и ячейки маржи)
+                  (маржа в оценке и цвет ячейки маржи)
                 </span>
                 <input
                   ref={setPriceInputEl}
                   type="number"
                   min={0.1}
                   step={1}
-                  className="w-24 rounded border border-eve-border bg-eve-bg px-2 py-1.5 tabular-nums text-eve-text focus:border-eve-accent focus:outline-none"
+                  className="w-24 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                   value={priceThresholdMln}
                   onChange={(e) => {
                     const n = Number(e.target.value.replace(',', '.'))
@@ -338,7 +376,7 @@ function App() {
                     min={0}
                     max={100}
                     step={0.01}
-                    className="w-20 rounded border border-eve-border bg-eve-bg px-2 py-1 tabular-nums text-eve-text focus:border-eve-accent focus:outline-none"
+                    className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                     value={brokerFeePct}
                     onChange={(e) => {
                       const n = Number(e.target.value.replace(',', '.'))
@@ -362,7 +400,7 @@ function App() {
                     min={0}
                     max={100}
                     step={0.01}
-                    className="w-20 rounded border border-eve-border bg-eve-bg px-2 py-1 tabular-nums text-eve-text focus:border-eve-accent focus:outline-none"
+                    className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                     value={salesTaxPct}
                     onChange={(e) => {
                       const n = Number(e.target.value.replace(',', '.'))
@@ -385,7 +423,7 @@ function App() {
               </div>
             </div>
             <div className="mb-2 mt-1">{hint}</div>
-            <div className="rounded border border-eve-border bg-eve-surface/80 p-2">
+            <div className="eve-panel p-1.5">
               <MarketTable
                 data={rows}
                 columnFilters={columnFilters}
@@ -399,13 +437,14 @@ function App() {
         )}
 
         {rows === null && !error && !loading && (
-          <p className="mt-4 text-center text-sm text-eve-muted">
-            Пока нет данных. Выберите файл выгрузки (например liq_*.xlsx).
+          <p className="mt-4 text-center text-sm text-eve-muted/90">
+            Пока нет данных. Выберите выгрузку (например liq_*.xlsx) или
+            загрузите локальный файл.
           </p>
         )}
 
         {loading && (
-          <p className="mt-4 text-center text-sm text-eve-muted">
+          <p className="mt-4 text-center text-sm font-semibold uppercase tracking-wider text-eve-accent/90">
             Загрузка…
           </p>
         )}

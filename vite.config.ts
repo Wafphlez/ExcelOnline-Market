@@ -1,12 +1,20 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingMessage, ServerResponse, Server } from 'node:http'
 import https from 'node:https'
 import fs from 'node:fs/promises'
 import { URL } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { migrateColumnFiltersRatioToPercent } from './src/lib/filterPercentMigration'
+import {
+  buildEsiLiquidityXlsx,
+  clearEsiDevLogs,
+  getEsiDevLogLines,
+  getEsiExportProgressState,
+  logEsiExportException,
+  requestEsiExportStop,
+} from './src/lib/dev/esiLiquidityExport'
 
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '.')
@@ -16,6 +24,9 @@ const filtersFilePath = path.join(exportsDir, 'filters.json')
 const ALLOWED_DOWNLOAD_URLS = new Set<string>([
   'https://eve.atpstealer.com/logistics/liquidity/exel?region=The%20Forge',
   'https://eve.atpstealer.com/logistics/liquidity/exel?region=Domain',
+  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Heimatar',
+  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Sinq%20Laison',
+  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Metropolis',
 ])
 
 const URL_PREFIX = 'https://eve.atpstealer.com/logistics/liquidity/'
@@ -94,15 +105,53 @@ function httpsGetToBuffer(
   })
 }
 
+function applyDevCors(
+  req: IncomingMessage,
+  res: ServerResponse
+): { handled: true } | { handled: false } {
+  const pathname = (req.url?.split('?')[0] ?? req.url) as string
+  const isDevApi =
+    pathname.startsWith('/__dev/export/') || pathname.startsWith('/__dev/filters/')
+  if (!isDevApi) return { handled: false }
+  const origin = req.headers.origin
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+  }
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    res.setHeader('Access-Control-Max-Age', '86400')
+    res.statusCode = 204
+    res.end()
+    return { handled: true }
+  }
+  return { handled: false }
+}
+
+/** Долгий ESI-экспорт (минуты) — не обрывать сокет по умолчанию (Node 20: requestTimeout 300s). */
+function extendServerTimeoutsForEsiExport(httpServer: Server | null | undefined): void {
+  if (!httpServer) return
+  httpServer.setTimeout(45 * 60 * 1000)
+  const s = httpServer as Server & { requestTimeout?: number; headersTimeout?: number }
+  if (typeof s.requestTimeout === 'number') s.requestTimeout = 0
+  if (typeof s.headersTimeout === 'number') s.headersTimeout = 0
+}
+
 function devExportPlugin(): Plugin {
   return {
     name: 'dev-export-exports',
     configureServer(server) {
       void fs.mkdir(exportsDir, { recursive: true })
+      extendServerTimeoutsForEsiExport(server.httpServer)
       server.middlewares.use(
         (req: IncomingMessage, res: ServerResponse, next: () => void) => {
           if (!req.url) return next()
           const pathname = (req.url.split('?')[0] ?? req.url) as string
+          const opt = applyDevCors(req, res)
+          if (opt.handled) return
           void (async () => {
             if (req.method === 'GET' && pathname === '/__dev/export/list') {
               try {
@@ -128,6 +177,41 @@ function devExportPlugin(): Plugin {
                 res.end(
                   JSON.stringify({
                     error: e instanceof Error ? e.message : 'list failed',
+                  })
+                )
+              }
+              return
+            }
+
+            if (req.method === 'POST' && pathname === '/__dev/export/esi-stop') {
+              try {
+                requestEsiExportStop()
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(JSON.stringify({ ok: true }))
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'esi stop failed',
+                  })
+                )
+              }
+              return
+            }
+
+            if (req.method === 'GET' && pathname === '/__dev/export/esi-logs') {
+              try {
+                const { lines } = getEsiDevLogLines()
+                const progress = getEsiExportProgressState()
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(JSON.stringify({ lines, progress }))
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'esi logs failed',
                   })
                 )
               }
@@ -229,6 +313,126 @@ function devExportPlugin(): Plugin {
                 )
               }
               return
+            }
+
+            if (req.method === 'POST' && pathname === '/__dev/export/esi-liquidity') {
+              const esiPostStart = Date.now()
+              type EsiBody = {
+                regionId?: number
+                maxTypes?: number
+                maxOrderPages?: number
+                typeConcurrency?: number
+                fileName?: string
+              }
+              let raw: string
+              try {
+                raw = (await readBody(req)).toString('utf8')
+              } catch (e) {
+                clearEsiDevLogs()
+                logEsiExportException('readBody', e)
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    error:
+                      e instanceof Error
+                        ? e.message
+                        : 'не удалось прочитать тело запроса',
+                  })
+                )
+              }
+              let j: EsiBody
+              try {
+                j = JSON.parse(raw) as EsiBody
+              } catch (e) {
+                clearEsiDevLogs()
+                logEsiExportException('JSON тела', e)
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    error: 'неверный JSON в теле POST (пусто или битая строка)',
+                  })
+                )
+              }
+              const rid = j.regionId
+              if (
+                typeof rid !== 'number' ||
+                !Number.isInteger(rid) ||
+                rid <= 0 ||
+                rid > 99_999_999
+              ) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({ error: 'regionId: positive integer required' })
+                )
+              }
+              clearEsiDevLogs()
+              console.log(
+                `[ESI export] dev сервер: POST /esi-liquidity regionId=${rid} — старт`
+              )
+              try {
+                const { buffer, rowCount, partial } = await buildEsiLiquidityXlsx(rid, {
+                  maxTypes:
+                    typeof j.maxTypes === 'number' && j.maxTypes > 0
+                      ? Math.min(200, j.maxTypes)
+                      : undefined,
+                  maxOrderPages:
+                    typeof j.maxOrderPages === 'number' && j.maxOrderPages > 0
+                      ? Math.min(200, j.maxOrderPages)
+                      : undefined,
+                  typeConcurrency:
+                    typeof j.typeConcurrency === 'number' && j.typeConcurrency > 0
+                      ? Math.min(8, j.typeConcurrency)
+                      : undefined,
+                })
+                const baseName =
+                  typeof j.fileName === 'string' &&
+                  /^[a-zA-Z0-9._-]+\.xlsx$/.test(j.fileName)
+                    ? j.fileName
+                    : `liquidity-esi-${rid}.xlsx`
+                if (!isSafeFileName(baseName)) {
+                  res.statusCode = 400
+                  return res.end('bad filename')
+                }
+                const filePath = path.join(exportsDir, baseName)
+                if (!isUnderExportsDir(filePath)) {
+                  res.statusCode = 400
+                  return res.end('bad path')
+                }
+                await fs.mkdir(exportsDir, { recursive: true })
+                await fs.writeFile(filePath, buffer)
+                const totalMs = Date.now() - esiPostStart
+                console.log(
+                  `[ESI export] dev сервер: готово ${baseName} (${rowCount} строк, ${buffer.length} B${partial ? ', частично' : ''}) за ${totalMs} ms`
+                )
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    ok: true,
+                    fileName: baseName,
+                    bytes: buffer.length,
+                    rowCount,
+                    partial,
+                  })
+                )
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : 'esi export failed'
+                const ms = Date.now() - esiPostStart
+                logEsiExportException('сборка ESI / запись файла', e)
+                console.error(
+                  `[ESI export] dev сервер: POST /esi-liquidity — ошибка за ${ms} ms:`,
+                  e
+                )
+                res.statusCode = 502
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    error: msg,
+                  })
+                )
+              }
             }
 
             if (req.method === 'POST' && pathname === '/__dev/export/download') {

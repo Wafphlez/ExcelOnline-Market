@@ -10,8 +10,44 @@ body,
 }
 
 body {
-  @apply bg-eve-bg font-sans antialiased text-eve-text;
-  font-family: 'Inter', system-ui, 'Segoe UI', sans-serif;
+  @apply font-sans antialiased text-eve-text;
+  font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+@layer components {
+  /**
+   * Фон «кабина корабля»: лёгкое тёплое свечение сверху + глубокий низ
+   */
+  .eve-ui-root {
+    background:
+      radial-gradient(ellipse 90% 55% at 50% 0%, rgba(184, 150, 61, 0.09), transparent 60%),
+      linear-gradient(180deg, #0a0b10 0%, #040506 100%);
+  }
+
+  /**
+   * Панель в стиле окон/инвентаря: тёмный металл + тонкое внутреннее «стекло»
+   */
+  .eve-panel {
+    @apply rounded border border-eve-border/90 bg-eve-surface/95 shadow-eve-inset;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.55),
+      0 4px 20px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .eve-chrome-top {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-eve-accent/50 to-transparent;
+  }
+
+  .eve-section-title {
+    @apply font-eve text-[11px] font-semibold uppercase tracking-[0.14em] text-eve-gold/90;
+  }
+
+  .eve-kicker {
+    @apply font-eve text-[10px] font-semibold uppercase tracking-[0.2em] text-eve-muted/90;
+  }
 }
 
 @layer utilities {

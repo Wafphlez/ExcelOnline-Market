@@ -1,6 +1,6 @@
 import type { ColumnFiltersState } from '@tanstack/react-table'
 import { migrateColumnFiltersRatioToPercent } from './filterPercentMigration'
-import { defaultBaseFilters, PRESETS } from './presets'
+import { defaultBaseFilters, PRESET_ALL_ID, PRESETS } from './presets'
 
 const LS_FILTERS = 'excelMarket_columnFilters_v2'
 const LS_FILTERS_LEGACY = 'excelMarket_columnFilters'
@@ -19,6 +19,7 @@ export const isDevFiltersFileApi = (): boolean => import.meta.env.DEV
 
 function sanitizePresetId(id: string | null | undefined): string | null {
   if (id == null || id === '') return null
+  if (id === PRESET_ALL_ID) return id
   return PRESETS.some((p) => p.id === id) ? id : null
 }
 

@@ -37,7 +37,7 @@ export function formatInteger(n: number | null | undefined): string {
 
 /**
  * min/max в фильтре для маржи и «средняя в спреде» задаются в **процентах**
- * (маржа: 5 = 5 %, спред: 0…100 = позиция bid…ask). Остальные колонки — целые.
+ * (маржа: 5 = 5 %, спред: 0…100 = позиция buy…sell). Остальные колонки — целые.
  */
 export function filterColumnUsesDecimals(columnId: ColumnId): boolean {
   return columnId === 'margin' // ввод с десятичной частью, % (5,5)

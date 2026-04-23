@@ -15,7 +15,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Store,
+  ExternalLink,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { MarketRow } from '../types/market'
@@ -26,11 +26,9 @@ import {
   textFilter,
   type NumberRange,
 } from '../lib/filterFns'
-import {
-  marginPercentCellStyle,
-  profitabilityRowBackground,
-} from '../lib/rowHeatmap'
+import { marginPercentCellStyle } from '../lib/rowHeatmap'
 import { NumberRangeFilterInputs } from './NumberRangeFilterInputs'
+import { EntryScoreFillBar } from './EntryScoreFillBar'
 import { SpreadPositionBar } from './SpreadPositionBar'
 import { marketRowCopyKey } from '../lib/rowCopyKey'
 import {
@@ -126,11 +124,6 @@ export function MarketTable({
     { id: 'entryScore', desc: true },
   ])
 
-  const maxDayTurnover = useMemo(() => {
-    if (!data.length) return 1
-    return Math.max(1, ...data.map((d) => d.dayTurnover))
-  }, [data])
-
   const columns = useMemo<ColumnDef<MarketRow>[]>(
     () =>
       COLUMN_DEFS.map((def) => {
@@ -148,8 +141,8 @@ export function MarketTable({
                     className="inline-flex items-center justify-center"
                     title={def.description}
                   >
-                    <Store
-                      className="h-4 w-4 text-eve-accent"
+                    <ExternalLink
+                      className="h-4 w-4 text-eve-gold"
                       aria-hidden
                     />
                     <span className="sr-only">{def.short} — {def.description}</span>
@@ -188,6 +181,13 @@ export function MarketTable({
                 </span>
               )
             }
+            if (id === 'entryScore') {
+              return (
+                <EntryScoreFillBar
+                  score={typeof v === 'number' ? v : null}
+                />
+              )
+            }
             if (id === 'typeId') {
               const tid = typeof v === 'number' ? v : null
               if (tid === null || !Number.isFinite(tid) || tid <= 0) {
@@ -203,11 +203,11 @@ export function MarketTable({
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex rounded p-0.5 text-eve-accent transition-colors hover:text-eve-accent-hover focus:outline-none focus:ring-1 focus:ring-eve-accent"
+                  className="inline-flex rounded p-0.5 text-eve-cyan/90 transition-colors hover:text-eve-bright focus:outline-none focus:ring-1 focus:ring-eve-accent/60"
                   title={`EVE Tycoon: type ${Math.floor(tid)}`}
                   aria-label={`Открыть type ${Math.floor(tid)} на EVE Tycoon`}
                 >
-                  <Store className="h-4 w-4" aria-hidden />
+                  <ExternalLink className="h-4 w-4" aria-hidden />
                 </a>
               )
             }
@@ -221,8 +221,8 @@ export function MarketTable({
                   type="button"
                   className={
                     copied
-                      ? 'line-clamp-2 max-w-full text-left text-xs font-medium text-violet-300 transition-colors hover:text-violet-200 hover:underline'
-                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-slate-100 transition-colors hover:text-eve-accent hover:underline'
+                      ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright transition-colors hover:underline'
+                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-eve-bright/95 transition-colors hover:text-eve-accent hover:underline'
                   }
                   title="Клик — копировать название"
                   onClick={async (e) => {
@@ -259,9 +259,9 @@ export function MarketTable({
   })
 
   return (
-    <div className="w-full overflow-x-auto rounded border border-eve-border bg-eve-surface">
+    <div className="w-full overflow-x-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
       <table className="w-full min-w-[1140px] border-collapse text-left text-sm text-eve-text">
-        <thead className="bg-eve-elevated text-xs uppercase tracking-wide text-eve-muted">
+        <thead className="bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => {
@@ -275,8 +275,8 @@ export function MarketTable({
                     key={h.id}
                     className={
                       isMarketCol
-                        ? 'sticky top-0 z-10 w-10 min-w-10 max-w-10 border-b border-eve-border bg-eve-elevated px-0.5 py-2 text-center align-bottom font-medium normal-case'
-                        : 'sticky top-0 z-10 max-w-[14rem] border-b border-eve-border bg-eve-elevated px-2 py-2 align-bottom font-medium normal-case'
+                        ? 'sticky top-0 z-10 w-10 min-w-10 max-w-10 border-b border-eve-accent/25 bg-eve-elevated px-0.5 py-2 text-center align-bottom font-semibold normal-case'
+                        : 'sticky top-0 z-10 max-w-[14rem] border-b border-eve-accent/25 bg-eve-elevated px-2 py-2 align-bottom font-semibold normal-case'
                     }
                   >
                     <div
@@ -291,8 +291,8 @@ export function MarketTable({
                           type="button"
                           className={
                             isMarketCol
-                              ? 'inline-flex items-center justify-center gap-0.5 text-eve-text hover:text-eve-accent'
-                              : 'flex min-w-0 flex-1 items-center gap-1 text-left text-eve-text hover:text-eve-accent'
+                              ? 'inline-flex items-center justify-center gap-0.5 text-eve-bright/95 hover:text-eve-gold-bright'
+                              : 'flex min-w-0 flex-1 items-center gap-1 text-left text-eve-bright/90 hover:text-eve-gold-bright'
                           }
                           onClick={h.column.getToggleSortingHandler()}
                         >
@@ -307,7 +307,7 @@ export function MarketTable({
                           ) : h.column.getIsSorted() === 'desc' ? (
                             <ArrowDown className="h-3.5 w-3.5 shrink-0 text-eve-accent" />
                           ) : (
-                            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+                            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-eve-muted/50" />
                           )}
                         </button>
                       ) : (
@@ -344,7 +344,7 @@ export function MarketTable({
                     className="border-b border-eve-border p-1"
                   >
                     <input
-                      className="w-full min-w-0 rounded border border-eve-border bg-eve-bg px-1.5 py-1 text-xs text-eve-text placeholder:text-eve-muted/70 focus:border-eve-accent focus:outline-none"
+                      className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1.5 py-1 text-xs text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
                       placeholder="Содержит…"
                       value={getTextValue(col.getFilterValue())}
                       onChange={(e) =>
@@ -363,8 +363,8 @@ export function MarketTable({
                     key={col.id}
                     className={
                       filterThNarrow
-                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border p-0.5'
-                        : 'border-b border-eve-border p-1'
+                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/60 bg-eve-elevated/30 p-0.5'
+                        : 'border-b border-eve-border/60 bg-eve-elevated/30 p-1'
                     }
                   >
                     <NumberRangeFilterInputs
@@ -386,37 +386,28 @@ export function MarketTable({
         <tbody>
           {table.getRowModel().rows.length === 0 ? (
             <tr>
-              <td
+                <td
                 colSpan={columns.length}
-                className="p-6 text-center text-eve-muted"
+                className="p-6 text-center text-eve-muted/90"
               >
                 Ни одна строка не подходит под фильтры
               </td>
             </tr>
           ) : (
             table.getRowModel().rows.map((row) => {
-              const o = row.original
-              const rowBg = profitabilityRowBackground(
-                o.margin,
-                o.dayTurnover,
-                maxDayTurnover,
-                o.price,
-                highPriceThresholdIsk
-              )
               return (
-              <tr
-                key={row.id}
-                style={{ background: rowBg }}
-              >
+              <tr key={row.id}>
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
                     className={
                       cell.column.id === 'typeId'
-                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/60 px-0.5 py-1.5 text-center text-xs text-slate-100'
+                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/50 px-0.5 py-1.5 text-center text-xs text-eve-bright/90'
                         : cell.column.id === 'name'
-                          ? 'max-w-[18rem] border-b border-eve-border/60 px-2 py-1.5 text-xs text-slate-100'
-                          : 'border-b border-eve-border/60 px-2 py-1.5 font-tabular-nums text-xs text-slate-100'
+                          ? 'max-w-[18rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-eve-bright/95'
+                          : cell.column.id === 'entryScore'
+                            ? 'min-w-[8rem] max-w-[10.5rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-eve-bright/90'
+                            : 'border-b border-eve-border/50 px-2 py-1.5 font-tabular-nums text-xs text-eve-bright/90'
                     }
                   >
                     {flexRender(

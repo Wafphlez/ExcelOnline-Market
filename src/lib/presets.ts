@@ -17,7 +17,7 @@ export function defaultBaseFilters(): ColumnFiltersState {
     { id: 'dayVolume', value: { min: 20, max: null } },
     { id: 'margin', value: { min: 5, max: null } }, // % 
     { id: 'dayTurnover', value: { min: 1_000_000_000, max: null } },
-    { id: 'buyToSellRatio', value: { min: 5, max: 95 } }, // % 0= bid … 100 = ask
+    { id: 'buyToSellRatio', value: { min: 5, max: 95 } }, // % 0 = buy … 100 = sell
   ]
 }
 
@@ -52,6 +52,20 @@ export function applyPreset(
     }
   }
   return Array.from(byId.values())
+}
+
+/** Все отдельные пресеты подряд = совокупные условия (как `defaultBaseFilters`). */
+export const PRESET_ALL_ID = 'all' as const
+
+/**
+ * Применить все PRESETS к пустой таблице фильтров (итог совпадает с `defaultBaseFilters()`).
+ */
+export function applyAllPresets(): ColumnFiltersState {
+  let next: ColumnFiltersState = []
+  for (const p of PRESETS) {
+    next = applyPreset(next, p)
+  }
+  return next
 }
 
 export const PRESETS: FilterPreset[] = [

@@ -123,7 +123,7 @@ export function NumberRangeFilterInputs({
         ref={setMinInputEl}
         type="text"
         inputMode="decimal"
-        className="w-full min-w-0 rounded border border-eve-border bg-eve-bg px-1 py-0.5 text-xs tabular-nums text-eve-text placeholder:text-eve-muted/70 focus:border-eve-accent focus:outline-none"
+        className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
         placeholder={
           isMargin ? '5' : isSpreadAxis ? '0' : 'min'
         }
@@ -148,7 +148,7 @@ export function NumberRangeFilterInputs({
         ref={setMaxInputEl}
         type="text"
         inputMode="decimal"
-        className="w-full min-w-0 rounded border border-eve-border bg-eve-bg px-1 py-0.5 text-xs tabular-nums text-eve-text placeholder:text-eve-muted/70 focus:border-eve-accent focus:outline-none"
+        className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
         placeholder={
           isMargin ? '20' : isSpreadAxis ? '100' : 'max'
         }
