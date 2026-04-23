@@ -48,6 +48,33 @@ body {
   .eve-kicker {
     @apply font-eve text-[10px] font-semibold uppercase tracking-[0.2em] text-eve-muted/90;
   }
+
+  /**
+   * Заголовок: градиентное «золото» + кромочное свечение (без крупных анимаций).
+   */
+  .eve-title-gold-shine {
+    --eve-gold-shine: linear-gradient(
+      160deg,
+      #fff9e6 0%,
+      #f0e0b8 12%,
+      #e8d4a0 28%,
+      #b8963d 48%,
+      #e6cf88 58%,
+      #c4a23a 78%,
+      #7a6220 100%
+    );
+    background-image: var(--eve-gold-shine);
+    background-size: 120% 140%;
+    background-position: 30% 20%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    /* контур: светлая кайма + тёплое свечение + глубина */
+    filter: drop-shadow(0 0 14px rgba(232, 212, 160, 0.38))
+      drop-shadow(0 0 32px rgba(184, 150, 61, 0.22)) drop-shadow(0 1px 0 rgba(255, 250, 235, 0.35))
+      drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  }
 }
 
 @layer utilities {

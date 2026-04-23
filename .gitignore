@@ -7,3 +7,6 @@ dist
 exports/*
 !exports/.gitkeep
 !exports/filters.json
+
+# Локальный кэш имён типов ESI (dev) — data/esi-type-cache.json
+data/esi-type-cache.json

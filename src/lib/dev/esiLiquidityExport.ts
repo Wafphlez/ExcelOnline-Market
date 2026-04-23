@@ -2,7 +2,9 @@
  * Сборка ликвидности для Excel по ESI (только Node / Vite dev middleware).
  * Ордера → лучший bid/ask; история → оборот/объём за ~30 дней.
  */
+import * as fs from 'node:fs/promises'
 import * as https from 'node:https'
+import * as path from 'node:path'
 import * as XLSX from 'xlsx'
 import {
   ESI_EXPORT_PROGRESS_IDLE,
@@ -86,6 +88,116 @@ export function logEsiExportException(context: string, err: unknown): void {
       const t = line.trim()
       if (t) esiDevLog(`  ${t}`)
     }
+  }
+}
+
+/* ---------- Локальный кэш GET /universe/types/{id}/ (имя не меняется, тянуть ESI смысла нет) ---------- */
+
+const TYPE_CACHE_FILE = 'esi-type-cache.json'
+const TYPE_CACHE_VERSION = 1
+type EsiTypeCacheFile = { v: number; types: Record<string, { name: string }> }
+
+const typeNameById = new Map<number, string>()
+let typeNameCacheLoaded = false
+let typeNameCacheDirty = false
+const typeNameFetchInflight = new Map<number, Promise<string | undefined>>()
+
+function typeCachePath(): string {
+  return path.join(process.cwd(), 'data', TYPE_CACHE_FILE)
+}
+
+async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
+  if (typeNameCacheLoaded) return
+  typeNameCacheLoaded = true
+  try {
+    const raw = await fs.readFile(typeCachePath(), 'utf8')
+    const j = JSON.parse(raw) as EsiTypeCacheFile
+    if (j && j.types && typeof j.types === 'object') {
+      for (const [k, v] of Object.entries(j.types)) {
+        const id = Number(k)
+        if (Number.isInteger(id) && v && typeof v.name === 'string' && v.name) {
+          typeNameById.set(id, v.name)
+        }
+      }
+    }
+    esiDevLog(
+      `кэш type names: из ${path.join('data', TYPE_CACHE_FILE)} — ${typeNameById.size} id`
+    )
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code
+    if (code !== 'ENOENT') {
+      esiDevLog(
+        `кэш type names: чтение пропущено (${e instanceof Error ? e.message : String(e)})`
+      )
+    }
+  }
+}
+
+async function persistTypeNameCacheToDisk(): Promise<void> {
+  if (!typeNameCacheDirty) return
+  const types: Record<string, { name: string }> = {}
+  for (const [id, name] of typeNameById) {
+    if (name) types[String(id)] = { name }
+  }
+  const out: EsiTypeCacheFile = { v: TYPE_CACHE_VERSION, types }
+  const dir = path.join(process.cwd(), 'data')
+  try {
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(
+      typeCachePath(),
+      `${JSON.stringify(out, null, 2)}\n`,
+      'utf8'
+    )
+    typeNameCacheDirty = false
+    esiDevLog(
+      `кэш type names: записан ${typeCachePath()} (${Object.keys(types).length} id)`
+    )
+  } catch (e) {
+    esiDevLog(
+      `кэш type names: не удалось записать (${
+        e instanceof Error ? e.message : String(e)
+      })`
+    )
+  }
+}
+
+/**
+ * Имя типа с ESI — один раз на `type_id`, далее из `data/esi-type-cache.json`.
+ * Параллельные батчи с одним id не дублируют HTTP.
+ */
+async function getEsiTypeName(typeId: number): Promise<string | undefined> {
+  await loadTypeNameCacheFromDiskIfNeeded()
+  const mem = typeNameById.get(typeId)
+  if (mem) return mem
+  const wait = typeNameFetchInflight.get(typeId)
+  if (wait) return wait
+  const p = (async () => {
+    const res = await esiFetch<{ name?: string }>(
+      `/universe/types/${typeId}/`,
+      { language: 'en' }
+    ).catch(() => ({} as { name?: string }))
+    const n = res.name
+    if (n) {
+      typeNameById.set(typeId, n)
+      typeNameCacheDirty = true
+    }
+    return n
+  })()
+  typeNameFetchInflight.set(typeId, p)
+  p.finally(() => {
+    typeNameFetchInflight.delete(typeId)
+  }).catch(() => {
+    /* отклонения уже у вызывающих */
+  })
+  return p
+}
+
+/** Имена типов не в очереди ордеров — качаем заранее, пока ещё идут sell/buy. */
+function prefetchEsiTypeNamesFromOrderRows(
+  rows: readonly { type_id: number }[]
+): void {
+  for (const o of rows) {
+    void getEsiTypeName(o.type_id).catch(() => undefined)
   }
 }
 
@@ -283,6 +395,21 @@ function liquidityFromHistory(
 const UNBOUNDED_ORDER_PAGES_SAFETY = 10_000
 
 /**
+ * Очередь только для GET `/markets/.../orders/`. GET `/universe/types/{id}/` сюда
+ * не входит и может идти параллельно с sell/buy (в т.ч. prefetch из страниц ордеров).
+ */
+let orderEsiRequestChain: Promise<unknown> = Promise.resolve()
+
+function runOrderEsiFetch<T>(fn: () => Promise<T>): Promise<T> {
+  const p = orderEsiRequestChain.then(() => fn()) as Promise<T>
+  orderEsiRequestChain = p.then(
+    () => undefined,
+    () => undefined
+  )
+  return p
+}
+
+/**
  * Разбор ответа ESI на страницу ордеров: массив, пусто или `{"error":"Requested page does not exist!"}`.
  */
 function parseEsiOrderPage(
@@ -346,10 +473,12 @@ async function fetchOrdersForSide(
       return all
     }
     onPage(page)
-    const data = await esiFetch<unknown>(`/markets/${regionId}/orders/`, {
-      order_type: side,
-      page: String(page),
-    })
+    const data = await runOrderEsiFetch(() =>
+      esiFetch<unknown>(`/markets/${regionId}/orders/`, {
+        order_type: side,
+        page: String(page),
+      })
+    )
     const { rows, endOfSide } = parseEsiOrderPage(
       data,
       page,
@@ -358,6 +487,7 @@ async function fetchOrdersForSide(
     )
     if (rows.length > 0) {
       all.push(...rows)
+      prefetchEsiTypeNamesFromOrderRows(rows)
       esiDevLog(
         `ордера region=${regionId} ${side} page=${page} — +${rows.length} (всего по ${side} ${all.length})`
       )
@@ -376,14 +506,16 @@ async function fetchOrdersForSide(
 }
 
 /**
- * Собирает ордера: sell + buy **параллельно** (два независимых `Promise.all`).
- * Не используем `order_type=all` — только отдельные sell/buy.
+ * Собирает ордера: sell и buy в `Promise.all`, запросы страниц к
+ * `/markets/.../orders/` **чередуются** (`runOrderEsiFetch`). Имена типов
+ * (`/universe/types/`) из ордеров префетчатся параллельно и не делят эту очередь.
  */
 export async function fetchAllMarketOrders(
   regionId: number,
   maxPages: number,
   orderPagesUntilExhausted: boolean
 ): Promise<EsiMarketOrder[]> {
+  orderEsiRequestChain = Promise.resolve()
   esiProgress.phase = 'orders'
   esiProgress.unboundedOrderPages = orderPagesUntilExhausted
   esiProgress.maxOrderPages = orderPagesUntilExhausted ? 0 : maxPages
@@ -460,16 +592,14 @@ async function buildOneLiquidityRow(
 
   let name = `Type ${typeId}`
 
-  const [typeRes, hist] = await Promise.all([
-    esiFetch<{ name?: string }>(`/universe/types/${typeId}/`, { language: 'en' }).catch(
-      () => ({}) as { name?: string }
-    ),
+  const [typeName, hist] = await Promise.all([
+    getEsiTypeName(typeId),
     esiFetch<EsiHistoryDay[]>(`/markets/${regionId}/history/`, {
       type_id: String(typeId),
     }).catch(() => [] as EsiHistoryDay[]),
   ])
-  if (typeRes.name) {
-    name = typeRes.name
+  if (typeName) {
+    name = typeName
   }
   if (!Array.isArray(hist) || hist.length === 0) {
     return null
@@ -499,11 +629,12 @@ export async function buildLiquidityRows(
   regionId: number,
   opts: Partial<EsiLiquidityExportOptions> = {}
 ): Promise<BuildLiquidityRowsResult> {
+  try {
   const o = mergeEsiOpts(opts)
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const tAll = Date.now()
   esiDevLog(
-    `строки ликвидности: region=${regionId}, orderPagesUntilExhausted=${o.orderPagesUntilExhausted}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}, typeConcurrency=${o.typeConcurrency}, historyDelayMs=${o.historyDelayMs}; ордера sell|buy — параллельно, типы — батчами`
+    `строки ликвидности: region=${regionId}, orderPagesUntilExhausted=${o.orderPagesUntilExhausted}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}, typeConcurrency=${o.typeConcurrency}, historyDelayMs=${o.historyDelayMs}; ордера sell|buy — параллельно, типы — батчами; имена типов — кэш data/${TYPE_CACHE_FILE}`
   )
 
   const orders = await fetchAllMarketOrders(
@@ -591,6 +722,9 @@ export async function buildLiquidityRows(
   )
   esiProgress = { ...ESI_EXPORT_PROGRESS_IDLE }
   return { rows, stoppedEarly: stoppedInTypes }
+  } finally {
+    await persistTypeNameCacheToDisk()
+  }
 }
 
 /**

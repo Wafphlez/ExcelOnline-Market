@@ -22,6 +22,13 @@ import {
   PRESET_ALL_ID,
   PRESETS,
 } from './lib/presets'
+import {
+  getExportRegionLabel,
+  LAST_EXPORT_REGION_EVENT,
+  LS_LAST_EXPORT_REGION_ID,
+  readLastExportRegionId,
+  type LastExportRegionDetail,
+} from './lib/lastExportRegionStorage'
 import type { MarketRow } from './types/market'
 
 const LS_PRICE_MLN = 'excelMarket_highPriceMln'
@@ -172,6 +179,78 @@ function App() {
     })
   }, [fileRows, highPriceThresholdIsk, brokerFeePct, salesTaxPct])
 
+  const [tickerRegionId, setTickerRegionId] = useState(() =>
+    readLastExportRegionId()
+  )
+  useEffect(() => {
+    const onCustom = (e: Event) => {
+      const id = (e as CustomEvent<LastExportRegionDetail>).detail?.id
+      if (id) setTickerRegionId(id)
+    }
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === LS_LAST_EXPORT_REGION_ID) {
+        setTickerRegionId(readLastExportRegionId())
+      }
+    }
+    window.addEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
+
+  const regionTickerUpper = useMemo(
+    () => getExportRegionLabel(tickerRegionId).toUpperCase(),
+    [tickerRegionId]
+  )
+
+  const { tableTicker, tableTitle } = useMemo(() => {
+    if (loading) {
+      return { tableTicker: '…', tableTitle: 'Идёт загрузка или разбор файла' }
+    }
+    if (fileRows === null) {
+      return { tableTicker: '—', tableTitle: 'Таблица: файл не загружен' }
+    }
+    if (fileRows.length === 0) {
+      return { tableTicker: '0', tableTitle: 'Таблица: 0 строк' }
+    }
+    return {
+      tableTicker: String(fileRows.length),
+      tableTitle: `Строк в таблице: ${fileRows.length}`,
+    }
+  }, [loading, fileRows])
+
+  const priceMlnForTicker = useMemo(
+    () =>
+      priceThresholdMln.toLocaleString('ru-RU', {
+        maximumFractionDigits: 1,
+        minimumFractionDigits: 0,
+      }),
+    [priceThresholdMln]
+  )
+
+  const feeTicker = useMemo(
+    () =>
+      `${brokerFeePct.toLocaleString('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}%·${salesTaxPct.toLocaleString('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}%`,
+    [brokerFeePct, salesTaxPct]
+  )
+
+  const tickerScreenReader = useMemo(
+    () =>
+      `Excel Online Market. ${tableTitle}. Регион ESI: ${getExportRegionLabel(
+        tickerRegionId
+      )}. Порог дорогой единицы больше ${priceMlnForTicker} млн ISK. Broker ${brokerFeePct}%, налог ${salesTaxPct}%. ` +
+        'Фильтры и сортировка по марже, спреду в ISK и обороту.',
+    [
+      tableTitle,
+      tickerRegionId,
+      priceMlnForTicker,
+      brokerFeePct,
+      salesTaxPct,
+    ]
+  )
+
   const onNameCopied = useCallback((key: string) => {
     setCopiedNameKeys((prev) => new Set([...prev, key]))
   }, [])
@@ -247,15 +326,118 @@ function App() {
   return (
     <div className="min-h-screen eve-ui-root text-eve-text">
       <div className="mx-auto max-w-[1600px] px-4 py-6">
-        <header className="mb-6">
-          <div className="eve-chrome-top mb-4 max-w-md" aria-hidden />
-          <h1 className="font-eve text-xl font-bold uppercase tracking-[0.18em] text-eve-bright sm:text-2xl">
-            Рынок — выгрузка
+        <header className="mb-6 text-center">
+          <div
+            className="eve-chrome-top mb-4 mx-auto max-w-md"
+            aria-hidden
+          />
+          <h1 className="font-eve leading-none">
+            <span className="inline-grid w-max min-w-0 max-w-full justify-items-stretch">
+              <span className="text-left text-3xl font-bold uppercase tracking-[0.12em] sm:text-4xl sm:tracking-[0.14em]">
+                <span className="eve-title-gold-shine">Excel Online</span>
+              </span>
+              <div className="mx-auto mt-0.5 w-[calc(100%-20px)] min-w-0 max-w-full sm:mt-1">
+                <span className="sr-only">Market</span>
+                <div
+                  className="flex w-full min-w-0 items-baseline justify-between text-sm font-bold uppercase text-eve-bright/95 [text-shadow:0_0_12px_rgba(236,238,242,0.08)] sm:text-base"
+                  aria-hidden="true"
+                >
+                  {'Market'.split('').map((ch, i) => (
+                    <span key={i} className="inline-block leading-none">
+                      {ch}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </span>
           </h1>
-          <p className="eve-kicker mt-2 max-w-2xl leading-relaxed">
-            New Eden · Excel с рынком · фильтры и сортировка по марже, спреду в
-            ISK и обороту
-          </p>
+          <p className="sr-only">{tickerScreenReader}</p>
+          <div
+            className="relative mt-3 mx-auto w-full max-w-4xl overflow-hidden rounded-sm border border-eve-border/50 bg-eve-bg/55 shadow-eve-inset [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(42,49,66,0.12)_3px,transparent_4px)]"
+            aria-hidden
+          >
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-eve-cyan/75 via-eve-accent/40 to-eve-cyan/50" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 bg-gradient-to-b from-eve-cyan/30 via-eve-accent/25 to-eve-cyan/30 opacity-40" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-eve-cyan/30 via-eve-accent/55 to-eve-cyan/30" />
+            <div className="overflow-x-auto overscroll-x-contain">
+              <p className="font-eve flex min-h-[2.5rem] min-w-min items-center justify-center gap-x-1.5 px-3 py-2 text-center text-[9px] font-semibold leading-snug text-eve-bright/95 [word-spacing:0.12em] [letter-spacing:0.08em] [text-shadow:0_0_8px_rgba(236,238,242,0.04)] sm:gap-x-2 sm:px-4 sm:py-1.5 sm:text-[10px] sm:whitespace-nowrap sm:[word-spacing:0.2em] sm:[letter-spacing:0.1em]">
+                <span className="shrink-0 text-eve-muted/55" aria-hidden>
+                  ◆
+                </span>
+                <span
+                  className={`shrink-0 font-tabular-nums ${
+                    loading
+                      ? 'text-eve-accent/90'
+                      : fileRows === null
+                        ? 'text-eve-muted/55'
+                        : 'text-eve-cyan/95'
+                  }`}
+                  title={tableTitle}
+                >
+                  {tableTicker}
+                </span>
+                <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                  |
+                </span>
+                <span
+                  className="shrink-0 text-eve-gold-bright/90"
+                  title={`Регион ESI-выгрузки: ${getExportRegionLabel(tickerRegionId)}`}
+                >
+                  {regionTickerUpper}
+                </span>
+                <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                  |
+                </span>
+                <span
+                  className="shrink-0 text-eve-cyan/95"
+                  title="Порог «дорогой» единицы (млн ISK)"
+                >
+                  &gt;{priceMlnForTicker}M
+                </span>
+                <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                  |
+                </span>
+                <span
+                  className="shrink-0 text-eve-cyan/90"
+                  title="Broker (buy) и sales tax, %"
+                >
+                  {feeTicker}
+                </span>
+                {import.meta.env.DEV ? (
+                  <>
+                    <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                      |
+                    </span>
+                    <span className="shrink-0 text-eve-muted/70" title="Режим разработки">
+                      DEV
+                    </span>
+                  </>
+                ) : null}
+                <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                  |
+                </span>
+                <span className="shrink-0 text-eve-bright/95">New Eden</span>
+                <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                  |
+                </span>
+                <span className="shrink-0 text-eve-gold-bright/90">Excel с рынком</span>
+                <span className="shrink-0 text-eve-muted/45" aria-hidden>
+                  |
+                </span>
+                <span className="shrink-0 sm:max-w-none">
+                  <span className="text-eve-bright/88">
+                    Фильтры и сортировка по <span className="text-eve-cyan/95">марже</span>,{' '}
+                    <span className="text-eve-cyan/95">спреду</span> в ISK и{' '}
+                    <span className="text-eve-cyan/95">обороту</span>
+                  </span>
+                </span>
+                <span className="shrink-0 text-eve-muted/55" aria-hidden>
+                  ◆
+                </span>
+              </p>
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-eve-border/30" />
+          </div>
         </header>
 
         <div className="eve-panel mb-4 overflow-hidden">

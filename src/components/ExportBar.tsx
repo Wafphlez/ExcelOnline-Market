@@ -16,8 +16,12 @@ import {
   ESI_EXPORT_PROGRESS_IDLE,
   type EsiExportProgressState,
 } from '../lib/esiExportProgressTypes'
+import {
+  LS_LAST_EXPORT_REGION_ID,
+  LAST_EXPORT_REGION_EVENT,
+  readLastExportRegionId,
+} from '../lib/lastExportRegionStorage'
 
-const LS_LAST_REGION = 'excelMarket_lastExportRegionId'
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
 const LS_ESI_UNBOUNDED_ORDERS = 'excelMarket_esiOrderPagesUntilExhausted'
@@ -40,16 +44,6 @@ function readEsiOrderPagesUntilExhausted(): boolean {
   }
 }
 
-function readLastRegionId(): string {
-  try {
-    const v = localStorage.getItem(LS_LAST_REGION)
-    if (v) return v
-  } catch {
-    /* ignore */
-  }
-  return EXPORT_REGIONS[0]?.id ?? ''
-}
-
 function readLastExportFileName(): string {
   try {
     const v = localStorage.getItem(LS_LAST_EXPORT_FILE)
@@ -67,7 +61,7 @@ type ExportBarProps = {
 export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
   const regions = EXPORT_REGIONS
   const [selectedId, setSelectedId] = useState(() => {
-    const id = readLastRegionId()
+    const id = readLastExportRegionId()
     return regions.some((r) => r.id === id) ? id : (regions[0]?.id ?? '')
   })
   const [files, setFiles] = useState<ExportListItem[]>([])
@@ -144,7 +138,14 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
 
   useEffect(() => {
     try {
-      if (selectedId) localStorage.setItem(LS_LAST_REGION, selectedId)
+      if (selectedId) {
+        localStorage.setItem(LS_LAST_EXPORT_REGION_ID, selectedId)
+        window.dispatchEvent(
+          new CustomEvent(LAST_EXPORT_REGION_EVENT, {
+            detail: { id: selectedId },
+          })
+        )
+      }
     } catch {
       /* ignore */
     }
@@ -455,15 +456,15 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
                 </div>
               </div>
 
-              <div className="min-w-0 w-80 max-w-full shrink-0 sm:w-96">
-                <div className="relative h-full min-h-full overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
+              <div className="min-w-0 w-max max-w-full shrink-0">
+                <div className="relative overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
                   <div
                     className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
                     aria-hidden
                   />
-                  <div className="flex min-w-0 items-stretch gap-2.5 sm:gap-3">
+                  <div className="flex min-w-0 w-max max-w-full items-stretch gap-2.5 sm:gap-3">
                     <label
-                      className={`shrink-0 ${
+                      className={`shrink-0 self-stretch ${
                         esiOrderPagesUntilExhausted ? 'opacity-50' : ''
                       }`}
                     >
@@ -482,28 +483,34 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
                       />
                     </label>
                     <div
-                      className={`group/mode min-w-0 flex-1 self-stretch rounded border p-2 transition-all ${
+                      className={`group/mode w-fit min-w-0 shrink-0 self-stretch rounded border p-2 transition-all ${
                         esiOrderPagesUntilExhausted
                           ? 'border-eve-accent/45 bg-eve-accent-muted/20 shadow-[inset_0_0_0_1px_rgba(184,150,61,0.12)]'
                           : 'border-eve-border/55 bg-eve-bg/20 hover:border-eve-border/70'
                       } ${disabled || loading ? 'pointer-events-none opacity-50' : ''}`}
                     >
                       <label
-                        className={`flex h-full min-h-0 min-w-0 flex-col ${
+                        className={`flex w-fit min-w-0 max-w-[min(11rem,100%)] flex-col ${
                           disabled || loading
                             ? 'cursor-not-allowed'
                             : 'cursor-pointer'
                         }`}
                       >
-                        <span className="mb-0.5 block font-eve text-[9px] font-semibold uppercase tracking-[0.12em] text-eve-gold/70">
+                        <span className="mb-0.5 block w-max font-eve text-[9px] font-semibold uppercase tracking-[0.12em] text-eve-gold/70">
                           Максимум
                         </span>
-                        <div className="flex min-h-0 min-w-0 flex-1 items-center justify-between gap-1.5">
-                          <p className="min-w-0 flex-1 text-[8.5px] leading-snug text-eve-muted/90 sm:text-[9px]">
-                            {esiOrderPagesUntilExhausted
-                              ? 'Все стр. до ответа ESI'
-                              : 'Число слева — на сторону'}
-                          </p>
+                        <div
+                          className={`flex w-max min-w-0 max-w-full items-center gap-1.5 ${
+                            esiOrderPagesUntilExhausted
+                              ? 'justify-between'
+                              : 'justify-end'
+                          }`}
+                        >
+                          {esiOrderPagesUntilExhausted && (
+                            <p className="min-w-0 max-w-[10.5rem] text-[8.5px] leading-snug text-eve-muted/90 sm:text-[9px]">
+                              Все стр. до ответа ESI
+                            </p>
+                          )}
                           <div className="flex shrink-0 items-center self-center">
                             <input
                               type="checkbox"
