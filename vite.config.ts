@@ -1,0 +1,304 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import https from 'node:https'
+import fs from 'node:fs/promises'
+import { URL } from 'node:url'
+import { defineConfig, type Plugin } from 'vite'
+import react from '@vitejs/plugin-react'
+import { migrateColumnFiltersRatioToPercent } from './src/lib/filterPercentMigration'
+
+const __filename = fileURLToPath(import.meta.url)
+const projectRoot = path.resolve(path.dirname(__filename), '.')
+const exportsDir = path.join(projectRoot, 'exports')
+const filtersFilePath = path.join(exportsDir, 'filters.json')
+
+const ALLOWED_DOWNLOAD_URLS = new Set<string>([
+  'https://eve.atpstealer.com/logistics/liquidity/exel?region=The%20Forge',
+  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Domain',
+])
+
+const URL_PREFIX = 'https://eve.atpstealer.com/logistics/liquidity/'
+
+function isSafeFileName(name: string): boolean {
+  return /^[a-zA-Z0-9._-]+\.(xlsx|xls)$/.test(name) && !name.includes('..')
+}
+
+function isUnderExportsDir(absolute: string): boolean {
+  const resolved = path.resolve(absolute)
+  const ed = path.resolve(exportsDir)
+  return resolved === ed || resolved.startsWith(ed + path.sep)
+}
+
+function readBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (c) => chunks.push(c as Buffer))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
+
+/** Node &lt; 18 не имеет глобального fetch — скачивание только через https. */
+function httpsGetToBuffer(
+  fullUrl: string,
+  ac: AbortController,
+  timeoutMs: number
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(fullUrl)
+    if (u.protocol !== 'https:') {
+      reject(new Error('только https'))
+      return
+    }
+    const req = https.get(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        port: u.port || 443,
+        headers: { 'user-agent': 'ExcelOnlineMarket-dev-export' },
+      },
+      (incoming) => {
+        const chunks: Buffer[] = []
+        incoming.on('data', (c) => chunks.push(c as Buffer))
+        incoming.on('end', () => {
+          clearTimeout(timer)
+          const code = incoming.statusCode ?? 0
+          if (code < 200 || code >= 300) {
+            reject(
+              new Error(`источник HTTP ${code} ${incoming.statusMessage ?? ''}`)
+            )
+            return
+          }
+          resolve(Buffer.concat(chunks))
+        })
+      }
+    )
+    const timer = setTimeout(() => {
+      ac.abort()
+      req.destroy()
+      reject(new Error('таймаут скачивания'))
+    }, timeoutMs)
+    const onAbort = () => {
+      clearTimeout(timer)
+      req.destroy()
+      reject(new Error('aborted'))
+    }
+    if (ac.signal.aborted) onAbort()
+    else ac.signal.addEventListener('abort', onAbort, { once: true })
+    req.on('error', (e) => {
+      clearTimeout(timer)
+      ac.signal.removeEventListener('abort', onAbort)
+      reject(e)
+    })
+  })
+}
+
+function devExportPlugin(): Plugin {
+  return {
+    name: 'dev-export-exports',
+    configureServer(server) {
+      void fs.mkdir(exportsDir, { recursive: true })
+      server.middlewares.use(
+        (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+          if (!req.url) return next()
+          const pathname = (req.url.split('?')[0] ?? req.url) as string
+          void (async () => {
+            if (req.method === 'GET' && pathname === '/__dev/export/list') {
+              try {
+                const names = await fs.readdir(exportsDir)
+                const out: { name: string; size: number; mtime: string }[] = []
+                for (const name of names) {
+                  if (name.startsWith('.')) continue
+                  if (!/\.(xlsx|xls)$/i.test(name)) continue
+                  const p = path.join(exportsDir, name)
+                  if (!isUnderExportsDir(p)) continue
+                  const st = await fs.stat(p)
+                  out.push({
+                    name,
+                    size: st.size,
+                    mtime: st.mtime.toISOString(),
+                  })
+                }
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(JSON.stringify({ files: out }))
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'list failed',
+                  })
+                )
+              }
+              return
+            }
+
+            if (req.method === 'GET' && pathname.startsWith('/__dev/export/file/')) {
+              const raw = decodeURIComponent(
+                pathname.slice('/__dev/export/file/'.length) ?? ''
+              )
+              if (!isSafeFileName(raw)) {
+                res.statusCode = 400
+                return res.end('bad filename')
+              }
+              const filePath = path.join(exportsDir, path.basename(raw))
+              if (!isUnderExportsDir(filePath) || !isSafeFileName(path.basename(filePath))) {
+                res.statusCode = 400
+                return res.end('bad path')
+              }
+              try {
+                const data = await fs.readFile(filePath)
+                res.setHeader(
+                  'Content-Type',
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                res.setHeader(
+                  'Content-Disposition',
+                  `inline; filename="${encodeURIComponent(path.basename(filePath))}"`
+                )
+                res.end(data)
+              } catch {
+                res.statusCode = 404
+                res.end('not found')
+              }
+              return
+            }
+
+            if (req.method === 'GET' && pathname === '/__dev/filters/load') {
+              try {
+                const raw = await fs.readFile(filtersFilePath, 'utf8')
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(raw)
+              } catch {
+                res.statusCode = 404
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(JSON.stringify({ error: 'not found' }))
+              }
+              return
+            }
+
+            if (req.method === 'POST' && pathname === '/__dev/filters/save') {
+              try {
+                const raw = (await readBody(req)).toString('utf8')
+                if (raw.length > 2_000_000) {
+                  res.statusCode = 413
+                  return res.end('body too large')
+                }
+                const j = JSON.parse(raw) as {
+                  version?: number
+                  columnFilters?: unknown
+                  activePreset?: string | null
+                }
+                if (j?.version !== 1 && j?.version !== 2) {
+                  res.statusCode = 400
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                  return res.end(JSON.stringify({ error: 'invalid payload' }))
+                }
+                if (!Array.isArray(j.columnFilters)) {
+                  res.statusCode = 400
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                  return res.end(JSON.stringify({ error: 'invalid payload' }))
+                }
+                const preset =
+                  j.activePreset == null || j.activePreset === ''
+                    ? null
+                    : typeof j.activePreset === 'string'
+                      ? j.activePreset
+                      : null
+                const columnFilters =
+                  j.version === 1
+                    ? migrateColumnFiltersRatioToPercent(j.columnFilters)
+                    : j.columnFilters
+                const out = JSON.stringify(
+                  { version: 2 as const, columnFilters, activePreset: preset },
+                  null,
+                  0
+                )
+                await fs.mkdir(exportsDir, { recursive: true })
+                await fs.writeFile(filtersFilePath, out, 'utf8')
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(JSON.stringify({ ok: true }))
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'save failed',
+                  })
+                )
+              }
+              return
+            }
+
+            if (req.method === 'POST' && pathname === '/__dev/export/download') {
+              let body: { url?: string; fileName?: string }
+              try {
+                const raw = (await readBody(req)).toString('utf8')
+                body = JSON.parse(raw) as { url?: string; fileName?: string }
+              } catch {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'invalid json' }))
+              }
+              const url = body.url
+              const fileName = body.fileName
+              if (typeof url !== 'string' || typeof fileName !== 'string') {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({ error: 'url and fileName required' })
+                )
+              }
+              if (!url.startsWith(URL_PREFIX) || !ALLOWED_DOWNLOAD_URLS.has(url)) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({ error: 'url not in allowed export list' })
+                )
+              }
+              if (!isSafeFileName(fileName)) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({ error: 'invalid fileName' })
+                )
+              }
+              const filePath = path.join(exportsDir, fileName)
+              if (!isUnderExportsDir(filePath)) {
+                res.statusCode = 400
+                return res.end('bad path')
+              }
+              try {
+                const ac = new AbortController()
+                const buf = await httpsGetToBuffer(url, ac, 120_000)
+                await fs.writeFile(filePath, buf)
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({ ok: true, fileName, bytes: buf.length })
+                )
+              } catch (e) {
+                res.statusCode = 502
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'fetch failed',
+                  })
+                )
+              }
+            }
+
+            next()
+          })()
+        }
+      )
+    },
+  }
+}
+
+export default defineConfig({
+  plugins: [react(), devExportPlugin()],
+  server: {
+    fs: { allow: [projectRoot] },
+  },
+})

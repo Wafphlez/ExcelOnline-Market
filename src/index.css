@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply bg-eve-bg font-sans antialiased text-eve-text;
+  font-family: 'Inter', system-ui, 'Segoe UI', sans-serif;
+}
+
+@layer utilities {
+  .font-tabular-nums {
+    font-feature-settings: 'tnum' 1;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
