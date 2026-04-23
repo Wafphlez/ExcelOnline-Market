@@ -69,7 +69,6 @@ function App() {
   const [priceThresholdMln, setPriceThresholdMln] = useState(readStoredPriceMln)
   const [brokerFeePct, setBrokerFeePct] = useState(readStoredBrokerFeePct)
   const [salesTaxPct, setSalesTaxPct] = useState(readStoredSalesTaxPct)
-  const [fileLabel, setFileLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() =>
@@ -177,43 +176,35 @@ function App() {
     setCopiedNameKeys((prev) => new Set([...prev, key]))
   }, [])
 
-  const loadFromBuffer = useCallback(
-    async (buf: ArrayBuffer, labelPrefix: string) => {
-      setError(null)
-      setLoading(true)
-      try {
-        const { sheetName, rows: raw } = parseMarketWorkbook(buf)
-        const mapped = mapRawRows(raw)
-        if (!mapped.ok) {
-          setError(
-            `Не удалось прочитать строку ${mapped.rowIndex + 1}: не хватает колонок (${mapped.error.column}).`
-          )
-          setFileRows(null)
-          setFileLabel(null)
-          setCopiedNameKeys(new Set())
-          return
-        }
-        setFileLabel(`${labelPrefix}лист «${sheetName}»`)
-        setFileRows(mapped.rows)
-        setCopiedNameKeys(new Set())
-      } catch (e) {
+  const loadFromBuffer = useCallback(async (buf: ArrayBuffer) => {
+    setError(null)
+    setLoading(true)
+    try {
+      const { rows: raw } = parseMarketWorkbook(buf)
+      const mapped = mapRawRows(raw)
+      if (!mapped.ok) {
         setError(
-          e instanceof Error ? e.message : 'Ошибка чтения файла'
+          `Не удалось прочитать строку ${mapped.rowIndex + 1}: не хватает колонок (${mapped.error.column}).`
         )
         setFileRows(null)
-        setFileLabel(null)
         setCopiedNameKeys(new Set())
-      } finally {
-        setLoading(false)
+        return
       }
-    },
-    []
-  )
+      setFileRows(mapped.rows)
+      setCopiedNameKeys(new Set())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка чтения файла')
+      setFileRows(null)
+      setCopiedNameKeys(new Set())
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   const onFile = useCallback(
     async (file: File) => {
       const buf = await file.arrayBuffer()
-      await loadFromBuffer(buf, `${file.name} · `)
+      await loadFromBuffer(buf)
     },
     [loadFromBuffer]
   )
@@ -295,22 +286,18 @@ function App() {
           </div>
         )}
 
-        {rows !== null && fileLabel && (
+        {rows !== null && (
           <>
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-b border-eve-accent/20 pb-3">
-              <span className="text-sm text-eve-muted">
-                {fileLabel} ·{' '}
-                <span className="tabular-nums text-eve-bright">
-                  {rows.length} строк
-                </span>
-              </span>
-              <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-1.5 border-b border-eve-accent/20 pb-3">
                 {PRESETS.map((p) => (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => onPreset(p.id)}
-                    className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    onClick={(e) => {
+                      onPreset(p.id)
+                      e.currentTarget.blur()
+                    }}
+                    className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${
                       activePreset === p.id
                         ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
                         : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
@@ -321,8 +308,11 @@ function App() {
                 ))}
                 <button
                   type="button"
-                  onClick={onApplyAllPresets}
-                  className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${
+                  onClick={(e) => {
+                    onApplyAllPresets()
+                    e.currentTarget.blur()
+                  }}
+                  className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${
                     activePreset === PRESET_ALL_ID
                       ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
                       : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
@@ -332,12 +322,14 @@ function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={onResetFilters}
-                  className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted hover:border-eve-muted/50 hover:text-eve-bright"
+                  onClick={(e) => {
+                    onResetFilters()
+                    e.currentTarget.blur()
+                  }}
+                  className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface hover:border-eve-muted/50 hover:text-eve-bright"
                 >
                   Сбросить фильтры
                 </button>
-              </div>
             </div>
             <div className="mb-2 mt-3 flex flex-col gap-3">
               <label className="flex flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:items-center">

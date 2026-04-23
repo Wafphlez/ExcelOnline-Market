@@ -373,13 +373,17 @@ function devExportPlugin(): Plugin {
                 `[ESI export] dev сервер: POST /esi-liquidity regionId=${rid} — старт`
               )
               try {
+                const orderPagesUntilExhausted = j.orderPagesUntilExhausted === true
                 const { buffer, rowCount, partial } = await buildEsiLiquidityXlsx(rid, {
                   maxTypes:
                     typeof j.maxTypes === 'number' && j.maxTypes > 0
                       ? Math.min(200, j.maxTypes)
                       : undefined,
+                  orderPagesUntilExhausted,
                   maxOrderPages:
-                    typeof j.maxOrderPages === 'number' && j.maxOrderPages > 0
+                    !orderPagesUntilExhausted &&
+                    typeof j.maxOrderPages === 'number' &&
+                    j.maxOrderPages > 0
                       ? Math.min(200, j.maxOrderPages)
                       : undefined,
                   typeConcurrency:

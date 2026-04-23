@@ -11,6 +11,11 @@ export type EsiExportProgressState = {
   typesDone: number
   /** Сколько типов в одном батче (параллельно). */
   typeConcurrency: number
+  /**
+   * Режим «все страницы ордеров, пока ESI не ответит "нет страницы"».
+   * Тогда `maxOrderPages` = 0 (неизвестно), прогресс не по макс. числу страниц.
+   */
+  unboundedOrderPages: boolean
 }
 
 export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
@@ -21,4 +26,5 @@ export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
   typeTotal: 0,
   typesDone: 0,
   typeConcurrency: 0,
+  unboundedOrderPages: false,
 }

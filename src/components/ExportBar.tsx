@@ -20,6 +20,7 @@ import {
 const LS_LAST_REGION = 'excelMarket_lastExportRegionId'
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
+const LS_ESI_UNBOUNDED_ORDERS = 'excelMarket_esiOrderPagesUntilExhausted'
 
 function readEsiMaxOrderPagesStr(): string {
   try {
@@ -29,6 +30,14 @@ function readEsiMaxOrderPagesStr(): string {
     /* ignore */
   }
   return '90'
+}
+
+function readEsiOrderPagesUntilExhausted(): boolean {
+  try {
+    return localStorage.getItem(LS_ESI_UNBOUNDED_ORDERS) === '1'
+  } catch {
+    return false
+  }
 }
 
 function readLastRegionId(): string {
@@ -51,7 +60,7 @@ function readLastExportFileName(): string {
 }
 
 type ExportBarProps = {
-  onLoadBuffer: (buf: ArrayBuffer, labelPrefix: string) => void | Promise<void>
+  onLoadBuffer: (buf: ArrayBuffer) => void | Promise<void>
   disabled?: boolean
 }
 
@@ -67,6 +76,9 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
   const [esiMaxPagesStr, setEsiMaxPagesStr] = useState(() =>
     readEsiMaxOrderPagesStr()
   )
+  const [esiOrderPagesUntilExhausted, setEsiOrderPagesUntilExhausted] = useState(
+    () => readEsiOrderPagesUntilExhausted()
+  )
   const [selectedExportFile, setSelectedExportFile] = useState(
     readLastExportFileName
   )
@@ -74,6 +86,9 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
     ...ESI_EXPORT_PROGRESS_IDLE,
   }))
   const [esiExporting, setEsiExporting] = useState(false)
+  const [esiSessionStartedAt, setEsiSessionStartedAt] = useState<number | null>(null)
+  const [esiTypesPhaseAt, setEsiTypesPhaseAt] = useState<number | null>(null)
+  const [esiTimerTick, setEsiTimerTick] = useState(0)
 
   const selected = regions.find((r) => r.id === selectedId) ?? regions[0]
 
@@ -83,6 +98,32 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
       .filter((f) => /\.(xlsx|xls)$/i.test(f.name))
       .sort((a, b) => b.mtime.localeCompare(a.mtime) || a.name.localeCompare(b.name))
   }, [files])
+
+  useEffect(() => {
+    if (!esiExporting) return
+    const id = window.setInterval(() => {
+      setEsiTimerTick((n) => n + 1)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [esiExporting])
+
+  useEffect(() => {
+    if (esiProgress.phase === 'types' && esiTypesPhaseAt === null) {
+      setEsiTypesPhaseAt(Date.now())
+    }
+  }, [esiProgress.phase, esiTypesPhaseAt])
+
+  const esiElapsedSec = useMemo(() => {
+    void esiTimerTick
+    if (esiSessionStartedAt == null) return 0
+    return (Date.now() - esiSessionStartedAt) / 1000
+  }, [esiTimerTick, esiSessionStartedAt])
+
+  const esiTypesPhaseElapsedSec = useMemo(() => {
+    void esiTimerTick
+    if (esiTypesPhaseAt == null) return null
+    return (Date.now() - esiTypesPhaseAt) / 1000
+  }, [esiTimerTick, esiTypesPhaseAt])
 
   const refreshList = useCallback(async () => {
     if (!isDevExportServer) {
@@ -145,6 +186,17 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
     }
   }, [esiMaxPagesStr])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        LS_ESI_UNBOUNDED_ORDERS,
+        esiOrderPagesUntilExhausted ? '1' : '0'
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [esiOrderPagesUntilExhausted])
+
   const onDownloadRegion = async (r: ExportRegion) => {
     setMsg(null)
     if (!isDevExportServer) {
@@ -167,7 +219,7 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
       const res = await fetch(u)
       if (res.ok) {
         const buf = await res.arrayBuffer()
-        await onLoadBuffer(buf, `exports/${r.fileName} · `)
+        await onLoadBuffer(buf)
         setMsg(`Открыт: ${r.label} (exports/${r.fileName})`)
       }
     } catch (e) {
@@ -186,6 +238,8 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
     }
     setLoading(true)
     setEsiExporting(true)
+    setEsiSessionStartedAt(Date.now())
+    setEsiTypesPhaseAt(null)
     setEsiProgress({ ...ESI_EXPORT_PROGRESS_IDLE })
     let lastLogIndex = 0
     const flushEsiLogsToConsole = async () => {
@@ -203,17 +257,18 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
     }
     const logPoll = window.setInterval(() => void flushEsiLogsToConsole(), 500)
     const logKick = window.setTimeout(() => void flushEsiLogsToConsole(), 100)
-    let maxOrderPages = 90
-    const mp = parseInt(esiMaxPagesStr.trim(), 10)
-    if (Number.isFinite(mp) && mp >= 1) {
-      maxOrderPages = Math.min(200, mp)
+    let maxOrderPages: number | undefined
+    if (!esiOrderPagesUntilExhausted) {
+      const mp = parseInt(esiMaxPagesStr.trim(), 10)
+      maxOrderPages = Number.isFinite(mp) && mp >= 1 ? Math.min(200, mp) : 90
     }
     try {
       const fileName = `liquidity-esi-${selected.esiRegionId}.xlsx`
       const result = await buildEsiLiquidityToExports({
         regionId: selected.esiRegionId,
         fileName,
-        maxOrderPages,
+        orderPagesUntilExhausted: esiOrderPagesUntilExhausted,
+        ...(maxOrderPages != null && { maxOrderPages }),
       })
       setMsg(
         `ESI: ${result.rowCount} позиций → exports/${result.fileName}${
@@ -231,7 +286,7 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
       const res = await fetch(u)
       if (res.ok) {
         const buf = await res.arrayBuffer()
-        await onLoadBuffer(buf, `exports/${result.fileName} · ESI · `)
+        await onLoadBuffer(buf)
       }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Ошибка ESI')
@@ -241,6 +296,8 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
       void flushEsiLogsToConsole()
       setEsiProgress({ ...ESI_EXPORT_PROGRESS_IDLE })
       setEsiExporting(false)
+      setEsiSessionStartedAt(null)
+      setEsiTypesPhaseAt(null)
       setLoading(false)
     }
   }
@@ -262,7 +319,7 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
         return
       }
       const buf = await res.arrayBuffer()
-      await onLoadBuffer(buf, `exports/${selectedExportFile} · `)
+      await onLoadBuffer(buf)
       setMsg(`Открыт: ${selectedExportFile}`)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Ошибка открытия')
@@ -372,62 +429,142 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
             Официальный ESI, долго. Экспорт в{' '}
             <code className="text-eve-text/80">exports/</code>, затем в таблицу.
           </p>
-          <div className="mb-3 flex min-w-0 max-w-sm flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-            <span className="shrink-0 text-[11px] text-eve-muted">Регион ESI</span>
-            <select
-              className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              disabled={disabled}
-            >
-              {regions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-0.5 text-[11px] text-eve-muted">
-              <span>Стр. ордеров (sell + buy)</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={200}
-                value={esiMaxPagesStr}
-                onChange={(e) => setEsiMaxPagesStr(e.target.value)}
-                disabled={disabled || loading}
-                className="w-16 rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none disabled:opacity-50"
-              />
-            </label>
-            <button
-              type="button"
-              disabled={disabled || loading || !selected}
-              onClick={() => void onEsiBuildSelected()}
-              className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/50 px-3 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/45 hover:text-eve-accent disabled:opacity-50"
-            >
-              <Globe className="h-3.5 w-3.5" aria-hidden />
-              Сформировать (ESI)
-            </button>
-            {loading && esiExporting && (
-              <button
-                type="button"
-                onClick={() => {
-                  void postEsiExportStop().catch((e) =>
-                    setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
-                  )
-                }}
-                className="rounded border border-eve-danger/50 bg-eve-danger/10 px-2.5 py-1.5 text-[11px] font-semibold text-eve-danger/95 hover:border-eve-danger/70"
-                title="Остановить и собрать xlsx из текущих данных"
-              >
-                Стоп → xlsx
-              </button>
-            )}
+          <div className="mb-3 min-w-0 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
+            <div className="flex w-max min-w-full flex-nowrap items-stretch gap-2 sm:w-full sm:gap-3">
+              <div className="w-44 shrink-0 sm:w-52">
+                <div className="relative h-full min-h-full overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
+                    aria-hidden
+                  />
+                  <span className="mb-1.5 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/80">
+                    Регион ESI
+                  </span>
+                  <select
+                    className="w-full min-w-0 cursor-pointer rounded border border-eve-border/80 bg-eve-bg/90 py-2 pl-2.5 pr-9 text-sm font-medium text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={selectedId}
+                    onChange={(e) => setSelectedId(e.target.value)}
+                    disabled={disabled}
+                  >
+                    {regions.map((r) => (
+                      <option key={r.id} value={r.id} className="bg-eve-surface text-eve-text">
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="min-w-0 w-80 max-w-full shrink-0 sm:w-96">
+                <div className="relative h-full min-h-full overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
+                    aria-hidden
+                  />
+                  <div className="flex min-w-0 items-stretch gap-2.5 sm:gap-3">
+                    <label
+                      className={`shrink-0 ${
+                        esiOrderPagesUntilExhausted ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <span className="mb-1 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
+                        Страниц
+                      </span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={200}
+                        value={esiMaxPagesStr}
+                        onChange={(e) => setEsiMaxPagesStr(e.target.value)}
+                        disabled={disabled || loading || esiOrderPagesUntilExhausted}
+                        className="w-[4.5rem] rounded border border-eve-border/80 bg-eve-bg/90 px-2.5 py-1.5 text-sm tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </label>
+                    <div
+                      className={`group/mode min-w-0 flex-1 self-stretch rounded border p-2 transition-all ${
+                        esiOrderPagesUntilExhausted
+                          ? 'border-eve-accent/45 bg-eve-accent-muted/20 shadow-[inset_0_0_0_1px_rgba(184,150,61,0.12)]'
+                          : 'border-eve-border/55 bg-eve-bg/20 hover:border-eve-border/70'
+                      } ${disabled || loading ? 'pointer-events-none opacity-50' : ''}`}
+                    >
+                      <label
+                        className={`flex h-full min-h-0 min-w-0 flex-col ${
+                          disabled || loading
+                            ? 'cursor-not-allowed'
+                            : 'cursor-pointer'
+                        }`}
+                      >
+                        <span className="mb-0.5 block font-eve text-[9px] font-semibold uppercase tracking-[0.12em] text-eve-gold/70">
+                          Максимум
+                        </span>
+                        <div className="flex min-h-0 min-w-0 flex-1 items-center justify-between gap-1.5">
+                          <p className="min-w-0 flex-1 text-[8.5px] leading-snug text-eve-muted/90 sm:text-[9px]">
+                            {esiOrderPagesUntilExhausted
+                              ? 'Все стр. до ответа ESI'
+                              : 'Число слева — на сторону'}
+                          </p>
+                          <div className="flex shrink-0 items-center self-center">
+                            <input
+                              type="checkbox"
+                              className="peer sr-only"
+                              checked={esiOrderPagesUntilExhausted}
+                              onChange={(e) =>
+                                setEsiOrderPagesUntilExhausted(e.target.checked)
+                              }
+                              disabled={disabled || loading}
+                              aria-label="Максимум: запрашивать все страницы ордеров"
+                            />
+                            <div
+                              className="flex h-5 w-10 flex-shrink-0 items-center justify-start rounded-full border border-eve-border/70 bg-eve-bg/80 p-px shadow-eve-inset transition peer-checked:justify-end peer-checked:border-eve-accent/55 peer-checked:bg-eve-accent-muted/30 peer-focus-visible:ring-2 peer-focus-visible:ring-eve-accent/35"
+                              aria-hidden
+                            >
+                              <span
+                                className="h-3.5 w-3.5 rounded-full border border-eve-border/40 bg-gradient-to-b from-eve-elevated to-eve-bg shadow-[0_1px_2px_rgba(0,0,0,0.5)] ring-1 ring-white/5 transition group-has-[:checked]/mode:border-eve-accent/70 group-has-[:checked]/mode:from-eve-highlight group-has-[:checked]/mode:shadow-[0_0_6px_rgba(184,150,61,0.35)]"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex min-w-0 flex-1 items-end justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={disabled || loading || !selected}
+                  onClick={() => void onEsiBuildSelected()}
+                  className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent shadow-eve-inset transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                >
+                  <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Сформировать (ESI)
+                </button>
+                {loading && esiExporting && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void postEsiExportStop().catch((e) =>
+                        setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
+                      )
+                    }}
+                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20"
+                    title="Остановить и собрать xlsx из текущих данных"
+                  >
+                    Стоп → xlsx
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           {loading && esiExporting && (
             <div className="mt-3">
-              <EsiExportProgressPanel progress={esiProgress} />
+              <EsiExportProgressPanel
+                progress={esiProgress}
+                elapsedSec={esiElapsedSec}
+                typesPhaseElapsedSec={esiTypesPhaseElapsedSec}
+              />
             </div>
           )}
         </section>

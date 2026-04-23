@@ -1,4 +1,11 @@
 import type { EsiExportProgressState } from '../lib/esiExportProgressTypes'
+import {
+  esiOrdersProgress01,
+  esiTypesProgress01,
+  formatEsiEtaRemaining,
+  formatEsiStopwatch,
+  linearEtaRemaining,
+} from '../lib/esiExportEta'
 
 function barWidth(current: number, max: number): number {
   if (max <= 0) return 0
@@ -37,28 +44,94 @@ function ProgressRow({
 
 type EsiExportProgressPanelProps = {
   progress: EsiExportProgressState
+  /** Секунд с начала ESI-выгрузки (таймер) */
+  elapsedSec: number
+  /** Секунд в фазе «типы»; null, пока фаза не types или нет отметки старта */
+  typesPhaseElapsedSec: number | null
 }
 
 /**
- * Прогресс ESI: параллельные sell/buy и батчи типов.
+ * Прогресс ESI, секундомер (прошло) и оценка ETA по текущей фазе.
  */
-export function EsiExportProgressPanel({ progress }: EsiExportProgressPanelProps) {
+export function EsiExportProgressPanel({
+  progress,
+  elapsedSec,
+  typesPhaseElapsedSec,
+}: EsiExportProgressPanelProps) {
   const m = progress.maxOrderPages
-  if (progress.phase === 'idle' && m <= 0) {
-    return null
+
+  const p = progress
+  const op = esiOrdersProgress01(p)
+  const tp = esiTypesProgress01(p)
+  const showTypesEta = p.phase === 'types' && p.typeTotal > 0
+  const showOrderEta =
+    p.phase === 'orders' && !p.unboundedOrderPages && p.maxOrderPages > 0
+
+  let etaNote = ''
+  let etaValue: number | null = null
+  if (showTypesEta) {
+    etaNote = 'типы'
+    if (typesPhaseElapsedSec != null && typesPhaseElapsedSec > 0) {
+      etaValue = linearEtaRemaining(tp, typesPhaseElapsedSec)
+    } else {
+      etaValue = null
+    }
+  } else if (showOrderEta) {
+    etaNote = 'ордера'
+    etaValue = linearEtaRemaining(op, Math.max(0, elapsedSec))
   }
+
+  const etaText = formatEsiEtaRemaining(etaValue)
+  const showEta = showTypesEta || showOrderEta
+  const sw = formatEsiStopwatch(elapsedSec)
 
   return (
     <div className="mt-3 rounded border border-eve-border/60 bg-eve-elevated/50 p-3 shadow-eve-inset">
-      <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-eve-accent/15 pb-2">
-        <span className="font-eve text-[11px] font-bold uppercase tracking-[0.12em] text-eve-gold/90">
-          ESI — загрузка
-        </span>
-        <span className="text-[10px] text-eve-muted">
-          {progress.phase === 'orders' && 'ордера sell ‖ buy'}
-          {progress.phase === 'types' && 'типы (батч)'}
-          {progress.phase === 'idle' && '…'}
-        </span>
+      <div className="mb-2.5 flex flex-col gap-1.5 border-b border-eve-accent/15 pb-2.5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <span className="font-eve text-[11px] font-bold uppercase tracking-[0.12em] text-eve-gold/90">
+            ESI — загрузка
+          </span>
+          <p className="mt-0.5 text-[10px] text-eve-muted/90">
+            {p.phase === 'orders' && p.unboundedOrderPages && (
+              <>ордера — все страницы, пока ESI не ответит «нет страницы» (sell ‖ buy)</>
+            )}
+            {p.phase === 'orders' && !p.unboundedOrderPages && 'ордера sell ‖ buy'}
+            {p.phase === 'types' && 'типы (батч)'}
+            {p.phase === 'idle' && m > 0 && '—'}
+            {p.phase === 'idle' && m <= 0 && '…'}
+          </p>
+        </div>
+        <div className="grid w-full shrink-0 grid-cols-[minmax(7.5rem,1fr)_minmax(9.5rem,1fr)] gap-x-3 gap-y-0.5 text-[10px] tabular-nums sm:ml-auto sm:w-[min(100%,19.5rem)]">
+          <div
+            className="flex min-h-[2.25rem] min-w-0 flex-col justify-center rounded border border-eve-border/35 bg-eve-bg/35 px-2 py-1 shadow-eve-inset"
+            title="Прошло с начала выгрузки"
+          >
+            <span className="text-[9px] uppercase tracking-wide text-eve-muted">
+              Прошло
+            </span>
+            <span className="font-semibold leading-tight text-eve-bright/95">
+              {sw}
+            </span>
+          </div>
+          <div
+            className="flex min-h-[2.25rem] min-w-0 flex-col justify-center rounded border border-eve-border/35 bg-eve-bg/35 px-2 py-1 shadow-eve-inset"
+            title={
+              showEta
+                ? 'Линейная оценка по скорости текущей фазы'
+                : 'Оценка появится, когда будет достаточно данных'
+            }
+          >
+            <span className="truncate text-[9px] uppercase tracking-wide text-eve-muted">
+              ETA{showEta ? ` (${etaNote})` : ''}
+            </span>
+            <span
+              className={`font-semibold leading-tight ${showEta ? 'text-eve-accent/95' : 'text-eve-muted/50'}`}
+            >
+              {showEta ? etaText : '—'}
+            </span>
+          </div>
+        </div>
       </div>
 
       {m > 0 && (
@@ -69,31 +142,31 @@ export function EsiExportProgressPanel({ progress }: EsiExportProgressPanelProps
           </p>
           <ProgressRow
             label="Sell"
-            current={progress.sellPage}
+            current={p.sellPage}
             max={m}
             accentClass="bg-eve-cyan/80"
           />
           <ProgressRow
             label="Buy"
-            current={progress.buyPage}
+            current={p.buyPage}
             max={m}
             accentClass="bg-eve-danger/70"
           />
         </div>
       )}
 
-      {progress.phase === 'types' && progress.typeTotal > 0 && (
+      {p.phase === 'types' && p.typeTotal > 0 && (
         <div className="mt-3 space-y-2 border-t border-eve-border/40 pt-3">
           <p className="text-[10px] text-eve-muted/90">
             Топ-типов: имя и история —{' '}
             <span className="font-semibold text-eve-accent/95">
-              до {progress.typeConcurrency || 1} типов параллельно
+              до {p.typeConcurrency || 1} типов параллельно
             </span>
           </p>
           <ProgressRow
             label="Обработано типов"
-            current={progress.typesDone}
-            max={progress.typeTotal}
+            current={p.typesDone}
+            max={p.typeTotal}
             accentClass="bg-eve-accent/85"
           />
         </div>

@@ -92,8 +92,13 @@ export function logEsiExportException(context: string, err: unknown): void {
 export type EsiLiquidityExportOptions = {
   /** Макс. типов с отдельным запросом истории (остальные отсекаются по активности ордеров). */
   maxTypes: number
-  /** Макс. страниц ордеров (по 1000 шт.), защита от бесконечного цикла. */
+  /** Макс. страниц ордеров (по 1000 шт.) — только в режиме `orderPagesUntilExhausted: false`. */
   maxOrderPages: number
+  /**
+   * true — запрашивать страницы подряд, пока ESI не вернёт JSON вроде
+   * `{"error":"Requested page does not exist!"}` или пустой массив; `maxOrderPages` не лимит.
+   */
+  orderPagesUntilExhausted: boolean
   /** Пауза между батчами типов (мс) — внутри батча имя + история по типу параллельны. */
   historyDelayMs: number
   /** Сколько типов обрабатывать одновременно (батчами, после батча — historyDelayMs). */
@@ -103,6 +108,7 @@ export type EsiLiquidityExportOptions = {
 const DEFAULT_OPTS: EsiLiquidityExportOptions = {
   maxTypes: 72,
   maxOrderPages: 90,
+  orderPagesUntilExhausted: false,
   historyDelayMs: 180,
   typeConcurrency: 3,
 }
@@ -115,6 +121,9 @@ function mergeEsiOpts(
   if (!partial) return o
   if (partial.maxTypes !== undefined) o.maxTypes = partial.maxTypes
   if (partial.maxOrderPages !== undefined) o.maxOrderPages = partial.maxOrderPages
+  if (partial.orderPagesUntilExhausted !== undefined) {
+    o.orderPagesUntilExhausted = partial.orderPagesUntilExhausted
+  }
   if (partial.historyDelayMs !== undefined) o.historyDelayMs = partial.historyDelayMs
   if (partial.typeConcurrency !== undefined) {
     o.typeConcurrency = Math.max(1, Math.min(8, Math.floor(partial.typeConcurrency)))
@@ -271,39 +280,92 @@ function liquidityFromHistory(
   return { dayAvgVolume, last3AvgPrice, dayTurnoverMln }
 }
 
+const UNBOUNDED_ORDER_PAGES_SAFETY = 10_000
+
+/**
+ * Разбор ответа ESI на страницу ордеров: массив, пусто или `{"error":"Requested page does not exist!"}`.
+ */
+function parseEsiOrderPage(
+  data: unknown,
+  page: number,
+  side: 'sell' | 'buy',
+  regionId: number
+): { rows: EsiMarketOrder[]; endOfSide: boolean } {
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      esiDevLog(
+        `ордера region=${regionId} ${side} page=${page} — пусто, конец стороны`
+      )
+      return { rows: [], endOfSide: true }
+    }
+    return { rows: data as EsiMarketOrder[], endOfSide: data.length < 1000 }
+  }
+  if (data && typeof data === 'object' && 'error' in (data as object)) {
+    const err = (data as { error?: unknown }).error
+    const errStr = typeof err === 'string' ? err : String(err)
+    if (/requested page does not exist|page does not exist/i.test(errStr)) {
+      esiDevLog(
+        `ордера region=${regionId} ${side} page=${page} — ESI: ${errStr} (конец пагинации)`
+      )
+      return { rows: [], endOfSide: true }
+    }
+    throw new Error(`ESI orders ${side} p.${page}: ${errStr}`)
+  }
+  throw new Error(
+    `ESI orders ${side} p.${page}: ожидался массив ордеров, получено: ${typeof data}`
+  )
+}
+
 /**
  * Одна сторона книги (sell / buy) — пагинация. Sell и buy вызываются параллельно.
+ * `untilExhausted` — идти по страницам, пока не `endOfSide` (пусто / <1000 / ошибка "нет страницы").
  */
 async function fetchOrdersForSide(
   regionId: number,
   maxPages: number,
   side: 'sell' | 'buy',
-  onPage: (page: number) => void
+  onPage: (page: number) => void,
+  untilExhausted: boolean
 ): Promise<EsiMarketOrder[]> {
   const all: EsiMarketOrder[] = []
-  for (let page = 1; page <= maxPages; page++) {
+  const hardCap = untilExhausted ? UNBOUNDED_ORDER_PAGES_SAFETY : maxPages
+  let page = 1
+  for (;;) {
+    if (page > hardCap) {
+      if (untilExhausted) {
+        esiDevLog(
+          `ордера ${side}: лимит безопасности ${UNBOUNDED_ORDER_PAGES_SAFETY} стр. — останов`
+        )
+      }
+      break
+    }
     if (isEsiStopRequested()) {
       esiDevLog(
-        `ордера ${side}: стоп — собрано ${all.length} (обе стороны запрашивались параллельно)`
+        `ордера ${side}: стоп — собрано ${all.length} (всего по стороне)`
       )
       return all
     }
     onPage(page)
-    const part = await esiFetch<EsiMarketOrder[]>(`/markets/${regionId}/orders/`, {
+    const data = await esiFetch<unknown>(`/markets/${regionId}/orders/`, {
       order_type: side,
       page: String(page),
     })
-    if (!Array.isArray(part) || part.length === 0) {
+    const { rows, endOfSide } = parseEsiOrderPage(
+      data,
+      page,
+      side,
+      regionId
+    )
+    if (rows.length > 0) {
+      all.push(...rows)
       esiDevLog(
-        `ордера region=${regionId} ${side} page=${page} — пусто, конец стороны (всего ${all.length})`
+        `ордера region=${regionId} ${side} page=${page} — +${rows.length} (всего по ${side} ${all.length})`
       )
+    }
+    if (endOfSide) {
       break
     }
-    all.push(...part)
-    esiDevLog(
-      `ордера region=${regionId} ${side} page=${page} — +${part.length} (всего по ${side} ${all.length})`
-    )
-    if (part.length < 1000) break
+    page += 1
     await sleep(200)
     if (isEsiStopRequested()) {
       esiDevLog(`ордера ${side}: стоп после паузы — ${all.length}`)
@@ -319,19 +381,33 @@ async function fetchOrdersForSide(
  */
 export async function fetchAllMarketOrders(
   regionId: number,
-  maxPages: number
+  maxPages: number,
+  orderPagesUntilExhausted: boolean
 ): Promise<EsiMarketOrder[]> {
   esiProgress.phase = 'orders'
-  esiProgress.maxOrderPages = maxPages
+  esiProgress.unboundedOrderPages = orderPagesUntilExhausted
+  esiProgress.maxOrderPages = orderPagesUntilExhausted ? 0 : maxPages
   esiProgress.sellPage = 0
   esiProgress.buyPage = 0
   const [sellOrders, buyOrders] = await Promise.all([
-    fetchOrdersForSide(regionId, maxPages, 'sell', (p) => {
-      esiProgress.sellPage = p
-    }),
-    fetchOrdersForSide(regionId, maxPages, 'buy', (p) => {
-      esiProgress.buyPage = p
-    }),
+    fetchOrdersForSide(
+      regionId,
+      maxPages,
+      'sell',
+      (p) => {
+        esiProgress.sellPage = p
+      },
+      orderPagesUntilExhausted
+    ),
+    fetchOrdersForSide(
+      regionId,
+      maxPages,
+      'buy',
+      (p) => {
+        esiProgress.buyPage = p
+      },
+      orderPagesUntilExhausted
+    ),
   ])
   return [...sellOrders, ...buyOrders]
 }
@@ -427,10 +503,14 @@ export async function buildLiquidityRows(
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const tAll = Date.now()
   esiDevLog(
-    `строки ликвидности: region=${regionId}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}, typeConcurrency=${o.typeConcurrency}, historyDelayMs=${o.historyDelayMs}; ордера sell|buy — параллельно, типы — батчами`
+    `строки ликвидности: region=${regionId}, orderPagesUntilExhausted=${o.orderPagesUntilExhausted}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}, typeConcurrency=${o.typeConcurrency}, historyDelayMs=${o.historyDelayMs}; ордера sell|buy — параллельно, типы — батчами`
   )
 
-  const orders = await fetchAllMarketOrders(regionId, o.maxOrderPages)
+  const orders = await fetchAllMarketOrders(
+    regionId,
+    o.maxOrderPages,
+    o.orderPagesUntilExhausted
+  )
   esiDevLog(
     `ордера собраны: ${orders.length} шт. за ${((Date.now() - tAll) / 1000).toFixed(1)} s`
   )
