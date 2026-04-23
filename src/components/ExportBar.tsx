@@ -21,27 +21,37 @@ import {
   LAST_EXPORT_REGION_EVENT,
   readLastExportRegionId,
 } from '../lib/lastExportRegionStorage'
+import {
+  ESI_DEFAULT_MAX_TYPES,
+  ESI_MAX_ORDER_PAGES_USER_CAP,
+  ESI_MAX_TYPES_USER_CAP,
+} from '../lib/esiOrderPageLimits'
 
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
-const LS_ESI_UNBOUNDED_ORDERS = 'excelMarket_esiOrderPagesUntilExhausted'
+const LS_ESI_MAX_TYPES = 'excelMarket_esiMaxTypes'
 
 function readEsiMaxOrderPagesStr(): string {
   try {
     const v = localStorage.getItem(LS_ESI_MAX_PAGES)
-    if (v && /^\d{1,3}$/.test(v)) return v
+    if (v && /^\d{1,4}$/.test(v)) return v
   } catch {
     /* ignore */
   }
   return '90'
 }
 
-function readEsiOrderPagesUntilExhausted(): boolean {
+function readEsiMaxTypesStr(): string {
   try {
-    return localStorage.getItem(LS_ESI_UNBOUNDED_ORDERS) === '1'
+    const v = localStorage.getItem(LS_ESI_MAX_TYPES)
+    if (v && /^\d{1,5}$/.test(v)) {
+      const n = parseInt(v, 10)
+      if (n >= 1 && n <= ESI_MAX_TYPES_USER_CAP) return String(n)
+    }
   } catch {
-    return false
+    /* ignore */
   }
+  return String(ESI_DEFAULT_MAX_TYPES)
 }
 
 function readLastExportFileName(): string {
@@ -70,8 +80,8 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
   const [esiMaxPagesStr, setEsiMaxPagesStr] = useState(() =>
     readEsiMaxOrderPagesStr()
   )
-  const [esiOrderPagesUntilExhausted, setEsiOrderPagesUntilExhausted] = useState(
-    () => readEsiOrderPagesUntilExhausted()
+  const [esiMaxTypesStr, setEsiMaxTypesStr] = useState(() =>
+    readEsiMaxTypesStr()
   )
   const [selectedExportFile, setSelectedExportFile] = useState(
     readLastExportFileName
@@ -179,7 +189,13 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
 
   useEffect(() => {
     const n = parseInt(esiMaxPagesStr, 10)
-    if (!Number.isFinite(n) || n < 1 || n > 200) return
+    if (
+      !Number.isFinite(n) ||
+      n < 1 ||
+      n > ESI_MAX_ORDER_PAGES_USER_CAP
+    ) {
+      return
+    }
     try {
       localStorage.setItem(LS_ESI_MAX_PAGES, String(n))
     } catch {
@@ -188,15 +204,20 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
   }, [esiMaxPagesStr])
 
   useEffect(() => {
+    const n = parseInt(esiMaxTypesStr, 10)
+    if (
+      !Number.isFinite(n) ||
+      n < 1 ||
+      n > ESI_MAX_TYPES_USER_CAP
+    ) {
+      return
+    }
     try {
-      localStorage.setItem(
-        LS_ESI_UNBOUNDED_ORDERS,
-        esiOrderPagesUntilExhausted ? '1' : '0'
-      )
+      localStorage.setItem(LS_ESI_MAX_TYPES, String(n))
     } catch {
       /* ignore */
     }
-  }, [esiOrderPagesUntilExhausted])
+  }, [esiMaxTypesStr])
 
   const onDownloadRegion = async (r: ExportRegion) => {
     setMsg(null)
@@ -258,18 +279,24 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
     }
     const logPoll = window.setInterval(() => void flushEsiLogsToConsole(), 500)
     const logKick = window.setTimeout(() => void flushEsiLogsToConsole(), 100)
-    let maxOrderPages: number | undefined
-    if (!esiOrderPagesUntilExhausted) {
-      const mp = parseInt(esiMaxPagesStr.trim(), 10)
-      maxOrderPages = Number.isFinite(mp) && mp >= 1 ? Math.min(200, mp) : 90
-    }
+    const mp = parseInt(esiMaxPagesStr.trim(), 10)
+    const maxOrderPages =
+      Number.isFinite(mp) && mp >= 1
+        ? Math.min(ESI_MAX_ORDER_PAGES_USER_CAP, Math.floor(mp))
+        : 90
+    const mt = parseInt(esiMaxTypesStr.trim(), 10)
+    const maxTypes =
+      Number.isFinite(mt) && mt >= 1
+        ? Math.min(ESI_MAX_TYPES_USER_CAP, Math.floor(mt))
+        : ESI_DEFAULT_MAX_TYPES
     try {
       const fileName = `liquidity-esi-${selected.esiRegionId}.xlsx`
       const result = await buildEsiLiquidityToExports({
         regionId: selected.esiRegionId,
         fileName,
-        orderPagesUntilExhausted: esiOrderPagesUntilExhausted,
-        ...(maxOrderPages != null && { maxOrderPages }),
+        orderPagesUntilExhausted: false,
+        maxTypes,
+        maxOrderPages,
       })
       setMsg(
         `ESI: ${result.rowCount} позиций → exports/${result.fileName}${
@@ -456,6 +483,29 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
                 </div>
               </div>
 
+              <div className="w-[5.25rem] shrink-0 sm:w-24">
+                <div className="relative h-full min-h-full overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
+                    aria-hidden
+                  />
+                  <span className="mb-1.5 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/80">
+                    Типов
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={ESI_MAX_TYPES_USER_CAP}
+                    value={esiMaxTypesStr}
+                    onChange={(e) => setEsiMaxTypesStr(e.target.value)}
+                    disabled={disabled || loading}
+                    className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-sm tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
+                  />
+                </div>
+              </div>
+
               <div className="min-w-0 w-max max-w-full shrink-0">
                 <div className="relative overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
                   <div
@@ -463,11 +513,7 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
                     aria-hidden
                   />
                   <div className="flex min-w-0 w-max max-w-full items-stretch gap-2.5 sm:gap-3">
-                    <label
-                      className={`shrink-0 self-stretch ${
-                        esiOrderPagesUntilExhausted ? 'opacity-50' : ''
-                      }`}
-                    >
+                    <label className="shrink-0 self-stretch">
                       <span className="mb-1 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
                         Страниц
                       </span>
@@ -475,65 +521,13 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
                         type="number"
                         inputMode="numeric"
                         min={1}
-                        max={200}
+                        max={ESI_MAX_ORDER_PAGES_USER_CAP}
                         value={esiMaxPagesStr}
                         onChange={(e) => setEsiMaxPagesStr(e.target.value)}
-                        disabled={disabled || loading || esiOrderPagesUntilExhausted}
+                        disabled={disabled || loading}
                         className="w-[4.5rem] rounded border border-eve-border/80 bg-eve-bg/90 px-2.5 py-1.5 text-sm tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                     </label>
-                    <div
-                      className={`group/mode w-fit min-w-0 shrink-0 self-stretch rounded border p-2 transition-all ${
-                        esiOrderPagesUntilExhausted
-                          ? 'border-eve-accent/45 bg-eve-accent-muted/20 shadow-[inset_0_0_0_1px_rgba(184,150,61,0.12)]'
-                          : 'border-eve-border/55 bg-eve-bg/20 hover:border-eve-border/70'
-                      } ${disabled || loading ? 'pointer-events-none opacity-50' : ''}`}
-                    >
-                      <label
-                        className={`flex w-fit min-w-0 max-w-[min(11rem,100%)] flex-col ${
-                          disabled || loading
-                            ? 'cursor-not-allowed'
-                            : 'cursor-pointer'
-                        }`}
-                      >
-                        <span className="mb-0.5 block w-max font-eve text-[9px] font-semibold uppercase tracking-[0.12em] text-eve-gold/70">
-                          Максимум
-                        </span>
-                        <div
-                          className={`flex w-max min-w-0 max-w-full items-center gap-1.5 ${
-                            esiOrderPagesUntilExhausted
-                              ? 'justify-between'
-                              : 'justify-end'
-                          }`}
-                        >
-                          {esiOrderPagesUntilExhausted && (
-                            <p className="min-w-0 max-w-[10.5rem] text-[8.5px] leading-snug text-eve-muted/90 sm:text-[9px]">
-                              Все стр. до ответа ESI
-                            </p>
-                          )}
-                          <div className="flex shrink-0 items-center self-center">
-                            <input
-                              type="checkbox"
-                              className="peer sr-only"
-                              checked={esiOrderPagesUntilExhausted}
-                              onChange={(e) =>
-                                setEsiOrderPagesUntilExhausted(e.target.checked)
-                              }
-                              disabled={disabled || loading}
-                              aria-label="Максимум: запрашивать все страницы ордеров"
-                            />
-                            <div
-                              className="flex h-5 w-10 flex-shrink-0 items-center justify-start rounded-full border border-eve-border/70 bg-eve-bg/80 p-px shadow-eve-inset transition peer-checked:justify-end peer-checked:border-eve-accent/55 peer-checked:bg-eve-accent-muted/30 peer-focus-visible:ring-2 peer-focus-visible:ring-eve-accent/35"
-                              aria-hidden
-                            >
-                              <span
-                                className="h-3.5 w-3.5 rounded-full border border-eve-border/40 bg-gradient-to-b from-eve-elevated to-eve-bg shadow-[0_1px_2px_rgba(0,0,0,0.5)] ring-1 ring-white/5 transition group-has-[:checked]/mode:border-eve-accent/70 group-has-[:checked]/mode:from-eve-highlight group-has-[:checked]/mode:shadow-[0_0_6px_rgba(184,150,61,0.35)]"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </label>
-                    </div>
                   </div>
                 </div>
               </div>

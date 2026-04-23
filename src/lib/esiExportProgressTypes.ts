@@ -7,15 +7,23 @@ export type EsiExportProgressState = {
   /** Текущая страница buy. */
   buyPage: number
   typeTotal: number
-  /** Сколько типов обработано (в т.ч. при параллельных батчах). */
+  /** Сколько слотов типов завершено (параллельные async). */
   typesDone: number
-  /** Сколько типов в одном батче (параллельно). */
+  /** В фазе `types` обычно = `typeTotal` (все типы — параллельные async). */
   typeConcurrency: number
   /**
-   * Режим «все страницы ордеров, пока ESI не ответит "нет страницы"».
-   * Тогда `maxOrderPages` = 0 (неизвестно), прогресс не по макс. числу страниц.
+   * Режим «все страницы ордеров» (`orderPagesUntilExhausted: true` в опциях экспорта) — влияет
+   * **только** на пагинацию /markets/…/orders/. Тогда `maxOrderPages` в прогрессе = потолок ESI
+   * (1000) для шкалы, не 0; авто-стоп по 404, пустому ответу, неполной странице, как в bounded.
    */
   unboundedOrderPages: boolean
+  /**
+   * Знаменатель шкалы Sell: 0 = брать `maxOrderPages` (ещё качаем или весь лимит).
+   * >0 = фактическое число страниц по sell (конец пагинации, 404 «нет страницы», …).
+   */
+  orderSellPageBarMax: number
+  /** То же для Buy. */
+  orderBuyPageBarMax: number
 }
 
 export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
@@ -27,4 +35,6 @@ export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
   typesDone: 0,
   typeConcurrency: 0,
   unboundedOrderPages: false,
+  orderSellPageBarMax: 0,
+  orderBuyPageBarMax: 0,
 }

@@ -10,6 +10,12 @@ import {
   ESI_EXPORT_PROGRESS_IDLE,
   type EsiExportProgressState,
 } from '../esiExportProgressTypes'
+import {
+  ESI_DEFAULT_MAX_TYPES,
+  ESI_MAX_ORDER_PAGES_USER_CAP,
+  ESI_MAX_TYPES_USER_CAP,
+  ESI_ORDER_PAGE_STAGGER_SEC,
+} from '../esiOrderPageLimits'
 
 const ESI_BASE = 'https://esi.evetech.net/latest'
 const USER_AGENT =
@@ -98,39 +104,49 @@ const TYPE_CACHE_VERSION = 1
 type EsiTypeCacheFile = { v: number; types: Record<string, { name: string }> }
 
 const typeNameById = new Map<number, string>()
-let typeNameCacheLoaded = false
 let typeNameCacheDirty = false
 const typeNameFetchInflight = new Map<number, Promise<string | undefined>>()
+
+/**
+ * Один Promise на весь прогон: нельзя ставить «загружено» до await read,
+ * иначе параллельные getEsiTypeName (prefetch с ордеров) видят пустой кэш и
+ * дублируют GET /universe/types/.
+ */
+let typeNameCacheLoadFromDisk: Promise<void> | null = null
 
 function typeCachePath(): string {
   return path.join(process.cwd(), 'data', TYPE_CACHE_FILE)
 }
 
 async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
-  if (typeNameCacheLoaded) return
-  typeNameCacheLoaded = true
-  try {
-    const raw = await fs.readFile(typeCachePath(), 'utf8')
-    const j = JSON.parse(raw) as EsiTypeCacheFile
-    if (j && j.types && typeof j.types === 'object') {
-      for (const [k, v] of Object.entries(j.types)) {
-        const id = Number(k)
-        if (Number.isInteger(id) && v && typeof v.name === 'string' && v.name) {
-          typeNameById.set(id, v.name)
+  if (typeNameCacheLoadFromDisk) return typeNameCacheLoadFromDisk
+  typeNameCacheLoadFromDisk = (async () => {
+    try {
+      const raw = await fs.readFile(typeCachePath(), 'utf8')
+      const j = JSON.parse(raw) as EsiTypeCacheFile
+      if (j && j.types && typeof j.types === 'object') {
+        for (const [k, v] of Object.entries(j.types)) {
+          const id = Number(k)
+          if (Number.isInteger(id) && v && typeof v.name === 'string' && v.name) {
+            typeNameById.set(id, v.name)
+          }
         }
       }
-    }
-    esiDevLog(
-      `кэш type names: из ${path.join('data', TYPE_CACHE_FILE)} — ${typeNameById.size} id`
-    )
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code
-    if (code !== 'ENOENT') {
       esiDevLog(
-        `кэш type names: чтение пропущено (${e instanceof Error ? e.message : String(e)})`
+        `кэш type names: из ${path.join('data', TYPE_CACHE_FILE)} — ${typeNameById.size} id`
       )
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        /* первый прогон — файла ещё нет */
+      } else {
+        esiDevLog(
+          `кэш type names: чтение пропущено (${e instanceof Error ? e.message : String(e)})`
+        )
+      }
     }
-  }
+  })()
+  return typeNameCacheLoadFromDisk
 }
 
 async function persistTypeNameCacheToDisk(): Promise<void> {
@@ -163,7 +179,7 @@ async function persistTypeNameCacheToDisk(): Promise<void> {
 
 /**
  * Имя типа с ESI — один раз на `type_id`, далее из `data/esi-type-cache.json`.
- * Параллельные батчи с одним id не дублируют HTTP.
+ * Параллельные вызовы с одним id не дублируют HTTP (тот же inflight).
  */
 async function getEsiTypeName(typeId: number): Promise<string | undefined> {
   await loadTypeNameCacheFromDiskIfNeeded()
@@ -211,18 +227,12 @@ export type EsiLiquidityExportOptions = {
    * `{"error":"Requested page does not exist!"}` или пустой массив; `maxOrderPages` не лимит.
    */
   orderPagesUntilExhausted: boolean
-  /** Пауза между батчами типов (мс) — внутри батча имя + история по типу параллельны. */
-  historyDelayMs: number
-  /** Сколько типов обрабатывать одновременно (батчами, после батча — historyDelayMs). */
-  typeConcurrency: number
 }
 
 const DEFAULT_OPTS: EsiLiquidityExportOptions = {
-  maxTypes: 72,
+  maxTypes: ESI_DEFAULT_MAX_TYPES,
   maxOrderPages: 90,
   orderPagesUntilExhausted: false,
-  historyDelayMs: 180,
-  typeConcurrency: 3,
 }
 
 /** Vite передаёт в opts явные `undefined` — без этого они затирают DEFAULT_OPTS при object spread. */
@@ -231,14 +241,23 @@ function mergeEsiOpts(
 ): EsiLiquidityExportOptions {
   const o: EsiLiquidityExportOptions = { ...DEFAULT_OPTS }
   if (!partial) return o
-  if (partial.maxTypes !== undefined) o.maxTypes = partial.maxTypes
-  if (partial.maxOrderPages !== undefined) o.maxOrderPages = partial.maxOrderPages
+  if (partial.maxTypes !== undefined) {
+    o.maxTypes = Math.max(
+      1,
+      Math.min(ESI_MAX_TYPES_USER_CAP, Math.floor(partial.maxTypes))
+    )
+  }
+  if (partial.maxOrderPages !== undefined) {
+    o.maxOrderPages = Math.max(
+      1,
+      Math.min(
+        ESI_MAX_ORDER_PAGES_USER_CAP,
+        Math.floor(partial.maxOrderPages)
+      )
+    )
+  }
   if (partial.orderPagesUntilExhausted !== undefined) {
     o.orderPagesUntilExhausted = partial.orderPagesUntilExhausted
-  }
-  if (partial.historyDelayMs !== undefined) o.historyDelayMs = partial.historyDelayMs
-  if (partial.typeConcurrency !== undefined) {
-    o.typeConcurrency = Math.max(1, Math.min(8, Math.floor(partial.typeConcurrency)))
   }
   return o
 }
@@ -314,9 +333,29 @@ async function esiFetch<T>(path: string, query: Record<string, string>): Promise
       )
       return JSON.parse(body) as T
     }
-    if (status === 404 && body.includes('Not found')) {
-      esiDevLog(`← ${path} HTTP 404, ${ms} ms — не найдено`)
-      throw new Error(`ESI 404: ${path}`)
+    if (status === 404) {
+      const t = body.trim()
+      if (t.startsWith('{')) {
+        try {
+          const j = JSON.parse(body) as { error?: string }
+          if (
+            j &&
+            typeof j.error === 'string' &&
+            /requested page does not exist|page does not exist/i.test(j.error)
+          ) {
+            esiDevLog(
+              `← ${path} HTTP 404, ${ms} ms — нет такой страницы ордеров (конец пагинации)`
+            )
+            return j as T
+          }
+        } catch {
+          /* not JSON */
+        }
+      }
+      if (body.includes('Not found')) {
+        esiDevLog(`← ${path} HTTP 404, ${ms} ms — не найдено`)
+        throw new Error(`ESI 404: ${path}`)
+      }
     }
     if (status === 420 || status === 429 || status === 503) {
       const w = Math.max(
@@ -394,19 +433,54 @@ function liquidityFromHistory(
 
 const UNBOUNDED_ORDER_PAGES_SAFETY = 10_000
 
-/**
- * Очередь только для GET `/markets/.../orders/`. GET `/universe/types/{id}/` сюда
- * не входит и может идти параллельно с sell/buy (в т.ч. prefetch из страниц ордеров).
- */
-let orderEsiRequestChain: Promise<unknown> = Promise.resolve()
+/** Повтор страницы ордеров вне `esiFetch` (сеть, неожиданный отбор и т.д.). */
+const ORDER_PAGE_OUTER_RETRIES = 3
+const ORDER_PAGE_OUTER_BACKOFF_MS = 1_200
 
-function runOrderEsiFetch<T>(fn: () => Promise<T>): Promise<T> {
-  const p = orderEsiRequestChain.then(() => fn()) as Promise<T>
-  orderEsiRequestChain = p.then(
-    () => undefined,
-    () => undefined
-  )
-  return p
+/** Каждая страница — отдельный асинхронный GET (без глобальной цепочки sell/buy). */
+async function fetchOrderPageForSide(
+  side: 'sell' | 'buy',
+  regionId: number,
+  page: number
+): Promise<unknown> {
+  const oneGet = () =>
+    esiFetch<unknown>(`/markets/${regionId}/orders/`, {
+      order_type: side,
+      page: String(page),
+    })
+  let lastErr: unknown
+  for (let attempt = 0; attempt < ORDER_PAGE_OUTER_RETRIES; attempt++) {
+    if (isEsiStopRequested()) {
+      throw new Error('ESI: остановка экспорта')
+    }
+    try {
+      return await oneGet()
+    } catch (e) {
+      lastErr = e
+      if (attempt < ORDER_PAGE_OUTER_RETRIES - 1) {
+        const w = ORDER_PAGE_OUTER_BACKOFF_MS * (attempt + 1)
+        esiDevLog(
+          `ордера ${side} p.${page}: внешний повтор ${attempt + 2}/${
+            ORDER_PAGE_OUTER_RETRIES
+          } через ${w} ms (${
+            e instanceof Error ? e.message : String(e)
+          })`
+        )
+        await sleep(w)
+        if (isEsiStopRequested()) {
+          throw new Error('ESI: остановка экспорта')
+        }
+      }
+    }
+  }
+  throw lastErr
+}
+
+type EsiOrderPageParseResult = {
+  rows: EsiMarketOrder[]
+  endOfSide: boolean
+  /** true — /orders/ за пределом (в т.ч. HTTP 404 + JSON), UI: шкала стороны = 100 % */
+  noSuchPage?: boolean
 }
 
 /**
@@ -417,7 +491,7 @@ function parseEsiOrderPage(
   page: number,
   side: 'sell' | 'buy',
   regionId: number
-): { rows: EsiMarketOrder[]; endOfSide: boolean } {
+): EsiOrderPageParseResult {
   if (Array.isArray(data)) {
     if (data.length === 0) {
       esiDevLog(
@@ -434,7 +508,7 @@ function parseEsiOrderPage(
       esiDevLog(
         `ордера region=${regionId} ${side} page=${page} — ESI: ${errStr} (конец пагинации)`
       )
-      return { rows: [], endOfSide: true }
+      return { rows: [], endOfSide: true, noSuchPage: true }
     }
     throw new Error(`ESI orders ${side} p.${page}: ${errStr}`)
   }
@@ -443,27 +517,140 @@ function parseEsiOrderPage(
   )
 }
 
+/** Шкала стороны = факт p/p, когда пагинация sell/buy закончилась (в т.ч. 404 «нет стр.»). */
+function setOrderSidePageBarActual(side: 'sell' | 'buy', page: number): void {
+  if (page <= 0) return
+  if (side === 'sell') {
+    esiProgress.sellPage = page
+    esiProgress.orderSellPageBarMax = page
+  } else {
+    esiProgress.buyPage = page
+    esiProgress.orderBuyPageBarMax = page
+  }
+}
+
+const STAGGER_MS = ESI_ORDER_PAGE_STAGGER_SEC * 1000
+
 /**
- * Одна сторона книги (sell / buy) — пагинация. Sell и buy вызываются параллельно.
- * `untilExhausted` — идти по страницам, пока не `endOfSide` (пусто / <1000 / ошибка "нет страницы").
+ * Режим «максимум страниц» (bounded): при `ESI_ORDER_PAGE_STAGGER_SEC > 0` старты p=1,2,…
+ * разведены по времени; при 0 — все GET стартуют сразу. Каждая страница — независимый `esiFetch`.
+ * `onPageSuccess` — после успешного ответа и parse (счётчик +1 в UI).
+ * Слияние: по номерам страниц 1..N, останов на первом `endOfSide` (ниже — не берём,
+ * ответы всё равно приходят, если уже в полёте).
  */
-async function fetchOrdersForSide(
+async function fetchOrderBookSideStaggered(
   regionId: number,
   maxPages: number,
   side: 'sell' | 'buy',
-  onPage: (page: number) => void,
-  untilExhausted: boolean
+  tBatchStart: number,
+  onPageSuccess: () => void,
+  onPageRows?: (
+    side: 'sell' | 'buy',
+    page: number,
+    rows: EsiMarketOrder[]
+  ) => void
+): Promise<EsiMarketOrder[]> {
+  const hardCap = maxPages
+  const tasks: Promise<{
+    page: number
+    rows: EsiMarketOrder[]
+    endOfSide: boolean
+    aborted?: boolean
+  }>[] = []
+  for (let page = 1; page <= hardCap; page++) {
+    const p = page
+    tasks.push(
+      (async () => {
+        const startAt = tBatchStart + (p - 1) * STAGGER_MS
+        const wait = Math.max(0, startAt - Date.now())
+        if (wait > 0) {
+          await sleep(wait)
+        }
+        if (isEsiStopRequested()) {
+          return { page: p, rows: [], endOfSide: true, aborted: true }
+        }
+        let data: unknown
+        try {
+          data = await fetchOrderPageForSide(side, regionId, p)
+        } catch (e) {
+          if (isEsiStopRequested()) {
+            esiDevLog(
+              `ордера ${side}: прервано (stagger) п.${p} — к объединению не пойдёт`
+            )
+            return { page: p, rows: [], endOfSide: true, aborted: true }
+          }
+          throw e
+        }
+        const parsed = parseEsiOrderPage(data, p, side, regionId)
+        onPageSuccess()
+        onPageRows?.(side, p, parsed.rows)
+        if (parsed.rows.length > 0) {
+          prefetchEsiTypeNamesFromOrderRows(parsed.rows)
+        }
+        return { page: p, rows: parsed.rows, endOfSide: parsed.endOfSide }
+      })()
+    )
+  }
+  const parts = await Promise.all(tasks)
+  const byPage = new Map(parts.map((x) => [x.page, x]))
+  const all: EsiMarketOrder[] = []
+  let mergeAborted = false
+  let setBarFromEndOfSide = false
+  for (let p = 1; p <= hardCap; p++) {
+    const b = byPage.get(p)
+    if (!b) {
+      break
+    }
+    if (b.aborted) {
+      mergeAborted = true
+      esiDevLog(
+        `ордера ${side} (stagger): сбор по объединению, прервано на/до п.${p}, ордеров ${all.length}`
+      )
+      break
+    }
+    if (b.rows.length > 0) {
+      all.push(...b.rows)
+    }
+    esiDevLog(
+      `ордера region=${regionId} ${side} page=${p} — +${b.rows.length} (stagger merge, всего ${all.length})`
+    )
+    if (b.endOfSide) {
+      setOrderSidePageBarActual(side, p)
+      setBarFromEndOfSide = true
+      break
+    }
+  }
+  if (!mergeAborted && !setBarFromEndOfSide && esiProgress.maxOrderPages > 0) {
+    const last = byPage.get(hardCap)
+    if (last && !last.aborted && !last.endOfSide) {
+      setOrderSidePageBarActual(side, hardCap)
+    }
+  }
+  return all
+}
+
+/**
+ * Режим «все страницы до конца ESI» — строго по одной странице за итерацию
+ * (нужен `endOfSide` от предыдущей). Каждый GET — отдельный `fetchOrderPageForSide`.
+ */
+async function fetchOrderBookSideSequential(
+  regionId: number,
+  side: 'sell' | 'buy',
+  onPageCompleted: (page: number) => void,
+  onPageRows?: (
+    side: 'sell' | 'buy',
+    page: number,
+    rows: EsiMarketOrder[]
+  ) => void
 ): Promise<EsiMarketOrder[]> {
   const all: EsiMarketOrder[] = []
-  const hardCap = untilExhausted ? UNBOUNDED_ORDER_PAGES_SAFETY : maxPages
+  const hardCap = UNBOUNDED_ORDER_PAGES_SAFETY
   let page = 1
   for (;;) {
     if (page > hardCap) {
-      if (untilExhausted) {
-        esiDevLog(
-          `ордера ${side}: лимит безопасности ${UNBOUNDED_ORDER_PAGES_SAFETY} стр. — останов`
-        )
-      }
+      esiDevLog(
+        `ордера ${side}: лимит безопасности ${UNBOUNDED_ORDER_PAGES_SAFETY} стр. — останов`
+      )
       break
     }
     if (isEsiStopRequested()) {
@@ -472,19 +659,25 @@ async function fetchOrdersForSide(
       )
       return all
     }
-    onPage(page)
-    const data = await runOrderEsiFetch(() =>
-      esiFetch<unknown>(`/markets/${regionId}/orders/`, {
-        order_type: side,
-        page: String(page),
-      })
-    )
-    const { rows, endOfSide } = parseEsiOrderPage(
+    let data: unknown
+    try {
+      data = await fetchOrderPageForSide(side, regionId, page)
+    } catch (e) {
+      if (isEsiStopRequested()) {
+        esiDevLog(`ордера ${side}: прервано — ${all.length} по стороне`)
+        return all
+      }
+      throw e
+    }
+    const parsed = parseEsiOrderPage(
       data,
       page,
       side,
       regionId
     )
+    const { rows, endOfSide } = parsed
+    onPageCompleted(page)
+    onPageRows?.(side, page, rows)
     if (rows.length > 0) {
       all.push(...rows)
       prefetchEsiTypeNamesFromOrderRows(rows)
@@ -493,12 +686,12 @@ async function fetchOrdersForSide(
       )
     }
     if (endOfSide) {
+      setOrderSidePageBarActual(side, page)
       break
     }
     page += 1
-    await sleep(200)
     if (isEsiStopRequested()) {
-      esiDevLog(`ордера ${side}: стоп после паузы — ${all.length}`)
+      esiDevLog(`ордера ${side}: стоп после стр. ${page - 1} — ${all.length}`)
       return all
     }
   }
@@ -506,41 +699,80 @@ async function fetchOrdersForSide(
 }
 
 /**
- * Собирает ордера: sell и buy в `Promise.all`, запросы страниц к
- * `/markets/.../orders/` **чередуются** (`runOrderEsiFetch`). Имена типов
- * (`/universe/types/`) из ордеров префетчатся параллельно и не делят эту очередь.
+ * Собирает ордера: sell и buy в `Promise.all` (стороны независимы).
+ * Bounded — при stagger=0 все страницы стороны параллельно; unbounded — строгая пагинация 1,2,…
+ * (каждое обращение — отдельный асинхронный GET).
+ * `onPageRows` — сразу по приходе страницы (можно гонять history параллельно с дальнейшим сбором sell/buy).
  */
 export async function fetchAllMarketOrders(
   regionId: number,
   maxPages: number,
-  orderPagesUntilExhausted: boolean
+  orderPagesUntilExhausted: boolean,
+  onPageRows?: (
+    side: 'sell' | 'buy',
+    page: number,
+    rows: EsiMarketOrder[]
+  ) => void
 ): Promise<EsiMarketOrder[]> {
-  orderEsiRequestChain = Promise.resolve()
   esiProgress.phase = 'orders'
   esiProgress.unboundedOrderPages = orderPagesUntilExhausted
-  esiProgress.maxOrderPages = orderPagesUntilExhausted ? 0 : maxPages
+  /**
+   * Только для ордеров: при «максимум» (все стр. до 404) — потолок для шкалы/ETA = лимит ESI, не 0
+   * (сбор по-прежнему sequential до endOfSide; «Типы» и maxTypes на это не завязаны).
+   */
+  esiProgress.maxOrderPages = orderPagesUntilExhausted
+    ? ESI_MAX_ORDER_PAGES_USER_CAP
+    : maxPages
   esiProgress.sellPage = 0
   esiProgress.buyPage = 0
-  const [sellOrders, buyOrders] = await Promise.all([
-    fetchOrdersForSide(
-      regionId,
-      maxPages,
-      'sell',
-      (p) => {
-        esiProgress.sellPage = p
-      },
-      orderPagesUntilExhausted
-    ),
-    fetchOrdersForSide(
-      regionId,
-      maxPages,
-      'buy',
-      (p) => {
-        esiProgress.buyPage = p
-      },
-      orderPagesUntilExhausted
-    ),
-  ])
+  esiProgress.orderSellPageBarMax = 0
+  esiProgress.orderBuyPageBarMax = 0
+  const tStagger = Date.now()
+  let sellN = 0
+  let buyN = 0
+  const [sellOrders, buyOrders] = orderPagesUntilExhausted
+    ? await Promise.all([
+        fetchOrderBookSideSequential(
+          regionId,
+          'sell',
+          (p) => {
+            esiProgress.sellPage = p
+          },
+          onPageRows
+        ),
+        fetchOrderBookSideSequential(
+          regionId,
+          'buy',
+          (p) => {
+            esiProgress.buyPage = p
+          },
+          onPageRows
+        ),
+      ])
+    : await Promise.all([
+        fetchOrderBookSideStaggered(
+          regionId,
+          maxPages,
+          'sell',
+          tStagger,
+          () => {
+            sellN += 1
+            esiProgress.sellPage = sellN
+          },
+          onPageRows
+        ),
+        fetchOrderBookSideStaggered(
+          regionId,
+          maxPages,
+          'buy',
+          tStagger,
+          () => {
+            buyN += 1
+            esiProgress.buyPage = buyN
+          },
+          onPageRows
+        ),
+      ])
   return [...sellOrders, ...buyOrders]
 }
 
@@ -548,8 +780,19 @@ type Agg = { asks: number[]; bids: number[]; activity: number }
 
 function aggregateByType(orders: EsiMarketOrder[]): Map<number, Agg> {
   const m = new Map<number, Agg>()
-  for (const o of orders) {
+  mergeOrdersInto(m, orders)
+  return m
+}
+
+/** Добавляет ордера в агрегат (только у затронутых type_id пересортирует bid/ask). */
+function mergeOrdersInto(
+  m: Map<number, Agg>,
+  rows: readonly EsiMarketOrder[]
+): void {
+  const touched = new Set<number>()
+  for (const o of rows) {
     const t = o.type_id
+    touched.add(t)
     let a = m.get(t)
     if (!a) {
       a = { asks: [], bids: [], activity: 0 }
@@ -559,11 +802,12 @@ function aggregateByType(orders: EsiMarketOrder[]): Map<number, Agg> {
     if (o.is_buy_order) a.bids.push(o.price)
     else a.asks.push(o.price)
   }
-  for (const a of m.values()) {
+  for (const t of touched) {
+    const a = m.get(t)
+    if (!a) continue
     a.asks.sort((x, y) => x - y)
     a.bids.sort((x, y) => y - x)
   }
-  return m
 }
 
 function bestAsk(a: Agg): number | null {
@@ -573,25 +817,17 @@ function bestBid(a: Agg): number | null {
   return a.bids.length ? a.bids[0]! : null
 }
 
-/** Имя типа + история рынка — параллельно (два HTTP к ESI). */
-async function buildOneLiquidityRow(
+/** Имя + `/markets/.../history/` — независимые async GET (без bid/ask из ордеров). */
+type TypeNameAndHistory = { name: string; hist: EsiHistoryDay[] }
+
+async function fetchTypeNameAndHistory(
   typeId: number,
-  regionId: number,
-  monthAgo: Date,
-  byType: Map<number, Agg>
-): Promise<LiquidityRow | null> {
+  regionId: number
+): Promise<TypeNameAndHistory | null> {
   if (isEsiStopRequested()) {
     return null
   }
-  const agg = byType.get(typeId)
-  if (!agg) return null
-  const priceSell = bestAsk(agg)
-  const priceBuy = bestBid(agg)
-  if (priceSell == null || priceBuy == null) return null
-  if (priceSell <= 0 || priceBuy <= 0) return null
-
   let name = `Type ${typeId}`
-
   const [typeName, hist] = await Promise.all([
     getEsiTypeName(typeId),
     esiFetch<EsiHistoryDay[]>(`/markets/${regionId}/history/`, {
@@ -604,12 +840,29 @@ async function buildOneLiquidityRow(
   if (!Array.isArray(hist) || hist.length === 0) {
     return null
   }
-  const liq = liquidityFromHistory(hist, monthAgo)
+  return { name, hist }
+}
+
+/** Bid/ask — из **финального** агрегата по ордерам; история/имя — с префетча или свежий запрос. */
+function composeLiquidityRow(
+  typeId: number,
+  byType: Map<number, Agg>,
+  monthAgo: Date,
+  parts: TypeNameAndHistory | null
+): LiquidityRow | null {
+  const agg = byType.get(typeId)
+  if (!agg) return null
+  const priceSell = bestAsk(agg)
+  const priceBuy = bestBid(agg)
+  if (priceSell == null || priceBuy == null) return null
+  if (priceSell <= 0 || priceBuy <= 0) return null
+  if (!parts) return null
+  const liq = liquidityFromHistory(parts.hist, monthAgo)
   if (!liq) {
     return null
   }
   return {
-    name,
+    name: parts.name,
     type_id: typeId,
     day_volume: liq.dayAvgVolume,
     day_turnover: liq.dayTurnoverMln,
@@ -631,16 +884,45 @@ export async function buildLiquidityRows(
 ): Promise<BuildLiquidityRowsResult> {
   try {
   const o = mergeEsiOpts(opts)
+  /** Сразу для UI: шкала «типы» видна на фазе ордеров (0 / maxTypes), прежде чем придут все страницы. */
+  esiProgress.typeTotal = o.maxTypes
+  esiProgress.typesDone = 0
   const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
   const tAll = Date.now()
+  await loadTypeNameCacheFromDiskIfNeeded()
   esiDevLog(
-    `строки ликвидности: region=${regionId}, orderPagesUntilExhausted=${o.orderPagesUntilExhausted}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}, typeConcurrency=${o.typeConcurrency}, historyDelayMs=${o.historyDelayMs}; ордера sell|buy — параллельно, типы — батчами; имена типов — кэш data/${TYPE_CACHE_FILE}`
+    `строки ликвидности: region=${regionId}, orderPagesUntilExhausted=${o.orderPagesUntilExhausted}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}; sell|buy|history+имя — независимые async: по мере прихода страниц ордеров стартует префетч /markets/.../history/ и имени; bid/ask в строке — по финальному агрегату; кэш имён — data/${TYPE_CACHE_FILE}`
   )
+
+  const partialByType = new Map<number, Agg>()
+  const typePrefetch = new Map<number, Promise<TypeNameAndHistory | null>>()
+  const onOrderPageRows: (
+    side: 'sell' | 'buy',
+    _page: number,
+    rows: EsiMarketOrder[]
+  ) => void = (_side, _page, rows) => {
+    if (rows.length === 0) return
+    mergeOrdersInto(partialByType, rows)
+    const preCandidates: { typeId: number; activity: number }[] = []
+    for (const [typeId, agg] of partialByType) {
+      const ask = bestAsk(agg)
+      const bid = bestBid(agg)
+      if (ask == null || bid == null) continue
+      if (ask <= 0 || bid <= 0) continue
+      preCandidates.push({ typeId, activity: agg.activity })
+    }
+    preCandidates.sort((a, b) => b.activity - a.activity)
+    for (const { typeId } of preCandidates.slice(0, o.maxTypes)) {
+      if (typePrefetch.has(typeId)) continue
+      typePrefetch.set(typeId, fetchTypeNameAndHistory(typeId, regionId))
+    }
+  }
 
   const orders = await fetchAllMarketOrders(
     regionId,
     o.maxOrderPages,
-    o.orderPagesUntilExhausted
+    o.orderPagesUntilExhausted,
+    onOrderPageRows
   )
   esiDevLog(
     `ордера собраны: ${orders.length} шт. за ${((Date.now() - tAll) / 1000).toFixed(1)} s`
@@ -680,43 +962,39 @@ export async function buildLiquidityRows(
   esiProgress.phase = 'types'
   esiProgress.typeTotal = chosen.length
   esiProgress.typesDone = 0
-  const conc = o.typeConcurrency
-  esiProgress.typeConcurrency = conc
+  esiProgress.typeConcurrency = chosen.length
 
-  const rows: LiquidityRow[] = []
-  let stoppedInTypes = false
-  for (let i = 0; i < chosen.length; i += conc) {
-    if (isEsiStopRequested()) {
-      stoppedInTypes = true
-      esiDevLog(
-        `типы: стоп — собрано ${rows.length} позиций (параллель по ${conc})`
-      )
-      break
-    }
-    const batch = chosen.slice(i, i + conc)
-    const batchRows = await Promise.all(
-      batch.map(({ typeId }) =>
-        buildOneLiquidityRow(typeId, regionId, monthAgo, byType)
-      )
-    )
-    for (const row of batchRows) {
-      if (row) rows.push(row)
-    }
-    const added = batchRows.filter(Boolean).length
-    esiDevLog(
-      `типы: батч ${Math.floor(i / conc) + 1}, +${added}/${batch.length} к строкам, всего ${rows.length}`
-    )
-    esiProgress.typesDone = Math.min(i + batch.length, chosen.length)
-    if (i + conc < chosen.length) {
-      if (isEsiStopRequested()) {
-        stoppedInTypes = true
-        esiDevLog(`типы: стоп после батча — ${rows.length} позиций`)
-        break
+  const rowResults = await Promise.all(
+    chosen.map(async ({ typeId }) => {
+      try {
+        if (isEsiStopRequested()) {
+          return null
+        }
+        const pref = typePrefetch.get(typeId)
+        const parts =
+          pref != null
+            ? await pref
+            : await fetchTypeNameAndHistory(typeId, regionId)
+        return composeLiquidityRow(typeId, byType, monthAgo, parts)
+      } finally {
+        esiProgress.typesDone += 1
       }
-      await sleep(o.historyDelayMs)
-    }
+    })
+  )
+  const rows: LiquidityRow[] = []
+  for (const r of rowResults) {
+    if (r) rows.push(r)
   }
-
+  const stoppedInTypes = isEsiStopRequested()
+  if (stoppedInTypes) {
+    esiDevLog(
+      `типы: стоп — ${rows.length} строк в таблицу, запросы по ${chosen.length} слотам завершены`
+    )
+  } else {
+    esiDevLog(
+      `типы: ${chosen.length} слотов (имя+history параллельно с ордерами, где префетч) → +${rows.length} строк в таблицу`
+    )
+  }
   esiDevLog(
     `сборка строк завершена: ${rows.length} позиций${stoppedInTypes ? ' (частично, стоп)' : ''} за ${((Date.now() - tAll) / 1000).toFixed(1)} s`
   )

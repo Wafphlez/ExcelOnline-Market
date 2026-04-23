@@ -59,13 +59,20 @@ export function EsiExportProgressPanel({
   typesPhaseElapsedSec,
 }: EsiExportProgressPanelProps) {
   const m = progress.maxOrderPages
+  const sellM =
+    m > 0 && progress.orderSellPageBarMax > 0
+      ? progress.orderSellPageBarMax
+      : m
+  const buyM =
+    m > 0 && progress.orderBuyPageBarMax > 0
+      ? progress.orderBuyPageBarMax
+      : m
 
   const p = progress
   const op = esiOrdersProgress01(p)
   const tp = esiTypesProgress01(p)
   const showTypesEta = p.phase === 'types' && p.typeTotal > 0
-  const showOrderEta =
-    p.phase === 'orders' && !p.unboundedOrderPages && p.maxOrderPages > 0
+  const showOrderEta = p.phase === 'orders' && p.maxOrderPages > 0
 
   let etaNote = ''
   let etaValue: number | null = null
@@ -93,11 +100,15 @@ export function EsiExportProgressPanel({
             ESI — загрузка
           </span>
           <p className="mt-0.5 text-[10px] text-eve-muted/90">
-            {p.phase === 'orders' && p.unboundedOrderPages && (
-              <>ордера — все страницы, пока ESI не ответит «нет страницы» (sell ‖ buy)</>
+            {p.phase === 'orders' && (
+              <>
+                ордера sell ‖ buy; префетч типов (топ)
+                {p.unboundedOrderPages
+                  ? ' · страницы ордеров: до 404/конца ESI (число в «Страниц» не используется)'
+                  : ' · страницы ордеров: ≤ лимита «Страниц»; тот же авто-стоп на 404/конце'}
+              </>
             )}
-            {p.phase === 'orders' && !p.unboundedOrderPages && 'ордера sell ‖ buy'}
-            {p.phase === 'types' && 'типы (батч)'}
+            {p.phase === 'types' && 'сборка строк (имя+history → bid/ask из фин. ордеров)'}
             {p.phase === 'idle' && m > 0 && '—'}
             {p.phase === 'idle' && m <= 0 && '…'}
           </p>
@@ -137,31 +148,46 @@ export function EsiExportProgressPanel({
       {m > 0 && (
         <div className="space-y-2.5">
           <p className="text-[10px] text-eve-muted/90">
-            Книга ордеров — стороны{' '}
-            <span className="font-semibold text-eve-accent/95">параллельно</span>
+            Книга ордеров: sell/buy <span className="font-semibold text-eve-accent/95">параллельно</span>
+            {p.unboundedOrderPages
+              ? ' (без сетевого лимита по числу в «Страниц»; запросы по стороне по порядку). '
+              : ' (лимит стр. из «Страниц»; внутри — параллельно). '}
+            Останов: пусто / «не 1000» на стр. / 404. Знаменатель = фактическое число стр. по
+            стороне, если конец раньше потолка.
           </p>
           <ProgressRow
             label="Sell"
             current={p.sellPage}
-            max={m}
+            max={sellM}
             accentClass="bg-eve-cyan/80"
           />
           <ProgressRow
             label="Buy"
             current={p.buyPage}
-            max={m}
+            max={buyM}
             accentClass="bg-eve-danger/70"
           />
         </div>
       )}
 
-      {p.phase === 'types' && p.typeTotal > 0 && (
+      {(p.phase === 'orders' || p.phase === 'types') && p.typeTotal > 0 && (
         <div className="mt-3 space-y-2 border-t border-eve-border/40 pt-3">
           <p className="text-[10px] text-eve-muted/90">
-            Топ-типов: имя и история —{' '}
-            <span className="font-semibold text-eve-accent/95">
-              до {p.typeConcurrency || 1} типов параллельно
-            </span>
+            {p.phase === 'orders' && (
+              <>
+                Макс. слотов: {p.typeTotal}. Префетч history+имя уже идёт; шкала «готово»
+                заполнится после ордеров (знаменатель станет равен числу отобранных типов)
+              </>
+            )}
+            {p.phase === 'types' && (
+              <>
+                Сборка{' '}
+                <span className="font-semibold text-eve-accent/95">
+                  {p.typeTotal} слотов
+                </span>
+                {': compose строк (имя+history, bid/ask из полного снимка)'}
+              </>
+            )}
           </p>
           <ProgressRow
             label="Обработано типов"

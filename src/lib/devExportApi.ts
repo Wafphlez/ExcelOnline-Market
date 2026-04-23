@@ -116,8 +116,6 @@ export async function buildEsiLiquidityToExports(opts: {
   maxOrderPages?: number
   /** true — запрашивать все страницы ордеров, пока ESI не вернёт «нет страницы» */
   orderPagesUntilExhausted?: boolean
-  /** 1..8, по умолчанию на сервере 3 */
-  typeConcurrency?: number
 }): Promise<EsiLiquidityResult> {
   if (!isDevExportServer) {
     throw new Error(
@@ -133,7 +131,6 @@ export async function buildEsiLiquidityToExports(opts: {
       maxTypes: opts.maxTypes,
       maxOrderPages: opts.maxOrderPages,
       orderPagesUntilExhausted: opts.orderPagesUntilExhausted === true,
-      typeConcurrency: opts.typeConcurrency,
     }),
   })
   const t = await r.text()

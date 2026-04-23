@@ -3,11 +3,16 @@ import type { EsiExportProgressState } from './esiExportProgressTypes'
 const MIN_P = 0.008
 const MAX_ETA_SEC = 6 * 60 * 60
 
-/** 0..1: сколько «отработана» фаза ордеров (sell + buy / 2*max) */
+/** 0..1: фаза ордеров; при `order*PageBarMax` — по фактическому max по стороне, иначе 2*m */
 export function esiOrdersProgress01(p: EsiExportProgressState): number {
   const m = p.maxOrderPages
   if (m <= 0) return 0
-  return Math.min(1, (p.sellPage + p.buyPage) / (2 * m))
+  const sellM = p.orderSellPageBarMax > 0 ? p.orderSellPageBarMax : m
+  const buyM = p.orderBuyPageBarMax > 0 ? p.orderBuyPageBarMax : m
+  return Math.min(
+    1,
+    (p.sellPage / sellM + p.buyPage / buyM) / 2
+  )
 }
 
 /** 0..1: фаза типов */

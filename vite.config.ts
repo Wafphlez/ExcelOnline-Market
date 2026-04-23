@@ -15,6 +15,10 @@ import {
   logEsiExportException,
   requestEsiExportStop,
 } from './src/lib/dev/esiLiquidityExport'
+import {
+  ESI_MAX_ORDER_PAGES_USER_CAP,
+  ESI_MAX_TYPES_USER_CAP,
+} from './src/lib/esiOrderPageLimits'
 
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '.')
@@ -321,7 +325,7 @@ function devExportPlugin(): Plugin {
                 regionId?: number
                 maxTypes?: number
                 maxOrderPages?: number
-                typeConcurrency?: number
+                orderPagesUntilExhausted?: boolean
                 fileName?: string
               }
               let raw: string
@@ -377,18 +381,14 @@ function devExportPlugin(): Plugin {
                 const { buffer, rowCount, partial } = await buildEsiLiquidityXlsx(rid, {
                   maxTypes:
                     typeof j.maxTypes === 'number' && j.maxTypes > 0
-                      ? Math.min(200, j.maxTypes)
+                      ? Math.min(ESI_MAX_TYPES_USER_CAP, j.maxTypes)
                       : undefined,
                   orderPagesUntilExhausted,
                   maxOrderPages:
                     !orderPagesUntilExhausted &&
                     typeof j.maxOrderPages === 'number' &&
                     j.maxOrderPages > 0
-                      ? Math.min(200, j.maxOrderPages)
-                      : undefined,
-                  typeConcurrency:
-                    typeof j.typeConcurrency === 'number' && j.typeConcurrency > 0
-                      ? Math.min(8, j.typeConcurrency)
+                      ? Math.min(ESI_MAX_ORDER_PAGES_USER_CAP, j.maxOrderPages)
                       : undefined,
                 })
                 const baseName =
