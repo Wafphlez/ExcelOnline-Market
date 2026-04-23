@@ -10,7 +10,8 @@ type Options = {
 }
 
 /**
- * Колёсико с шагом `step` при наведении на поле или при фокусе; `passive: false` для preventDefault.
+ * Колёсико с шагом `step` при наведении на поле или при фокусе; стрелки ↑/↓ с тем же шагом при фокусе.
+ * `passive: false` на wheel для preventDefault.
  */
 export function useInputWheelNudge(
   element: HTMLInputElement | null,
@@ -34,24 +35,36 @@ export function useInputWheelNudge(
     const onLeave = () => {
       hoveredRef.current = false
     }
-    const handler = (e: WheelEvent) => {
+    const nudge = (dir: 1 | -1) => {
+      const { getValue, onNudge, bounds: b, step: s } = optRef.current
+      const next = nudgeByWheel(getValue(), dir, s, b)
+      onNudge(next)
+    }
+    const onWheel = (e: WheelEvent) => {
       const canNudge =
         hoveredRef.current || document.activeElement === element
       if (!canNudge) return
       e.preventDefault()
       e.stopPropagation()
-      const { getValue, onNudge, bounds: b, step: s } = optRef.current
       const dir = (e.deltaY < 0 ? 1 : -1) as 1 | -1
-      const next = nudgeByWheel(getValue(), dir, s, b)
-      onNudge(next)
+      nudge(dir)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      e.preventDefault()
+      const dir = (e.key === 'ArrowUp' ? 1 : -1) as 1 | -1
+      nudge(dir)
     }
     element.addEventListener('mouseenter', onEnter)
     element.addEventListener('mouseleave', onLeave)
-    element.addEventListener('wheel', handler, { passive: false })
+    element.addEventListener('wheel', onWheel, { passive: false })
+    element.addEventListener('keydown', onKeyDown)
     return () => {
       element.removeEventListener('mouseenter', onEnter)
       element.removeEventListener('mouseleave', onLeave)
-      element.removeEventListener('wheel', handler)
+      element.removeEventListener('wheel', onWheel)
+      element.removeEventListener('keydown', onKeyDown)
     }
   }, [element, enabled, step])
 }
