@@ -94,26 +94,13 @@ export function EsiExportProgressPanel({
 
   return (
     <div className="mt-3 rounded border border-eve-border/60 bg-eve-elevated/50 p-3 shadow-eve-inset">
-      <div className="mb-2.5 flex flex-col gap-1.5 border-b border-eve-accent/15 pb-2.5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+      <div className="mb-2.5 flex flex-col gap-2 border-b border-eve-accent/15 pb-2.5">
         <div className="min-w-0">
           <span className="font-eve text-[11px] font-bold uppercase tracking-[0.12em] text-eve-gold">
             ESI — загрузка
           </span>
-          <p className="mt-0.5 text-[10px] text-eve-muted/90">
-            {p.phase === 'orders' && (
-              <>
-                ордера sell ‖ buy; префетч типов (топ)
-                {p.unboundedOrderPages
-                  ? ' · страницы ордеров: до 404/конца ESI (число в «Страниц» не используется)'
-                  : ' · страницы ордеров: ≤ лимита «Страниц»; тот же авто-стоп на 404/конце'}
-              </>
-            )}
-            {p.phase === 'types' && 'сборка строк (имя+history → bid/ask из фин. ордеров)'}
-            {p.phase === 'idle' && m > 0 && '—'}
-            {p.phase === 'idle' && m <= 0 && '…'}
-          </p>
         </div>
-        <div className="grid w-full shrink-0 grid-cols-[minmax(7.5rem,1fr)_minmax(9.5rem,1fr)] gap-x-3 gap-y-0.5 text-[10px] tabular-nums sm:ml-auto sm:w-[min(100%,19.5rem)]">
+        <div className="grid w-full shrink-0 grid-cols-[minmax(7.5rem,1fr)_minmax(9.5rem,1fr)] gap-x-3 gap-y-0.5 text-[10px] tabular-nums sm:w-[min(100%,19.5rem)]">
           <div
             className="flex min-h-[2.25rem] min-w-0 flex-col justify-center rounded border border-eve-border/35 bg-eve-bg/35 px-2 py-1 shadow-eve-inset"
             title="Прошло с начала выгрузки"
@@ -148,12 +135,7 @@ export function EsiExportProgressPanel({
       {m > 0 && (
         <div className="space-y-2.5">
           <p className="text-[10px] text-eve-muted/90">
-            Книга ордеров: sell/buy <span className="font-semibold text-eve-accent/95">параллельно</span>
-            {p.unboundedOrderPages
-              ? ' (без сетевого лимита по числу в «Страниц»; запросы по стороне по порядку). '
-              : ' (лимит стр. из «Страниц»; внутри — параллельно). '}
-            Останов: пусто / «не 1000» на стр. / 404. Знаменатель = фактическое число стр. по
-            стороне, если конец раньше потолка.
+            Поиск завершится досрочно если в evetech закончатся записи
           </p>
           <ProgressRow
             label="Sell"
@@ -172,23 +154,6 @@ export function EsiExportProgressPanel({
 
       {(p.phase === 'orders' || p.phase === 'types') && p.typeTotal > 0 && (
         <div className="mt-3 space-y-2 border-t border-eve-border/40 pt-3">
-          <p className="text-[10px] text-eve-muted/90">
-            {p.phase === 'orders' && (
-              <>
-                Макс. слотов: {p.typeTotal}. Префетч history+имя уже идёт; шкала «готово»
-                заполнится после ордеров (знаменатель станет равен числу отобранных типов)
-              </>
-            )}
-            {p.phase === 'types' && (
-              <>
-                Сборка{' '}
-                <span className="font-semibold text-eve-accent/95">
-                  {p.typeTotal} слотов
-                </span>
-                {': compose строк (имя+history, bid/ask из полного снимка)'}
-              </>
-            )}
-          </p>
           <ProgressRow
             label="Обработано типов"
             current={p.typesDone}

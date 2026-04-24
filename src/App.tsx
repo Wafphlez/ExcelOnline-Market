@@ -586,8 +586,8 @@ function App()
   }, [selectedLocalExportFile])
 
   return (
-    <div className="h-screen overflow-hidden eve-ui-root text-eve-text">
-      <div className="flex h-full w-full flex-col px-4 py-6">
+    <div className="min-h-screen eve-ui-root text-eve-text lg:h-screen lg:overflow-hidden">
+      <div className="w-full px-4 py-6 lg:flex lg:h-full lg:flex-col">
         <header className="mb-0 shrink-0 text-center">
           <div
             className="eve-chrome-top mb-4 mx-auto max-w-md"
@@ -719,7 +719,7 @@ function App()
             <div className="eve-panel p-1.5">
               { (isDevExportServer || exportMsg) && (
                 <>
-                  <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                     <h3 className="eve-section-title mb-2">Источник таблицы</h3>
                     { isDevExportServer && (
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -769,20 +769,20 @@ function App()
                           </button>
                         </div>
                         <div className="flex w-full items-center gap-2 text-xs text-eve-muted">
-                          <span>Выбрать локальный файл .xlsx/.xls</span>
-                          <div className="ml-auto">
+                          <div>
                             <FileDropzone
                               onFile={ onFile }
                               disabled={ loading || localExportLoading }
                               embedded
                             />
                           </div>
+                          <span>Выбрать локальный файл .xlsx/.xls</span>
                         </div>
                       </div>
                     ) }
                   </section>
 
-                  <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                     <h3 className="eve-section-title mb-2">Готовые выгрузки</h3>
                     <div className="flex flex-wrap gap-2">
                       { EXPORT_REGIONS.map((region) => (
@@ -805,7 +805,7 @@ function App()
                     </div>
                   </section>
 
-                  <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                     <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
                     <ExportBar
                       onLoadBuffer={ loadFromBuffer }
@@ -900,7 +900,7 @@ function App()
                 type="number"
                 min={ 0.1 }
                 step={ 1 }
-                className="w-24 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-24 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 tabular-nums text-eve-bright shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
                 value={ priceThresholdMln }
                 onChange={ (e) =>
                 {

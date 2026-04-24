@@ -240,6 +240,7 @@ export function ExportBar({
     ...ESI_EXPORT_PROGRESS_IDLE,
   }))
   const [esiExporting, setEsiExporting] = useState(false)
+  const [esiStopRequestKind, setEsiStopRequestKind] = useState<'soft' | 'force' | null>(null)
   const [esiSessionStartedAt, setEsiSessionStartedAt] = useState<number | null>(null)
   const [esiTypesPhaseAt, setEsiTypesPhaseAt] = useState<number | null>(null)
   const [esiTimerTick, setEsiTimerTick] = useState(0)
@@ -577,6 +578,7 @@ export function ExportBar({
     }
     setLoading(true)
     setEsiExporting(true)
+    setEsiStopRequestKind(null)
     setEsiSessionStartedAt(Date.now())
     setEsiTypesPhaseAt(null)
     setEsiProgress({ ...ESI_EXPORT_PROGRESS_IDLE })
@@ -639,9 +641,34 @@ export function ExportBar({
       void flushEsiLogsToConsole()
       setEsiProgress({ ...ESI_EXPORT_PROGRESS_IDLE })
       setEsiExporting(false)
+      setEsiStopRequestKind(null)
       setEsiSessionStartedAt(null)
       setEsiTypesPhaseAt(null)
       setLoading(false)
+    }
+  }
+
+  const requestSoftStop = async () => {
+    if (esiStopRequestKind !== null) return
+    try {
+      setEsiStopRequestKind('soft')
+      await postEsiExportStop()
+      setMsg('Остановка запрошена: после текущего запроса ESI будет собран xlsx.')
+    } catch (e) {
+      setEsiStopRequestKind(null)
+      setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
+    }
+  }
+
+  const requestForceStop = async () => {
+    if (esiStopRequestKind !== null) return
+    try {
+      setEsiStopRequestKind('force')
+      await postEsiExportForceStop()
+      setMsg('Принудительная остановка запрошена: сборка будет прервана без xlsx.')
+    } catch (e) {
+      setEsiStopRequestKind(null)
+      setMsg(e instanceof Error ? e.message : 'Ошибка stop-force')
     }
   }
 
@@ -771,7 +798,7 @@ export function ExportBar({
 
       {!hideEsiSection && (
         <div>
-          <div className="space-y-2">
+          <div className="space-y-2 @[450px]:grid @[450px]:grid-cols-3 @[450px]:gap-2 @[450px]:space-y-0">
             <label className="flex flex-col gap-1 text-xs text-eve-muted">
               <span>Регион ESI</span>
               <select
@@ -797,7 +824,7 @@ export function ExportBar({
                 value={esiMaxTypesStr}
                 onChange={(e) => setEsiMaxTypesStr(e.target.value)}
                 disabled={disabled || loading}
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
                 title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
               />
             </label>
@@ -811,10 +838,10 @@ export function ExportBar({
                 value={esiMaxPagesStr}
                 onChange={(e) => setEsiMaxPagesStr(e.target.value)}
                 disabled={disabled || loading}
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               />
             </label>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1 @[450px]:col-span-3 @[450px]:justify-end">
               <button
                 type="button"
                 disabled={disabled || loading || !selected}
@@ -828,27 +855,25 @@ export function ExportBar({
                 <>
                   <button
                     type="button"
+                    disabled={esiStopRequestKind !== null}
                     onClick={() => {
-                      void postEsiExportStop().catch((e) =>
-                        setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
-                      )
+                      void requestSoftStop()
                     }}
-                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20"
+                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20 disabled:opacity-60"
                     title="Остановить и собрать xlsx из текущих данных"
                   >
-                    Стоп → xlsx
+                    {esiStopRequestKind === 'soft' ? 'Останавливаем…' : 'Стоп → xlsx'}
                   </button>
                   <button
                     type="button"
+                    disabled={esiStopRequestKind !== null}
                     onClick={() => {
-                      void postEsiExportForceStop().catch((e) =>
-                        setMsg(e instanceof Error ? e.message : 'Ошибка stop-force')
-                      )
+                      void requestForceStop()
                     }}
-                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/75 bg-eve-danger/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger shadow-eve-inset transition-colors hover:border-eve-danger hover:bg-eve-danger/30"
+                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/75 bg-eve-danger/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger shadow-eve-inset transition-colors hover:border-eve-danger hover:bg-eve-danger/30 disabled:opacity-60"
                     title="Остановить без сборки xlsx"
                   >
-                    Стоп → принудительно
+                    {esiStopRequestKind === 'force' ? 'Останавливаем…' : 'Стоп → принудительно'}
                   </button>
                 </>
               )}
@@ -867,7 +892,7 @@ export function ExportBar({
       )}
 
       {!hideMarketLogsSection && (
-        <section className="rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+        <section className="@container rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h3 className="eve-section-title">Market export logs</h3>
           <label className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
@@ -914,7 +939,7 @@ export function ExportBar({
               min={0}
               max={100}
               step={0.01}
-              className="w-20 min-w-0 appearance-none rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={brokerFeePct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -934,7 +959,7 @@ export function ExportBar({
               min={0}
               max={100}
               step={0.01}
-              className="w-20 min-w-0 appearance-none rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={salesTaxPct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -980,7 +1005,7 @@ export function ExportBar({
             return (
               <article
                 key={`${r.name || 'empty'}-${idx}`}
-                className="@container rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
+                className="rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
               >
                 <div className="grid grid-cols-1 gap-2 text-xs @[450px]:grid-cols-4">
                   <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
