@@ -708,11 +708,8 @@ function devExportPlugin(): Plugin {
 }
 
 export default defineConfig({
-  base: process.env.PAGES_BASE_PATH || '/',
   plugins: [react(), devExportPlugin()],
   server: {
-    host: true,
-    port: Number(process.env.PORT) || 5173,
     fs: { allow: [projectRoot] },
   },
 })
