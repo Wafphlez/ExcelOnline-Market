@@ -3,14 +3,19 @@ import { Download, FolderOpen, Globe, RefreshCw } from 'lucide-react'
 import { EXPORT_REGIONS, type ExportRegion } from '../lib/exportRegions'
 import {
   buildEsiLiquidityToExports,
+  fetchLatestMarketLogFile,
+  fetchMarketLogFileBuffer,
   devExportFileUrl,
   downloadToExports,
   fetchEsiDevLogs,
   isDevExportServer,
   listExportFiles,
+  postEsiExportForceStop,
   postEsiExportStop,
   type ExportListItem,
 } from '../lib/devExportApi'
+import { marginPercentCellStyle } from '../lib/rowHeatmap'
+import { formatIsk, formatPercent } from '../lib/formatNumber'
 import { EsiExportProgressPanel } from './EsiExportProgressPanel'
 import {
   ESI_EXPORT_PROGRESS_IDLE,
@@ -66,9 +71,130 @@ function readLastExportFileName(): string {
 type ExportBarProps = {
   onLoadBuffer: (buf: ArrayBuffer) => void | Promise<void>
   disabled?: boolean
+  brokerFeePct: number
+  salesTaxPct: number
+  highPriceThresholdIsk: number
+  onBrokerFeeChange: (value: number) => void
+  onSalesTaxChange: (value: number) => void
+  brokerInputRef?: (el: HTMLInputElement | null) => void
+  taxInputRef?: (el: HTMLInputElement | null) => void
+  onMessageChange?: (message: string | null) => void
 }
 
-export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
+type MarketLogSummaryRow = {
+  name: string
+  margin: number | null
+  profitIsk: number | null
+  exportTime: string
+  price: number
+}
+
+const LS_MARKETLOGS_PATH = 'excelMarket_marketLogsPath'
+
+function readMarketLogsPath(): string {
+  try {
+    return localStorage.getItem(LS_MARKETLOGS_PATH) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function parseExportTime(birthtimeIso?: string, mtimeIso?: string): string {
+  const source = birthtimeIso || mtimeIso
+  if (!source) return '—'
+  const d = new Date(source)
+  if (!Number.isFinite(d.getTime())) return '—'
+  return d.toLocaleString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+type ParsedMarketLog = {
+  itemName: string
+  bestSell: number | null
+  bestBuy: number | null
+}
+
+function decodeMarketLogBuffer(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  const decoders = ['utf-8', 'utf-16le', 'utf-16be', 'windows-1251'] as const
+  for (const enc of decoders) {
+    try {
+      const t = new TextDecoder(enc).decode(bytes)
+      if (t && /price|bid/i.test(t.slice(0, 200))) return t
+    } catch {
+      /* try next */
+    }
+  }
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
+function parseItemNameFromMarketLogFile(fileName: string): string {
+  const base = fileName.replace(/\.txt$/i, '')
+  const parts = base.split('-')
+  if (parts.length >= 3) {
+    return parts.slice(1, -1).join('-').trim() || base
+  }
+  return base
+}
+
+function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
+  const lines = text
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  if (lines.length < 2) {
+    return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell: null, bestBuy: null }
+  }
+  const headerLine = lines[0]!
+    .replace(/^\uFEFF/, '')
+  const delimiter =
+    headerLine.includes(';') && !headerLine.includes(',') ? ';' : ','
+  const header = headerLine
+    .split(delimiter)
+    .map((x) => x.trim().toLowerCase())
+  const priceIdx = header.indexOf('price')
+  const bidIdx = header.indexOf('bid')
+  if (priceIdx < 0 || bidIdx < 0) {
+    return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell: null, bestBuy: null }
+  }
+  let bestSell: number | null = null
+  let bestBuy: number | null = null
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i]!.split(delimiter)
+    if (cols.length <= Math.max(priceIdx, bidIdx)) continue
+    const priceRaw = cols[priceIdx]?.trim().replace(',', '.')
+    const bidRaw = cols[bidIdx]?.trim().toLowerCase()
+    if (!priceRaw) continue
+    const price = Number(priceRaw)
+    if (!Number.isFinite(price) || price <= 0) continue
+    const isBid = bidRaw === 'true' || bidRaw === '1' || bidRaw === 'yes'
+    if (isBid) {
+      if (bestBuy === null || price > bestBuy) bestBuy = price
+    } else {
+      if (bestSell === null || price < bestSell) bestSell = price
+    }
+  }
+  return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell, bestBuy }
+}
+
+export function ExportBar({
+  onLoadBuffer,
+  disabled,
+  brokerFeePct,
+  salesTaxPct,
+  highPriceThresholdIsk,
+  onBrokerFeeChange,
+  onSalesTaxChange,
+  brokerInputRef,
+  taxInputRef,
+  onMessageChange,
+}: ExportBarProps) {
   const regions = EXPORT_REGIONS
   const [selectedId, setSelectedId] = useState(() => {
     const id = readLastExportRegionId()
@@ -93,8 +219,16 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
   const [esiSessionStartedAt, setEsiSessionStartedAt] = useState<number | null>(null)
   const [esiTypesPhaseAt, setEsiTypesPhaseAt] = useState<number | null>(null)
   const [esiTimerTick, setEsiTimerTick] = useState(0)
+  const [marketLogsPath, setMarketLogsPath] = useState(readMarketLogsPath)
+  const [marketLogRows, setMarketLogRows] = useState<MarketLogSummaryRow[]>([])
+  const [marketLogInfo, setMarketLogInfo] = useState<string>('Папка не выбрана')
+
+  useEffect(() => {
+    onMessageChange?.(msg)
+  }, [msg, onMessageChange])
 
   const selected = regions.find((r) => r.id === selectedId) ?? regions[0]
+  const trimmedMarketLogsPath = marketLogsPath.trim()
 
   /** Только .xlsx/.xls из exports/, свежие сверху */
   const exportFilesSorted = useMemo(() => {
@@ -218,6 +352,102 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
       /* ignore */
     }
   }, [esiMaxTypesStr])
+
+  useEffect(() => {
+    try {
+      if (trimmedMarketLogsPath) {
+        localStorage.setItem(LS_MARKETLOGS_PATH, trimmedMarketLogsPath)
+      } else {
+        localStorage.removeItem(LS_MARKETLOGS_PATH)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [trimmedMarketLogsPath])
+
+  useEffect(() => {
+    if (!isDevExportServer) return
+    if (!trimmedMarketLogsPath) {
+      setMarketLogRows([])
+      setMarketLogInfo('Укажите путь к папке market logs')
+      return
+    }
+    let cancelled = false
+    let initialized = false
+    let lastSeenKey = ''
+    let pollingBusy = false
+
+    const poll = async () => {
+      if (pollingBusy) return
+      pollingBusy = true
+      try {
+        const latest = await fetchLatestMarketLogFile(trimmedMarketLogsPath)
+        if (cancelled) return
+        if (!latest) {
+          if (!initialized) {
+            initialized = true
+            lastSeenKey = ''
+          }
+          setMarketLogInfo('В папке пока нет .txt файлов market log')
+          return
+        }
+        const key = `${latest.name}|${latest.mtime}|${latest.size}`
+        if (!initialized) {
+          initialized = true
+          lastSeenKey = key
+          setMarketLogInfo(`Ожидание новых файлов в папке… Последний: ${latest.name}`)
+          return
+        }
+        if (key === lastSeenKey) return
+        const buf = await fetchMarketLogFileBuffer(trimmedMarketLogsPath, latest.name)
+        if (cancelled) return
+        const text = decodeMarketLogBuffer(buf)
+        const parsed = parseMarketLogText(latest.name, text)
+        if (parsed.bestSell === null || parsed.bestBuy === null) {
+          setMarketLogRows([])
+          setMarketLogInfo(
+            `Новый файл найден (${latest.name}), ожидаем завершения записи/разбора...`
+          )
+          return
+        }
+        const brokerFee = brokerFeePct / 100
+        const salesTax = salesTaxPct / 100
+        const cost = parsed.bestBuy * (1 + brokerFee)
+        const revenue = parsed.bestSell * (1 - salesTax - brokerFee)
+        const profitIsk = revenue - cost
+        const margin =
+          parsed.bestSell > 0 && Number.isFinite(parsed.bestSell)
+            ? profitIsk / parsed.bestSell
+            : null
+        const exportTime = parseExportTime(latest.birthtime, latest.mtime)
+        const summaryRows: MarketLogSummaryRow[] = [
+          {
+            name: parsed.itemName,
+            margin: Number.isFinite(margin) ? margin : null,
+            profitIsk: Number.isFinite(profitIsk) ? profitIsk : null,
+            exportTime,
+            price: parsed.bestSell,
+          },
+        ]
+        lastSeenKey = key
+        setMarketLogRows(summaryRows)
+        setMarketLogInfo(`Новый файл обработан: ${latest.name}`)
+      } catch (e) {
+        if (cancelled) return
+        setMarketLogRows([])
+        setMarketLogInfo(e instanceof Error ? e.message : 'Ошибка чтения папки market logs')
+      } finally {
+        pollingBusy = false
+      }
+    }
+
+    void poll()
+    const id = window.setInterval(() => void poll(), 700)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [trimmedMarketLogsPath, brokerFeePct, salesTaxPct, highPriceThresholdIsk])
 
   const onDownloadRegion = async (r: ExportRegion) => {
     setMsg(null)
@@ -541,18 +771,32 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
                   Сформировать (ESI)
                 </button>
                 {loading && esiExporting && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void postEsiExportStop().catch((e) =>
-                        setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
-                      )
-                    }}
-                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20"
-                    title="Остановить и собрать xlsx из текущих данных"
-                  >
-                    Стоп → xlsx
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void postEsiExportStop().catch((e) =>
+                          setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
+                        )
+                      }}
+                      className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20"
+                      title="Остановить и собрать xlsx из текущих данных"
+                    >
+                      Стоп → xlsx
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void postEsiExportForceStop().catch((e) =>
+                          setMsg(e instanceof Error ? e.message : 'Ошибка stop-force')
+                        )
+                      }}
+                      className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/75 bg-eve-danger/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger shadow-eve-inset transition-colors hover:border-eve-danger hover:bg-eve-danger/30"
+                      title="Остановить без сборки xlsx"
+                    >
+                      Стоп → принудительно
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -569,11 +813,121 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
         </section>
       )}
 
-      {msg && (
-        <p className="rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
-          {msg}
-        </p>
-      )}
+      <section className="rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+        <h3 className="eve-section-title mb-2">Market export logs</h3>
+        <div className="mb-2 flex flex-wrap items-center gap-0 text-xs text-eve-text">
+          <div className="flex flex-wrap items-center gap-1.5 pr-3 sm:border-r sm:border-eve-border">
+            <span className="italic text-eve-muted">Broker fee:</span>
+            <input
+              ref={brokerInputRef}
+              type="number"
+              min={0}
+              max={100}
+              step={0.01}
+              className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+              value={brokerFeePct}
+              onChange={(e) => {
+                const n = Number(e.target.value.replace(',', '.'))
+                if (!Number.isFinite(n) || n < 0 || n > 100) return
+                onBrokerFeeChange(n)
+              }}
+              aria-label="Broker fee, процент"
+            />
+            <span className="tabular-nums text-eve-muted">%</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-0 sm:mt-0 sm:pl-3">
+            <span className="italic text-eve-muted">Sales tax:</span>
+            <input
+              ref={taxInputRef}
+              type="number"
+              min={0}
+              max={100}
+              step={0.01}
+              className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+              value={salesTaxPct}
+              onChange={(e) => {
+                const n = Number(e.target.value.replace(',', '.'))
+                if (!Number.isFinite(n) || n < 0 || n > 100) return
+                onSalesTaxChange(n)
+              }}
+              aria-label="Sales tax, процент"
+            />
+            <span className="tabular-nums text-eve-muted">%</span>
+          </div>
+        </div>
+        <label className="mb-2 flex flex-col gap-1 text-xs text-eve-muted/95">
+          <span>Путь к папке market logs</span>
+          <input
+            type="text"
+            value={marketLogsPath}
+            onChange={(e) => setMarketLogsPath(e.target.value)}
+            placeholder="Например: C:\\Users\\...\\Documents\\EVE\\logs\\marketlogs"
+            className="w-full rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+            disabled={disabled || !isDevExportServer}
+          />
+        </label>
+        <p className="mb-2 text-[11px] text-eve-muted/95">{marketLogInfo}</p>
+        <div className="space-y-2">
+          {(marketLogRows.length > 0
+            ? marketLogRows
+            : [
+                {
+                  name: '',
+                  margin: null,
+                  profitIsk: null,
+                  exportTime: '',
+                  price: 0,
+                } as MarketLogSummaryRow,
+              ]
+          ).map((r, idx) => {
+            const style = marginPercentCellStyle(
+              r.margin,
+              r.price,
+              highPriceThresholdIsk
+            )
+            return (
+              <article
+                key={`${r.name || 'empty'}-${idx}`}
+                className="rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
+              >
+                <div className="grid grid-cols-1 gap-2 text-xs">
+                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                    <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
+                      Item name
+                    </p>
+                    <p className="text-eve-bright/95">{r.name || '—'}</p>
+                  </div>
+                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                    <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
+                      Profit margin
+                    </p>
+                    <span
+                      className="inline-block rounded px-1.5 py-0.5 font-tabular-nums"
+                      style={style}
+                    >
+                      {r.margin === null ? '—' : formatPercent(r.margin)}
+                    </span>
+                  </div>
+                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                    <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
+                      Profit, ISK
+                    </p>
+                    <p className="font-tabular-nums text-eve-bright/90">
+                      {r.profitIsk === null ? '—' : formatIsk(r.profitIsk)}
+                    </p>
+                  </div>
+                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                    <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
+                      Время экспорта
+                    </p>
+                    <p className="text-eve-muted/95">{r.exportTime || '—'}</p>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </section>
 
       {!isDevExportServer && (
         <p className="text-[11px] leading-relaxed text-eve-muted/80">

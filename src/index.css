@@ -42,7 +42,7 @@ body {
   }
 
   .eve-section-title {
-    @apply font-eve text-[11px] font-semibold uppercase tracking-[0.14em] text-eve-gold/90;
+    @apply font-eve text-[11px] font-semibold uppercase tracking-[0.14em] text-eve-gold;
   }
 
   .eve-kicker {

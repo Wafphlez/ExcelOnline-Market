@@ -30,6 +30,8 @@ let esiProgress: EsiExportProgressState = { ...ESI_EXPORT_PROGRESS_IDLE }
 
 /** Сигнал из POST /esi-stop: завершить сбор и собрать xlsx по текущим строкам. */
 let esiStopRequested = false
+/** Сигнал из POST /esi-stop-force: завершить сбор без сборки xlsx. */
+let esiForceStopRequested = false
 
 /** Клиент (кнопка «стоп») — между запросами ESI сработает на следующем шаге. */
 function requestEsiExportStopLog(): void {
@@ -45,12 +47,33 @@ export function requestEsiExportStop(): void {
   requestEsiExportStopLog()
 }
 
+export function requestEsiExportForceStop(): void {
+  if (!esiForceStopRequested) {
+    esiForceStopRequested = true
+    esiStopRequested = true
+    esiDevLog(
+      'запрошен принудительный stop-force — остановка без сборки xlsx'
+    )
+  }
+}
+
 function clearEsiStopRequest(): void {
   esiStopRequested = false
+  esiForceStopRequested = false
 }
 
 function isEsiStopRequested(): boolean {
   return esiStopRequested
+}
+
+function isEsiForceStopRequested(): boolean {
+  return esiForceStopRequested
+}
+
+function assertNotEsiForceStopped(): void {
+  if (isEsiForceStopRequested()) {
+    throw new Error('ESI: stop-force (без сборки xlsx)')
+  }
 }
 
 export function getEsiExportProgressState(): EsiExportProgressState {
@@ -468,6 +491,7 @@ async function fetchOrderPageForSide(
     })
   let lastErr: unknown
   for (let attempt = 0; attempt < ORDER_PAGE_OUTER_RETRIES; attempt++) {
+    assertNotEsiForceStopped()
     if (isEsiStopRequested()) {
       throw new Error('ESI: остановка экспорта')
     }
@@ -485,6 +509,7 @@ async function fetchOrderPageForSide(
           })`
         )
         await sleep(w)
+        assertNotEsiForceStopped()
         if (isEsiStopRequested()) {
           throw new Error('ESI: остановка экспорта')
         }
@@ -584,6 +609,7 @@ async function fetchOrderBookSideStaggered(
         if (wait > 0) {
           await sleep(wait)
         }
+        assertNotEsiForceStopped()
         if (isEsiStopRequested()) {
           return { page: p, rows: [], endOfSide: true, aborted: true }
         }
@@ -671,6 +697,7 @@ async function fetchOrderBookSideSequential(
       )
       break
     }
+    assertNotEsiForceStopped()
     if (isEsiStopRequested()) {
       esiDevLog(
         `ордера ${side}: стоп — собрано ${all.length} (всего по стороне)`
@@ -712,6 +739,7 @@ async function fetchOrderBookSideSequential(
       esiDevLog(`ордера ${side}: стоп после стр. ${page - 1} — ${all.length}`)
       return all
     }
+    assertNotEsiForceStopped()
   }
   return all
 }
@@ -842,6 +870,7 @@ async function fetchTypeNameAndHistory(
   typeId: number,
   regionId: number
 ): Promise<TypeNameAndHistory | null> {
+  assertNotEsiForceStopped()
   if (isEsiStopRequested()) {
     return null
   }
@@ -901,6 +930,7 @@ export async function buildLiquidityRows(
   opts: Partial<EsiLiquidityExportOptions> = {}
 ): Promise<BuildLiquidityRowsResult> {
   try {
+  assertNotEsiForceStopped()
   const o = mergeEsiOpts(opts)
   /** Сразу для UI: шкала «типы» видна на фазе ордеров (0 / maxTypes), прежде чем придут все страницы. */
   esiProgress.typeTotal = o.maxTypes
@@ -942,6 +972,7 @@ export async function buildLiquidityRows(
     o.orderPagesUntilExhausted,
     onOrderPageRows
   )
+  assertNotEsiForceStopped()
   esiDevLog(
     `ордера собраны: ${orders.length} шт. за ${((Date.now() - tAll) / 1000).toFixed(1)} s`
   )
@@ -985,6 +1016,7 @@ export async function buildLiquidityRows(
   const rowResults = await Promise.all(
     chosen.map(async ({ typeId }) => {
       try {
+        assertNotEsiForceStopped()
         if (isEsiStopRequested()) {
           return null
         }
@@ -1068,7 +1100,9 @@ export async function buildEsiLiquidityXlsx(
 ): Promise<{ buffer: Buffer; rowCount: number; partial: boolean }> {
   const t0 = Date.now()
   try {
+    assertNotEsiForceStopped()
     const { rows, stoppedEarly } = await buildLiquidityRows(regionId, opts)
+    assertNotEsiForceStopped()
     if (rows.length === 0) {
       if (!stoppedEarly) {
         throw new Error(

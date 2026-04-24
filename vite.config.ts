@@ -13,6 +13,7 @@ import {
   getEsiDevLogLines,
   getEsiExportProgressState,
   logEsiExportException,
+  requestEsiExportForceStop,
   requestEsiExportStop,
 } from './src/lib/dev/esiLiquidityExport'
 import {
@@ -43,6 +44,21 @@ function isUnderExportsDir(absolute: string): boolean {
   const resolved = path.resolve(absolute)
   const ed = path.resolve(exportsDir)
   return resolved === ed || resolved.startsWith(ed + path.sep)
+}
+
+function parseMarketLogsDirPath(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const v = raw.trim()
+  if (!v) return null
+  return path.resolve(v)
+}
+
+function isSafeMarketLogFileName(name: string): boolean {
+  const trimmed = name.trim()
+  if (!trimmed || trimmed.includes('..')) return false
+  if (trimmed.includes('/') || trimmed.includes('\\')) return false
+  if (!/\.txt$/i.test(trimmed)) return false
+  return true
 }
 
 function formatFileDateRu(d: Date): string {
@@ -194,6 +210,104 @@ function devExportPlugin(): Plugin {
               return
             }
 
+            if (req.method === 'POST' && pathname === '/__dev/export/marketlogs/latest') {
+              let body: { dirPath?: unknown }
+              try {
+                const raw = (await readBody(req)).toString('utf8')
+                body = JSON.parse(raw) as { dirPath?: unknown }
+              } catch {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'invalid json' }))
+              }
+              const dirPath = parseMarketLogsDirPath(body.dirPath)
+              if (!dirPath) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'dirPath required' }))
+              }
+              try {
+                const st = await fs.stat(dirPath)
+                if (!st.isDirectory()) {
+                  res.statusCode = 400
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                  return res.end(JSON.stringify({ error: 'dirPath must be a directory' }))
+                }
+                const names = await fs.readdir(dirPath)
+                const files: { name: string; size: number; mtime: string; birthtime: string }[] = []
+                for (const name of names) {
+                  if (name.startsWith('.')) continue
+                  if (!/\.txt$/i.test(name)) continue
+                  const p = path.join(dirPath, name)
+                  const fst = await fs.stat(p)
+                  if (!fst.isFile()) continue
+                  files.push({
+                    name,
+                    size: fst.size,
+                    mtime: fst.mtime.toISOString(),
+                    birthtime: fst.birthtime.toISOString(),
+                  })
+                }
+                files.sort(
+                  (a, b) => b.mtime.localeCompare(a.mtime) || a.name.localeCompare(b.name)
+                )
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ file: files[0] ?? null }))
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    error:
+                      e instanceof Error ? e.message : 'marketlogs latest failed',
+                  })
+                )
+              }
+            }
+
+            if (req.method === 'POST' && pathname === '/__dev/export/marketlogs/file') {
+              let body: { dirPath?: unknown; fileName?: unknown }
+              try {
+                const raw = (await readBody(req)).toString('utf8')
+                body = JSON.parse(raw) as { dirPath?: unknown; fileName?: unknown }
+              } catch {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'invalid json' }))
+              }
+              const dirPath = parseMarketLogsDirPath(body.dirPath)
+              if (!dirPath) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'dirPath required' }))
+              }
+              if (
+                typeof body.fileName !== 'string' ||
+                !isSafeMarketLogFileName(body.fileName)
+              ) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'invalid fileName' }))
+              }
+              try {
+                const filePath = path.join(dirPath, path.basename(body.fileName))
+                const st = await fs.stat(filePath)
+                if (!st.isFile()) {
+                  res.statusCode = 404
+                  return res.end('not found')
+                }
+                const data = await fs.readFile(filePath)
+                res.setHeader(
+                  'Content-Type',
+                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                return res.end(data)
+              } catch {
+                res.statusCode = 404
+                return res.end('not found')
+              }
+            }
+
             if (req.method === 'POST' && pathname === '/__dev/export/esi-stop') {
               try {
                 requestEsiExportStop()
@@ -205,6 +319,23 @@ function devExportPlugin(): Plugin {
                 res.end(
                   JSON.stringify({
                     error: e instanceof Error ? e.message : 'esi stop failed',
+                  })
+                )
+              }
+              return
+            }
+
+            if (req.method === 'POST' && pathname === '/__dev/export/esi-stop-force') {
+              try {
+                requestEsiExportForceStop()
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(JSON.stringify({ ok: true }))
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'esi stop-force failed',
                   })
                 )
               }

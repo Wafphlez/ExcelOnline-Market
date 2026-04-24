@@ -77,6 +77,7 @@ function App() {
   const [brokerFeePct, setBrokerFeePct] = useState(readStoredBrokerFeePct)
   const [salesTaxPct, setSalesTaxPct] = useState(readStoredSalesTaxPct)
   const [error, setError] = useState<string | null>(null)
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() =>
     readInitialStateFromLocalStorage().columnFilters
@@ -255,6 +256,24 @@ function App() {
     setCopiedNameKeys((prev) => new Set([...prev, key]))
   }, [])
 
+  const onBrokerFeeChange = useCallback((n: number) => {
+    setBrokerFeePct(n)
+    try {
+      localStorage.setItem(LS_BROKER_PCT, String(n))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const onSalesTaxChange = useCallback((n: number) => {
+    setSalesTaxPct(n)
+    try {
+      localStorage.setItem(LS_SALES_TAX_PCT, String(n))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   const loadFromBuffer = useCallback(async (buf: ArrayBuffer) => {
     setError(null)
     setLoading(true)
@@ -304,24 +323,6 @@ function App() {
     setActivePreset(null)
     setColumnFilters(clearFilters())
   }, [])
-
-  const hint = useMemo(
-    () => (
-      <p className="text-xs leading-relaxed text-eve-muted">
-        <strong className="text-eve-bright/95">Маржа, %</strong> — после broker
-        (buy) и sales tax + broker (sell), к list ask.{' '}
-        <strong className="text-eve-bright/95">Спред, ISK</strong> — ask
-        − bid (без комиссий). <strong className="text-eve-bright/95">Оборот</strong> в файле в
-        млн ISK, в таблице — полные ISK. Ячейка «Маржа» подсвечивается по величине
-        маржи. «Средняя в спреде» — полоска buy→sell с центром в 0,5. «Выгодность
-        входа» — шкала 0–100 % (полоска в ячейке) по абсолютным порогам (маржа,
-        оборот, спред); при 0 сделок или 0 оборота балл занижен. Дорогая единица
-        (цена выше порога, млн ISK) — меньше вклад маржи в оценку и бледнее фон
-        ячейки маржи.
-      </p>
-    ),
-    []
-  )
 
   return (
     <div className="min-h-screen eve-ui-root text-eve-text">
@@ -454,6 +455,14 @@ function App() {
               <ExportBar
                 onLoadBuffer={loadFromBuffer}
                 disabled={loading}
+                brokerFeePct={brokerFeePct}
+                salesTaxPct={salesTaxPct}
+                highPriceThresholdIsk={highPriceThresholdIsk}
+                onBrokerFeeChange={onBrokerFeeChange}
+                onSalesTaxChange={onSalesTaxChange}
+                brokerInputRef={setBrokerInputEl}
+                taxInputRef={setTaxInputEl}
+                onMessageChange={setExportMsg}
               />
             </div>
           </div>
@@ -470,6 +479,11 @@ function App() {
 
         {rows !== null && (
           <>
+            {exportMsg && (
+              <p className="mb-3 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
+                {exportMsg}
+              </p>
+            )}
             <div className="mt-4 flex flex-wrap items-center justify-end gap-1.5 border-b border-eve-accent/20 pb-3">
                 {PRESETS.map((p) => (
                   <button
@@ -541,62 +555,7 @@ function App() {
                   = {formatInteger(highPriceThresholdIsk)} ISK
                 </span>
               </label>
-              <div className="flex flex-wrap items-center gap-0 text-xs text-eve-text">
-                <div className="flex flex-wrap items-center gap-1.5 pr-3 sm:border-r sm:border-eve-border">
-                  <span className="italic text-eve-muted">Broker fee:</span>
-                  <input
-                    ref={setBrokerInputEl}
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.01}
-                    className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-                    value={brokerFeePct}
-                    onChange={(e) => {
-                      const n = Number(e.target.value.replace(',', '.'))
-                      if (!Number.isFinite(n) || n < 0 || n > 100) return
-                      setBrokerFeePct(n)
-                      try {
-                        localStorage.setItem(LS_BROKER_PCT, String(n))
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                    aria-label="Broker fee, процент"
-                  />
-                  <span className="tabular-nums text-eve-muted">%</span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-0 sm:mt-0 sm:pl-3">
-                  <span className="italic text-eve-muted">Sales tax:</span>
-                  <input
-                    ref={setTaxInputEl}
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.01}
-                    className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-                    value={salesTaxPct}
-                    onChange={(e) => {
-                      const n = Number(e.target.value.replace(',', '.'))
-                      if (!Number.isFinite(n) || n < 0 || n > 100) return
-                      setSalesTaxPct(n)
-                      try {
-                        localStorage.setItem(LS_SALES_TAX_PCT, String(n))
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                    aria-label="Sales tax, процент"
-                  />
-                  <span className="tabular-nums text-eve-muted">%</span>
-                </div>
-                <p className="w-full pl-0 pt-1 text-[11px] text-eve-muted/90 sm:w-auto sm:pl-3 sm:pt-0">
-                  Buy: bid × (1 + broker). Sell: ask × (1 − tax − broker). Маржа:
-                  (выручка sell − цена buy) / ask
-                </p>
-              </div>
             </div>
-            <div className="mb-2 mt-1">{hint}</div>
             <div className="eve-panel p-1.5">
               <MarketTable
                 data={rows}

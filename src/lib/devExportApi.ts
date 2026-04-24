@@ -11,6 +11,12 @@ const BASE = '/__dev/export'
 export const isDevExportServer = import.meta.env.DEV
 
 export type ExportListItem = { name: string; size: number; mtime: string }
+export type MarketLogLatestFile = {
+  name: string
+  size: number
+  mtime: string
+  birthtime?: string
+}
 
 export async function downloadToExports(
   downloadUrl: string,
@@ -49,6 +55,56 @@ export function devExportFileUrl(fileName: string): string {
   return `${BASE}/file/${encodeURIComponent(fileName)}`
 }
 
+export async function fetchLatestMarketLogFile(
+  dirPath: string
+): Promise<MarketLogLatestFile | null> {
+  if (!isDevExportServer) return null
+  const r = await fetch(`${BASE}/marketlogs/latest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dirPath }),
+  })
+  if (!r.ok) {
+    const t = await r.text()
+    let err = t
+    try {
+      const j = JSON.parse(t) as { error?: string }
+      if (j.error) err = j.error
+    } catch {
+      /* ignore */
+    }
+    throw new Error(err || 'Не удалось прочитать market logs')
+  }
+  const j = (await r.json()) as { file?: MarketLogLatestFile | null }
+  return j.file ?? null
+}
+
+export async function fetchMarketLogFileBuffer(
+  dirPath: string,
+  fileName: string
+): Promise<ArrayBuffer> {
+  if (!isDevExportServer) {
+    throw new Error('Чтение market logs доступно только в режиме разработки (npm run dev).')
+  }
+  const r = await fetch(`${BASE}/marketlogs/file`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dirPath, fileName }),
+  })
+  if (!r.ok) {
+    const t = await r.text()
+    let err = t
+    try {
+      const j = JSON.parse(t) as { error?: string }
+      if (j.error) err = j.error
+    } catch {
+      /* ignore */
+    }
+    throw new Error(err || 'Не удалось прочитать файл market logs')
+  }
+  return await r.arrayBuffer()
+}
+
 export type EsiLiquidityResult = {
   ok: true
   fileName: string
@@ -67,6 +123,25 @@ export async function postEsiExportStop(): Promise<void> {
     return
   }
   const r = await fetch(`${BASE}/esi-stop`, { method: 'POST' })
+  if (!r.ok) {
+    const t = await r.text()
+    let err = t
+    try {
+      const j = JSON.parse(t) as { error?: string }
+      if (j.error) err = j.error
+    } catch {
+      /* ignore */
+    }
+    throw new Error(err)
+  }
+}
+
+/** Принудительно остановить ESI-экспорт без сборки xlsx. */
+export async function postEsiExportForceStop(): Promise<void> {
+  if (!isDevExportServer) {
+    return
+  }
+  const r = await fetch(`${BASE}/esi-stop-force`, { method: 'POST' })
   if (!r.ok) {
     const t = await r.text()
     let err = t

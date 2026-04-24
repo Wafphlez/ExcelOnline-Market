@@ -96,7 +96,7 @@ export function EsiExportProgressPanel({
     <div className="mt-3 rounded border border-eve-border/60 bg-eve-elevated/50 p-3 shadow-eve-inset">
       <div className="mb-2.5 flex flex-col gap-1.5 border-b border-eve-accent/15 pb-2.5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
         <div className="min-w-0">
-          <span className="font-eve text-[11px] font-bold uppercase tracking-[0.12em] text-eve-gold/90">
+          <span className="font-eve text-[11px] font-bold uppercase tracking-[0.12em] text-eve-gold">
             ESI — загрузка
           </span>
           <p className="mt-0.5 text-[10px] text-eve-muted/90">
