@@ -45,6 +45,13 @@ function isUnderExportsDir(absolute: string): boolean {
   return resolved === ed || resolved.startsWith(ed + path.sep)
 }
 
+function formatFileDateRu(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = String(d.getFullYear())
+  return `${dd}.${mm}.${yyyy}`
+}
+
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
@@ -395,7 +402,7 @@ function devExportPlugin(): Plugin {
                   typeof j.fileName === 'string' &&
                   /^[a-zA-Z0-9._-]+\.xlsx$/.test(j.fileName)
                     ? j.fileName
-                    : `liquidity-esi-${rid}.xlsx`
+                    : `liquidity-esi-${rid}-${formatFileDateRu(new Date())}.xlsx`
                 if (!isSafeFileName(baseName)) {
                   res.statusCode = 400
                   return res.end('bad filename')

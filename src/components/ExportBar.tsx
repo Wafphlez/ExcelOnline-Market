@@ -290,10 +290,8 @@ export function ExportBar({ onLoadBuffer, disabled }: ExportBarProps) {
         ? Math.min(ESI_MAX_TYPES_USER_CAP, Math.floor(mt))
         : ESI_DEFAULT_MAX_TYPES
     try {
-      const fileName = `liquidity-esi-${selected.esiRegionId}.xlsx`
       const result = await buildEsiLiquidityToExports({
         regionId: selected.esiRegionId,
-        fileName,
         orderPagesUntilExhausted: false,
         maxTypes,
         maxOrderPages,

@@ -100,10 +100,16 @@ export function logEsiExportException(context: string, err: unknown): void {
 /* ---------- Локальный кэш GET /universe/types/{id}/ (имя не меняется, тянуть ESI смысла нет) ---------- */
 
 const TYPE_CACHE_FILE = 'esi-type-cache.json'
-const TYPE_CACHE_VERSION = 1
-type EsiTypeCacheFile = { v: number; types: Record<string, { name: string }> }
+const TYPE_CACHE_VERSION = 2
+type EsiTypePayload = {
+  name?: string
+  [key: string]: unknown
+}
+type EsiTypeCacheEntry = { name: string; payload?: EsiTypePayload }
+type EsiTypeCacheFile = { v: number; types: Record<string, EsiTypeCacheEntry> }
 
 const typeNameById = new Map<number, string>()
+const typePayloadById = new Map<number, EsiTypePayload>()
 let typeNameCacheDirty = false
 const typeNameFetchInflight = new Map<number, Promise<string | undefined>>()
 
@@ -127,8 +133,17 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
       if (j && j.types && typeof j.types === 'object') {
         for (const [k, v] of Object.entries(j.types)) {
           const id = Number(k)
-          if (Number.isInteger(id) && v && typeof v.name === 'string' && v.name) {
-            typeNameById.set(id, v.name)
+          const entry = v as { name?: unknown; payload?: unknown }
+          if (
+            Number.isInteger(id) &&
+            entry &&
+            typeof entry.name === 'string' &&
+            entry.name
+          ) {
+            typeNameById.set(id, entry.name)
+            if (entry.payload && typeof entry.payload === 'object') {
+              typePayloadById.set(id, entry.payload as EsiTypePayload)
+            }
           }
         }
       }
@@ -151,9 +166,11 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
 
 async function persistTypeNameCacheToDisk(): Promise<void> {
   if (!typeNameCacheDirty) return
-  const types: Record<string, { name: string }> = {}
+  const types: Record<string, EsiTypeCacheEntry> = {}
   for (const [id, name] of typeNameById) {
-    if (name) types[String(id)] = { name }
+    if (!name) continue
+    const payload = typePayloadById.get(id)
+    types[String(id)] = payload ? { name, payload } : { name }
   }
   const out: EsiTypeCacheFile = { v: TYPE_CACHE_VERSION, types }
   const dir = path.join(process.cwd(), 'data')
@@ -188,13 +205,14 @@ async function getEsiTypeName(typeId: number): Promise<string | undefined> {
   const wait = typeNameFetchInflight.get(typeId)
   if (wait) return wait
   const p = (async () => {
-    const res = await esiFetch<{ name?: string }>(
+    const res = await esiFetch<EsiTypePayload>(
       `/universe/types/${typeId}/`,
       { language: 'en' }
     ).catch(() => ({} as { name?: string }))
     const n = res.name
     if (n) {
       typeNameById.set(typeId, n)
+      typePayloadById.set(typeId, res)
       typeNameCacheDirty = true
     }
     return n
