@@ -207,7 +207,7 @@ export function MarketTable({
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex rounded p-0.5 text-eve-cyan/90 transition-colors hover:text-eve-bright focus:outline-none focus:ring-1 focus:ring-eve-accent/60"
+                  className="inline-flex rounded p-0.5 text-eve-cyan/90 transition-colors hover:text-white focus:outline-none focus:ring-1 focus:ring-eve-accent/60"
                   title={`EVE Tycoon: type ${Math.floor(tid)}`}
                   aria-label={`Открыть type ${Math.floor(tid)} на EVE Tycoon`}
                 >
@@ -226,7 +226,7 @@ export function MarketTable({
                   className={
                     copied
                       ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright transition-colors hover:underline'
-                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-eve-bright/95 transition-colors hover:text-eve-accent hover:underline'
+                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-white transition-colors hover:text-eve-accent hover:underline'
                   }
                   title="Клик — копировать название"
                   onClick={async (e) => {
@@ -264,7 +264,7 @@ export function MarketTable({
 
   return (
     <div className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
-      <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-eve-text">
+      <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-white">
         <thead className="sticky top-0 z-40 bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
@@ -295,8 +295,8 @@ export function MarketTable({
                           type="button"
                           className={
                             isMarketCol
-                              ? 'inline-flex items-center justify-center gap-0.5 text-eve-bright/95 hover:text-eve-gold-bright'
-                              : 'flex min-w-0 flex-1 items-center gap-1 text-left text-eve-bright/90 hover:text-eve-gold-bright'
+                              ? 'inline-flex items-center justify-center gap-0.5 text-white hover:text-eve-gold-bright'
+                              : 'flex min-w-0 flex-1 items-center gap-1 text-left text-white hover:text-eve-gold-bright'
                           }
                           onClick={h.column.getToggleSortingHandler()}
                         >
@@ -363,7 +363,7 @@ export function MarketTable({
                     className="border-b border-eve-border bg-eve-elevated p-1"
                   >
                     <input
-                      className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1.5 py-1 text-xs text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
+                      className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1.5 py-1 text-xs text-white shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
                       placeholder="Содержит…"
                       value={getTextValue(col.getFilterValue())}
                       onChange={(e) =>
@@ -415,18 +415,18 @@ export function MarketTable({
           ) : (
             table.getRowModel().rows.map((row) => {
               return (
-              <tr key={row.id}>
+              <tr key={row.id} className="group/market-row">
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
                     className={
                       cell.column.id === 'typeId'
-                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/50 px-0.5 py-1.5 text-center text-xs text-eve-bright/90'
+                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/50 px-0.5 py-1.5 text-center text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
                         : cell.column.id === 'name'
-                          ? 'max-w-[18rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-eve-bright/95'
+                          ? 'max-w-[18rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
                           : cell.column.id === 'entryScore'
-                            ? 'min-w-[8rem] max-w-[10.5rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-eve-bright/90'
-                            : 'border-b border-eve-border/50 px-2 py-1.5 font-tabular-nums text-xs text-eve-bright/90'
+                            ? 'min-w-[8rem] max-w-[10.5rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
+                            : 'border-b border-eve-border/50 px-2 py-1.5 font-tabular-nums text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
                     }
                   >
                     {flexRender(

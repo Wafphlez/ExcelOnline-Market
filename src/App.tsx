@@ -586,7 +586,7 @@ function App()
   }, [selectedLocalExportFile])
 
   return (
-    <div className="min-h-screen eve-ui-root text-eve-text lg:h-screen lg:overflow-hidden">
+    <div className="min-h-screen eve-ui-root text-white lg:h-screen lg:overflow-hidden">
       <div className="w-full px-4 py-6 lg:flex lg:h-full lg:flex-col">
         <header className="mb-0 shrink-0 text-center">
           <div
@@ -726,7 +726,7 @@ function App()
                         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
                           <span className="shrink-0">Файл</span>
                           <select
-                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                             value={ selectedLocalExportFile }
                             onChange={ (e) => setSelectedLocalExportFile(e.target.value) }
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }

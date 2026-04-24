@@ -28,7 +28,7 @@ function ProgressRow({
     <div className="min-w-0">
       <div className="mb-0.5 flex justify-between gap-2 text-[10px] text-eve-muted">
         <span className="truncate">{label}</span>
-        <span className="shrink-0 tabular-nums text-eve-text/90">
+        <span className="shrink-0 tabular-nums text-white">
           {current}/{max}
         </span>
       </div>

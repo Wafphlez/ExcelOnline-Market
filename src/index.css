@@ -10,7 +10,7 @@ body,
 }
 
 body {
-  @apply font-sans antialiased text-eve-text;
+  @apply font-sans antialiased text-white;
   font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
   font-weight: 500;
   letter-spacing: 0.01em;

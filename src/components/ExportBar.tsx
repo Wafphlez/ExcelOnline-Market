@@ -735,7 +735,7 @@ export function ExportBar({
           </h3>
           <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
             Сервис: ликвидность; в dev файлы пишутся в{' '}
-            <code className="rounded bg-eve-bg/80 px-1 text-eve-text/85">exports/</code>
+            <code className="rounded bg-eve-bg/80 px-1 text-white">exports/</code>
           </p>
           <div className="flex flex-wrap gap-2">
             {regions.map((r) => (
@@ -764,7 +764,7 @@ export function ExportBar({
           <h3 className="eve-section-title mb-2">Открыть локальный файл</h3>
           <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
             Файлы из папки{' '}
-            <code className="rounded bg-eve-bg/80 px-1 text-eve-text/85">exports/</code>{' '}
+            <code className="rounded bg-eve-bg/80 px-1 text-white">exports/</code>{' '}
             на диске проекта
           </p>
           {isDevExportServer ? (
@@ -772,7 +772,7 @@ export function ExportBar({
               <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
                 <span className="shrink-0">Файл</span>
                 <select
-                  className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                  className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                   value={selectedExportFile}
                   onChange={(e) => setSelectedExportFile(e.target.value)}
                   disabled={disabled || exportFilesSorted.length === 0}
@@ -830,7 +830,7 @@ export function ExportBar({
             <label className="flex flex-col gap-1 text-xs text-eve-muted">
               <span>Регион ESI</span>
               <select
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
                 disabled={disabled || loading}
@@ -852,7 +852,7 @@ export function ExportBar({
                 value={esiMaxTypesStr}
                 onChange={(e) => setEsiMaxTypesStr(e.target.value)}
                 disabled={disabled || loading}
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-white shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
                 title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
               />
             </label>
@@ -866,7 +866,7 @@ export function ExportBar({
                 value={esiMaxPagesStr}
                 onChange={(e) => setEsiMaxPagesStr(e.target.value)}
                 disabled={disabled || loading}
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-white shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               />
             </label>
             <div className="flex flex-wrap items-center gap-2 pt-1 @[450px]:col-span-3 @[450px]:justify-end">
@@ -958,7 +958,7 @@ export function ExportBar({
           }`}
           aria-disabled={!marketExportLogsEnabled}
         >
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-eve-text">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-white">
           <div className="flex flex-wrap items-center gap-1.5 pr-3">
             <span className="italic text-eve-muted">Broker fee:</span>
             <input
@@ -967,7 +967,7 @@ export function ExportBar({
               min={0}
               max={100}
               step={0.01}
-              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-white shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={brokerFeePct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -987,7 +987,7 @@ export function ExportBar({
               min={0}
               max={100}
               step={0.01}
-              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-white shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={salesTaxPct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -1096,7 +1096,7 @@ export function ExportBar({
       {!isDevExportServer && (
         <p className="text-[11px] leading-relaxed text-eve-muted/80">
           Запись в <code>exports/</code> и ESI — только в режиме{' '}
-          <code className="text-eve-text/70">npm run dev</code>. Ссылки скачивания откроются в
+          <code className="text-white">npm run dev</code>. Ссылки скачивания откроются в
           браузере.
         </p>
       )}
