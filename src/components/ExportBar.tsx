@@ -86,6 +86,10 @@ function readEnableMarketExportLogs(): boolean {
 type ExportBarProps = {
   onLoadBuffer: (buf: ArrayBuffer) => void | Promise<void>
   disabled?: boolean
+  hideReadyExportsSection?: boolean
+  hideLocalFileOpenSection?: boolean
+  hideEsiSection?: boolean
+  hideMarketLogsSection?: boolean
   brokerFeePct: number
   salesTaxPct: number
   highPriceThresholdIsk: number
@@ -201,6 +205,10 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
 export function ExportBar({
   onLoadBuffer,
   disabled,
+  hideReadyExportsSection = false,
+  hideLocalFileOpenSection = false,
+  hideEsiSection = false,
+  hideMarketLogsSection = false,
   brokerFeePct,
   salesTaxPct,
   highPriceThresholdIsk,
@@ -636,219 +644,185 @@ export function ExportBar({
 
   return (
     <div className="space-y-5">
-      <section>
-        <h3 className="eve-section-title mb-2">
-          Готовые выгрузки по региону
-        </h3>
-        <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
-          Сервис: ликвидность; в dev файлы пишутся в{' '}
-          <code className="rounded bg-eve-bg/80 px-1 text-eve-text/85">exports/</code>
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {regions.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              disabled={disabled || loading}
-              onClick={() => void onDownloadRegion(r)}
-              className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
-              title={
-                isDevExportServer
-                  ? `Скачать в exports/${r.fileName}`
-                  : 'Открыть в новой вкладке'
-              }
-            >
-              <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-t border-eve-border/50 pt-4">
-        <h3 className="eve-section-title mb-2">Открыть локальный файл</h3>
-        <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
-          Файлы из папки{' '}
-          <code className="rounded bg-eve-bg/80 px-1 text-eve-text/85">exports/</code>{' '}
-          на диске проекта
-        </p>
-        {isDevExportServer ? (
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-            <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
-              <span className="shrink-0">Файл</span>
-              <select
-                className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-                value={selectedExportFile}
-                onChange={(e) => setSelectedExportFile(e.target.value)}
-                disabled={disabled || exportFilesSorted.length === 0}
-              >
-                {exportFilesSorted.length === 0 ? (
-                  <option value="">— папка пуста —</option>
-                ) : (
-                  exportFilesSorted.map((f) => (
-                    <option key={f.name} value={f.name}>
-                      {f.name} ({Math.round(f.size / 1024)} KB)
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
+      {!hideReadyExportsSection && (
+        <section>
+          <h3 className="eve-section-title mb-2">
+            Готовые выгрузки по региону
+          </h3>
+          <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
+            Сервис: ликвидность; в dev файлы пишутся в{' '}
+            <code className="rounded bg-eve-bg/80 px-1 text-eve-text/85">exports/</code>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {regions.map((r) => (
               <button
+                key={r.id}
                 type="button"
-                disabled={
-                  disabled ||
-                  loading ||
-                  exportFilesSorted.length === 0 ||
-                  !selectedExportFile
+                disabled={disabled || loading}
+                onClick={() => void onDownloadRegion(r)}
+                className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                title={
+                  isDevExportServer
+                    ? `Скачать в exports/${r.fileName}`
+                    : 'Открыть в новой вкладке'
                 }
-                onClick={() => void onOpenLocalExportFile()}
-                className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
-                title="Открыть в таблицу выбранный файл из exports/"
               >
-                <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Открыть
+                <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {r.label}
               </button>
-              <button
-                type="button"
-                onClick={() => void refreshList()}
-                className="inline-flex items-center justify-center rounded border border-eve-border/80 p-1.5 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright"
-                title="Обновить список из exports/"
-              >
-                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            </div>
+            ))}
           </div>
-        ) : (
-          <p className="text-[11px] leading-relaxed text-eve-muted/85">
-            Список <code>exports/</code> и чтение с диска проекта работают только
-            в режиме разработчика. В production используйте кнопки выгрузок
-            выше (ссылки) или перетаскивание файла в блоке «Локальный Excel».
-          </p>
-        )}
-      </section>
+        </section>
+      )}
 
-      {isDevExportServer && (
-        <section className="eve-panel rounded p-3">
-          <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
-          <p className="mb-3 text-[11px] text-eve-muted/85">
-            Официальный ESI, долго. Экспорт в{' '}
-            <code className="text-eve-text/80">exports/</code>, затем в таблицу.
+      {!hideLocalFileOpenSection && (
+        <section className="border-t border-eve-border/50 pt-4">
+          <h3 className="eve-section-title mb-2">Открыть локальный файл</h3>
+          <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
+            Файлы из папки{' '}
+            <code className="rounded bg-eve-bg/80 px-1 text-eve-text/85">exports/</code>{' '}
+            на диске проекта
           </p>
-          <div className="mb-3 min-w-0 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
-            <div className="flex w-max min-w-full flex-nowrap items-stretch gap-2 sm:w-full sm:gap-3">
-              <div className="w-44 shrink-0 sm:w-52">
-                <div className="relative h-full min-h-full overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
-                  <div
-                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
-                    aria-hidden
-                  />
-                  <span className="mb-1.5 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/80">
-                    Регион ESI
-                  </span>
-                  <select
-                    className="w-full min-w-0 cursor-pointer rounded border border-eve-border/80 bg-eve-bg/90 py-2 pl-2.5 pr-9 text-sm font-medium text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={selectedId}
-                    onChange={(e) => setSelectedId(e.target.value)}
-                    disabled={disabled}
-                  >
-                    {regions.map((r) => (
-                      <option key={r.id} value={r.id} className="bg-eve-surface text-eve-text">
-                        {r.label}
+          {isDevExportServer ? (
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+              <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
+                <span className="shrink-0">Файл</span>
+                <select
+                  className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                  value={selectedExportFile}
+                  onChange={(e) => setSelectedExportFile(e.target.value)}
+                  disabled={disabled || exportFilesSorted.length === 0}
+                >
+                  {exportFilesSorted.length === 0 ? (
+                    <option value="">— папка пуста —</option>
+                  ) : (
+                    exportFilesSorted.map((f) => (
+                      <option key={f.name} value={f.name}>
+                        {f.name} ({Math.round(f.size / 1024)} KB)
                       </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="w-[5.25rem] shrink-0 sm:w-24">
-                <div className="relative h-full min-h-full overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
-                  <div
-                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
-                    aria-hidden
-                  />
-                  <span className="mb-1.5 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/80">
-                    Типов
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={ESI_MAX_TYPES_USER_CAP}
-                    value={esiMaxTypesStr}
-                    onChange={(e) => setEsiMaxTypesStr(e.target.value)}
-                    disabled={disabled || loading}
-                    className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-sm tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
-                  />
-                </div>
-              </div>
-
-              <div className="min-w-0 w-max max-w-full shrink-0">
-                <div className="relative overflow-hidden rounded border border-eve-border/60 bg-eve-elevated/30 p-2.5 shadow-eve-inset">
-                  <div
-                    className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/40 to-transparent"
-                    aria-hidden
-                  />
-                  <div className="flex min-w-0 w-max max-w-full items-stretch gap-2.5 sm:gap-3">
-                    <label className="shrink-0 self-stretch">
-                      <span className="mb-1 block font-eve text-[10px] font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
-                        Страниц
-                      </span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={ESI_MAX_ORDER_PAGES_USER_CAP}
-                        value={esiMaxPagesStr}
-                        onChange={(e) => setEsiMaxPagesStr(e.target.value)}
-                        disabled={disabled || loading}
-                        className="w-[4.5rem] rounded border border-eve-border/80 bg-eve-bg/90 px-2.5 py-1.5 text-sm tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none focus:ring-2 focus:ring-eve-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex min-w-0 flex-1 items-end justify-end gap-2">
+                    ))
+                  )}
+                </select>
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  disabled={disabled || loading || !selected}
-                  onClick={() => void onEsiBuildSelected()}
-                  className="inline-flex min-h-[2.5rem] items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent shadow-eve-inset transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                  disabled={
+                    disabled ||
+                    loading ||
+                    exportFilesSorted.length === 0 ||
+                    !selectedExportFile
+                  }
+                  onClick={() => void onOpenLocalExportFile()}
+                  className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                  title="Открыть в таблицу выбранный файл из exports/"
                 >
-                  <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Сформировать (ESI)
+                  <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Открыть
                 </button>
-                {loading && esiExporting && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void postEsiExportStop().catch((e) =>
-                          setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
-                        )
-                      }}
-                      className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20"
-                      title="Остановить и собрать xlsx из текущих данных"
-                    >
-                      Стоп → xlsx
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void postEsiExportForceStop().catch((e) =>
-                          setMsg(e instanceof Error ? e.message : 'Ошибка stop-force')
-                        )
-                      }}
-                      className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/75 bg-eve-danger/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger shadow-eve-inset transition-colors hover:border-eve-danger hover:bg-eve-danger/30"
-                      title="Остановить без сборки xlsx"
-                    >
-                      Стоп → принудительно
-                    </button>
-                  </>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void refreshList()}
+                  className="inline-flex items-center justify-center rounded border border-eve-border/80 p-1.5 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright"
+                  title="Обновить список из exports/"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                </button>
               </div>
+            </div>
+          ) : (
+            <p className="text-[11px] leading-relaxed text-eve-muted/85">
+              Список <code>exports/</code> и чтение с диска проекта работают только
+              в режиме разработчика. В production используйте кнопки выгрузок
+              выше (ссылки) или перетаскивание файла в блоке «Локальный Excel».
+            </p>
+          )}
+        </section>
+      )}
+
+      {!hideEsiSection && (
+        <div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-sm">
+              <span className="shrink-0">Регион ESI</span>
+              <select
+                className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                value={selectedId}
+                onChange={(e) => setSelectedId(e.target.value)}
+                disabled={disabled || loading}
+              >
+                {regions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-eve-muted">
+              <span className="shrink-0">Типов</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={ESI_MAX_TYPES_USER_CAP}
+                value={esiMaxTypesStr}
+                onChange={(e) => setEsiMaxTypesStr(e.target.value)}
+                disabled={disabled || loading}
+                className="w-20 rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-eve-muted">
+              <span className="shrink-0">Страниц</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={ESI_MAX_ORDER_PAGES_USER_CAP}
+                value={esiMaxPagesStr}
+                onChange={(e) => setEsiMaxPagesStr(e.target.value)}
+                disabled={disabled || loading}
+                className="w-20 rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <button
+                type="button"
+                disabled={disabled || loading || !selected}
+                onClick={() => void onEsiBuildSelected()}
+                className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+              >
+                <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Сформировать (ESI)
+              </button>
+              {loading && esiExporting && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void postEsiExportStop().catch((e) =>
+                        setMsg(e instanceof Error ? e.message : 'Ошибка стоп')
+                      )
+                    }}
+                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/55 bg-eve-danger/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger/95 shadow-eve-inset transition-colors hover:border-eve-danger/80 hover:bg-eve-danger/20"
+                    title="Остановить и собрать xlsx из текущих данных"
+                  >
+                    Стоп → xlsx
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void postEsiExportForceStop().catch((e) =>
+                        setMsg(e instanceof Error ? e.message : 'Ошибка stop-force')
+                      )
+                    }}
+                    className="inline-flex min-h-[2.5rem] items-center justify-center rounded border border-eve-danger/75 bg-eve-danger/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-eve-danger shadow-eve-inset transition-colors hover:border-eve-danger hover:bg-eve-danger/30"
+                    title="Остановить без сборки xlsx"
+                  >
+                    Стоп → принудительно
+                  </button>
+                </>
+              )}
             </div>
           </div>
           {loading && esiExporting && (
@@ -860,10 +834,11 @@ export function ExportBar({
               />
             </div>
           )}
-        </section>
+        </div>
       )}
 
-      <section className="rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+      {!hideMarketLogsSection && (
+        <section className="rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h3 className="eve-section-title">Market export logs</h3>
           <label className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
@@ -901,8 +876,8 @@ export function ExportBar({
           }`}
           aria-disabled={!marketExportLogsEnabled}
         >
-        <div className="mb-2 flex flex-wrap items-center gap-0 text-xs text-eve-text">
-          <div className="flex flex-wrap items-center gap-1.5 pr-3 sm:border-r sm:border-eve-border">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-eve-text">
+          <div className="flex flex-wrap items-center gap-1.5 pr-3">
             <span className="italic text-eve-muted">Broker fee:</span>
             <input
               ref={brokerInputRef}
@@ -942,18 +917,19 @@ export function ExportBar({
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
+          <label className="flex min-w-[18rem] flex-1 items-center gap-2 sm:ml-[20vw] sm:pl-3">
+            <span className="shrink-0 text-eve-muted/95">Путь к папке market logs</span>
+            <input
+              type="text"
+              value={marketLogsPath}
+              onChange={(e) => setMarketLogsPath(e.target.value)}
+              placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
+              className="min-w-[14rem] flex-1 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+              disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
+            />
+          </label>
         </div>
-        <label className="mb-2 flex flex-col gap-1 text-xs text-eve-muted/95">
-          <span>Путь к папке market logs</span>
-          <input
-            type="text"
-            value={marketLogsPath}
-            onChange={(e) => setMarketLogsPath(e.target.value)}
-            placeholder="Например: C:\\Users\\...\\Documents\\EVE\\logs\\marketlogs"
-            className="w-full rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-            disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
-          />
-        </label>
+        <p className="mb-2 text-[11px] text-eve-muted/85">{marketLogInfo}</p>
         <div className="space-y-2">
           {(marketLogRows.length > 0
             ? marketLogRows
@@ -977,7 +953,7 @@ export function ExportBar({
                 key={`${r.name || 'empty'}-${idx}`}
                 className="rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
               >
-                <div className="grid grid-cols-1 gap-2 text-xs">
+                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Item name
@@ -1015,7 +991,8 @@ export function ExportBar({
           })}
         </div>
         </div>
-      </section>
+        </section>
+      )}
 
       {!isDevExportServer && (
         <p className="text-[11px] leading-relaxed text-eve-muted/80">

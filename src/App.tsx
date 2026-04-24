@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInputWheelNudge } from './hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
+import { Download, FolderOpen, RefreshCw } from 'lucide-react'
 import { ExportBar } from './components/ExportBar'
 import { FileDropzone } from './components/FileDropzone'
 import { MarketTable } from './components/MarketTable'
@@ -9,69 +10,104 @@ import { DEFAULT_HIGH_PRICE_THRESHOLD_ISK } from './lib/pricePenalty'
 import { formatInteger } from './lib/formatNumber'
 import { mapRawRows } from './lib/mapColumns'
 import { parseMarketWorkbook } from './lib/parseExcel'
-import {
-  loadFiltersFromDevFile,
-  readInitialStateFromLocalStorage,
-  saveFiltersToDevFile,
-  writeFiltersToLocalStorage,
-} from './lib/filterPersistence'
-import {
-  applyAllPresets,
-  applyPreset,
-  clearFilters,
-  PRESET_ALL_ID,
-  PRESETS,
-} from './lib/presets'
-import {
-  getExportRegionLabel,
-  LAST_EXPORT_REGION_EVENT,
-  LS_LAST_EXPORT_REGION_ID,
-  readLastExportRegionId,
-  type LastExportRegionDetail,
-} from './lib/lastExportRegionStorage'
+import
+  {
+    loadFiltersFromDevFile,
+    readInitialStateFromLocalStorage,
+    saveFiltersToDevFile,
+    writeFiltersToLocalStorage,
+  } from './lib/filterPersistence'
+import
+  {
+    applyAllPresets,
+    applyPreset,
+    clearFilters,
+    PRESET_ALL_ID,
+    PRESETS,
+  } from './lib/presets'
+import
+  {
+    getExportRegionLabel,
+    LAST_EXPORT_REGION_EVENT,
+    LS_LAST_EXPORT_REGION_ID,
+    readLastExportRegionId,
+    type LastExportRegionDetail,
+  } from './lib/lastExportRegionStorage'
+import
+  {
+    devExportFileUrl,
+    downloadToExports,
+    isDevExportServer,
+    listExportFiles,
+    type ExportListItem,
+  } from './lib/devExportApi'
+import { EXPORT_REGIONS, type ExportRegion } from './lib/exportRegions'
 import type { MarketRow } from './types/market'
 
 const LS_PRICE_MLN = 'excelMarket_highPriceMln'
 const LS_BROKER_PCT = 'excelMarket_brokerFeePct'
 const LS_SALES_TAX_PCT = 'excelMarket_salesTaxPct'
+const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 
 const DEFAULT_BROKER_FEE_PCT = 1.4
 const DEFAULT_SALES_TAX_PCT = 4.2
 
-function readStoredPriceMln(): number {
-  try {
+function readStoredPriceMln(): number
+{
+  try
+  {
     const v = localStorage.getItem(LS_PRICE_MLN)
     if (v === null) return DEFAULT_HIGH_PRICE_THRESHOLD_ISK / 1_000_000
     const n = Number(String(v).replace(',', '.'))
     return Number.isFinite(n) && n > 0 ? n : DEFAULT_HIGH_PRICE_THRESHOLD_ISK / 1_000_000
-  } catch {
+  } catch
+  {
     return DEFAULT_HIGH_PRICE_THRESHOLD_ISK / 1_000_000
   }
 }
 
-function readStoredBrokerFeePct(): number {
-  try {
+function readStoredBrokerFeePct(): number
+{
+  try
+  {
     const v = localStorage.getItem(LS_BROKER_PCT)
     if (v === null) return DEFAULT_BROKER_FEE_PCT
     const n = Number(String(v).replace(',', '.'))
     return Number.isFinite(n) && n >= 0 && n <= 100 ? n : DEFAULT_BROKER_FEE_PCT
-  } catch {
+  } catch
+  {
     return DEFAULT_BROKER_FEE_PCT
   }
 }
 
-function readStoredSalesTaxPct(): number {
-  try {
+function readStoredSalesTaxPct(): number
+{
+  try
+  {
     const v = localStorage.getItem(LS_SALES_TAX_PCT)
     if (v === null) return DEFAULT_SALES_TAX_PCT
     const n = Number(String(v).replace(',', '.'))
     return Number.isFinite(n) && n >= 0 && n <= 100 ? n : DEFAULT_SALES_TAX_PCT
-  } catch {
+  } catch
+  {
     return DEFAULT_SALES_TAX_PCT
   }
 }
 
-function App() {
+function readLastExportFileName(): string
+{
+  try
+  {
+    const v = localStorage.getItem(LS_LAST_EXPORT_FILE)
+    return v ?? ''
+  } catch
+  {
+    return ''
+  }
+}
+
+function App()
+{
   const [fileRows, setFileRows] = useState<MarketRow[] | null>(null)
   const [priceThresholdMln, setPriceThresholdMln] = useState(readStoredPriceMln)
   const [brokerFeePct, setBrokerFeePct] = useState(readStoredBrokerFeePct)
@@ -90,8 +126,11 @@ function App() {
     () => new Set()
   )
   const [priceInputEl, setPriceInputEl] = useState<HTMLInputElement | null>(null)
-  const [brokerInputEl, setBrokerInputEl] = useState<HTMLInputElement | null>(null)
-  const [taxInputEl, setTaxInputEl] = useState<HTMLInputElement | null>(null)
+  const [localExportFiles, setLocalExportFiles] = useState<ExportListItem[]>([])
+  const [localExportLoading, setLocalExportLoading] = useState(false)
+  const [selectedLocalExportFile, setSelectedLocalExportFile] = useState(
+    readLastExportFileName
+  )
 
   const highPriceThresholdIsk = priceThresholdMln * 1_000_000
 
@@ -99,35 +138,29 @@ function App() {
     step: 1,
     bounds: { min: 0.1, max: 1_000_000 },
     getValue: () => priceThresholdMln,
-    onNudge: (n) => {
+    onNudge: (n) =>
+    {
       const v = Math.max(0.1, n)
       setPriceThresholdMln(v)
-      try {
+      try
+      {
         localStorage.setItem(LS_PRICE_MLN, String(v))
-      } catch {
+      } catch
+      {
         /* ignore */
       }
     },
   })
-  useInputWheelNudge(brokerInputEl, {
-    step: 0.01,
-    bounds: { min: 0, max: 100 },
-    getValue: () => brokerFeePct,
-    onNudge: (n) => {
-      setBrokerFeePct(n)
-      try {
-        localStorage.setItem(LS_BROKER_PCT, String(n))
-      } catch {
-        /* ignore */
-      }
-    },
-  })
-  useEffect(() => {
+  useEffect(() =>
+  {
     let cancelled = false
-    void (async () => {
-      if (import.meta.env.DEV) {
+    void (async () =>
+    {
+      if (import.meta.env.DEV)
+      {
         const fromFile = await loadFiltersFromDevFile()
-        if (!cancelled && fromFile) {
+        if (!cancelled && fromFile)
+        {
           setColumnFilters(fromFile.columnFilters)
           setActivePreset(fromFile.activePreset)
           writeFiltersToLocalStorage(
@@ -138,14 +171,17 @@ function App() {
       }
       if (!cancelled) setFiltersPersistReady(true)
     })()
-    return () => {
+    return () =>
+    {
       cancelled = true
     }
   }, [])
 
-  useEffect(() => {
+  useEffect(() =>
+  {
     if (!filtersPersistReady) return
-    const t = window.setTimeout(() => {
+    const t = window.setTimeout(() =>
+    {
       writeFiltersToLocalStorage(columnFilters, activePreset)
       void saveFiltersToDevFile({
         version: 2,
@@ -156,21 +192,9 @@ function App() {
     return () => clearTimeout(t)
   }, [columnFilters, activePreset, filtersPersistReady])
 
-  useInputWheelNudge(taxInputEl, {
-    step: 0.01,
-    bounds: { min: 0, max: 100 },
-    getValue: () => salesTaxPct,
-    onNudge: (n) => {
-      setSalesTaxPct(n)
-      try {
-        localStorage.setItem(LS_SALES_TAX_PCT, String(n))
-      } catch {
-        /* ignore */
-      }
-    },
-  })
 
-  const rows = useMemo((): MarketRow[] | null => {
+  const rows = useMemo((): MarketRow[] | null =>
+  {
     if (fileRows === null) return null
     if (fileRows.length === 0) return []
     return computeAllMetrics(fileRows, {
@@ -179,23 +203,38 @@ function App() {
       salesTax: salesTaxPct / 100,
     })
   }, [fileRows, highPriceThresholdIsk, brokerFeePct, salesTaxPct])
+  const tableEmptyMessage = fileRows === null
+    ? 'Нет данных: выберите файл для загрузки таблицы.'
+    : 'Ни одна строка не подходит под фильтры'
+
+  const localExportFilesSorted = useMemo(() =>
+  {
+    return [...localExportFiles]
+      .filter((f) => /\.(xlsx|xls)$/i.test(f.name))
+      .sort((a, b) => b.mtime.localeCompare(a.mtime) || a.name.localeCompare(b.name))
+  }, [localExportFiles])
 
   const [tickerRegionId, setTickerRegionId] = useState(() =>
     readLastExportRegionId()
   )
-  useEffect(() => {
-    const onCustom = (e: Event) => {
+  useEffect(() =>
+  {
+    const onCustom = (e: Event) =>
+    {
       const id = (e as CustomEvent<LastExportRegionDetail>).detail?.id
       if (id) setTickerRegionId(id)
     }
-    const onStorage = (ev: StorageEvent) => {
-      if (ev.key === LS_LAST_EXPORT_REGION_ID) {
+    const onStorage = (ev: StorageEvent) =>
+    {
+      if (ev.key === LS_LAST_EXPORT_REGION_ID)
+      {
         setTickerRegionId(readLastExportRegionId())
       }
     }
     window.addEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
     window.addEventListener('storage', onStorage)
-    return () => {
+    return () =>
+    {
       window.removeEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
       window.removeEventListener('storage', onStorage)
     }
@@ -206,19 +245,23 @@ function App() {
     [tickerRegionId]
   )
 
-  const { tableTicker, tableTitle } = useMemo(() => {
-    if (loading) {
+  const { tableTicker, tableTitle } = useMemo(() =>
+  {
+    if (loading)
+    {
       return { tableTicker: '…', tableTitle: 'Идёт загрузка или разбор файла' }
     }
-    if (fileRows === null) {
+    if (fileRows === null)
+    {
       return { tableTicker: '—', tableTitle: 'Таблица: файл не загружен' }
     }
-    if (fileRows.length === 0) {
+    if (fileRows.length === 0)
+    {
       return { tableTicker: '0', tableTitle: 'Таблица: 0 строк' }
     }
     return {
       tableTicker: String(fileRows.length),
-      tableTitle: `Строк в таблице: ${fileRows.length}`,
+      tableTitle: `Строк в таблице: ${ fileRows.length }`,
     }
   }, [loading, fileRows])
 
@@ -233,16 +276,16 @@ function App() {
 
   const feeTicker = useMemo(
     () =>
-      `${brokerFeePct.toLocaleString('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}%·${salesTaxPct.toLocaleString('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 0 })}%`,
+      `${ brokerFeePct.toLocaleString('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 0 }) }%·${ salesTaxPct.toLocaleString('ru-RU', { maximumFractionDigits: 2, minimumFractionDigits: 0 }) }%`,
     [brokerFeePct, salesTaxPct]
   )
 
   const tickerScreenReader = useMemo(
     () =>
-      `Excel Online Market. ${tableTitle}. Регион ESI: ${getExportRegionLabel(
+      `Excel Online Market. ${ tableTitle }. Регион ESI: ${ getExportRegionLabel(
         tickerRegionId
-      )}. Порог дорогой единицы больше ${priceMlnForTicker} млн ISK. Broker ${brokerFeePct}%, налог ${salesTaxPct}%. ` +
-        'Фильтры и сортировка по марже, спреду в ISK и обороту.',
+      ) }. Порог дорогой единицы больше ${ priceMlnForTicker } млн ISK. Broker ${ brokerFeePct }%, налог ${ salesTaxPct }%. ` +
+      'Фильтры и сортировка по марже, спреду в ISK и обороту.',
     [
       tableTitle,
       tickerRegionId,
@@ -252,37 +295,68 @@ function App() {
     ]
   )
 
-  const onNameCopied = useCallback((key: string) => {
+  const onNameCopied = useCallback((key: string) =>
+  {
     setCopiedNameKeys((prev) => new Set([...prev, key]))
   }, [])
 
-  const onBrokerFeeChange = useCallback((n: number) => {
+  const onBrokerFeeChange = useCallback((n: number) =>
+  {
     setBrokerFeePct(n)
-    try {
+    try
+    {
       localStorage.setItem(LS_BROKER_PCT, String(n))
-    } catch {
+    } catch
+    {
       /* ignore */
     }
   }, [])
 
-  const onSalesTaxChange = useCallback((n: number) => {
+  const onSalesTaxChange = useCallback((n: number) =>
+  {
     setSalesTaxPct(n)
-    try {
+    try
+    {
       localStorage.setItem(LS_SALES_TAX_PCT, String(n))
-    } catch {
+    } catch
+    {
       /* ignore */
     }
   }, [])
 
-  const loadFromBuffer = useCallback(async (buf: ArrayBuffer) => {
+  const refreshLocalExportFiles = useCallback(async () =>
+  {
+    if (!isDevExportServer)
+    {
+      setLocalExportFiles([])
+      return
+    }
+    setLocalExportLoading(true)
+    try
+    {
+      const list = await listExportFiles()
+      setLocalExportFiles(list)
+    } catch
+    {
+      setLocalExportFiles([])
+    } finally
+    {
+      setLocalExportLoading(false)
+    }
+  }, [])
+
+  const loadFromBuffer = useCallback(async (buf: ArrayBuffer) =>
+  {
     setError(null)
     setLoading(true)
-    try {
+    try
+    {
       const { rows: raw } = parseMarketWorkbook(buf)
       const mapped = mapRawRows(raw)
-      if (!mapped.ok) {
+      if (!mapped.ok)
+      {
         setError(
-          `Не удалось прочитать строку ${mapped.rowIndex + 1}: не хватает колонок (${mapped.error.column}).`
+          `Не удалось прочитать строку ${ mapped.rowIndex + 1 }: не хватает колонок (${ mapped.error.column }).`
         )
         setFileRows(null)
         setCopiedNameKeys(new Set())
@@ -290,39 +364,151 @@ function App() {
       }
       setFileRows(mapped.rows)
       setCopiedNameKeys(new Set())
-    } catch (e) {
+    } catch (e)
+    {
       setError(e instanceof Error ? e.message : 'Ошибка чтения файла')
       setFileRows(null)
       setCopiedNameKeys(new Set())
-    } finally {
+    } finally
+    {
       setLoading(false)
     }
   }, [])
 
+  const onOpenSelectedLocalExportFile = useCallback(async () =>
+  {
+    if (!selectedLocalExportFile) return
+    setError(null)
+    setExportMsg(null)
+    try
+    {
+      const u = devExportFileUrl(selectedLocalExportFile)
+      const res = await fetch(u)
+      if (!res.ok)
+      {
+        setExportMsg(
+          'Файл не найден в exports/ — обновите список или скачайте выгрузку снова.'
+        )
+        return
+      }
+      const buf = await res.arrayBuffer()
+      await loadFromBuffer(buf)
+      setExportMsg(`Открыт: ${ selectedLocalExportFile }`)
+    } catch (e)
+    {
+      setExportMsg(e instanceof Error ? e.message : 'Ошибка открытия')
+    }
+  }, [selectedLocalExportFile, loadFromBuffer])
+
+  const onDownloadReadyExport = useCallback(
+    async (region: ExportRegion) =>
+    {
+      setExportMsg(null)
+      if (!isDevExportServer)
+      {
+        window.open(region.downloadUrl, '_blank', 'noopener,noreferrer')
+        setExportMsg(
+          'В production откроется ссылка; в dev (npm run dev) файл пишется в папку exports/.'
+        )
+        return
+      }
+      setLoading(true)
+      try
+      {
+        await downloadToExports(region.downloadUrl, region.fileName)
+        setSelectedLocalExportFile(region.fileName)
+        await refreshLocalExportFiles()
+        const u = devExportFileUrl(region.fileName)
+        const res = await fetch(u)
+        if (res.ok)
+        {
+          const buf = await res.arrayBuffer()
+          await loadFromBuffer(buf)
+          setExportMsg(`Открыт: ${ region.label } (exports/${ region.fileName })`)
+        } else
+        {
+          setExportMsg(`Сохранено: exports/${ region.fileName }`)
+        }
+      } catch (e)
+      {
+        setExportMsg(e instanceof Error ? e.message : 'Ошибка скачивания')
+      } finally
+      {
+        setLoading(false)
+      }
+    },
+    [loadFromBuffer, refreshLocalExportFiles]
+  )
+
   const onFile = useCallback(
-    async (file: File) => {
+    async (file: File) =>
+    {
       const buf = await file.arrayBuffer()
       await loadFromBuffer(buf)
     },
     [loadFromBuffer]
   )
 
-  const onPreset = useCallback((id: string) => {
+  const onPreset = useCallback((id: string) =>
+  {
     const p = PRESETS.find((x) => x.id === id)
     if (!p) return
     setActivePreset(id)
     setColumnFilters((prev) => applyPreset(prev, p))
   }, [])
 
-  const onApplyAllPresets = useCallback(() => {
+  const onApplyAllPresets = useCallback(() =>
+  {
     setActivePreset(PRESET_ALL_ID)
     setColumnFilters(applyAllPresets())
   }, [])
 
-  const onResetFilters = useCallback(() => {
+  const onResetFilters = useCallback(() =>
+  {
     setActivePreset(null)
     setColumnFilters(clearFilters())
   }, [])
+
+  useEffect(() =>
+  {
+    if (!isDevExportServer) return
+    void refreshLocalExportFiles()
+  }, [refreshLocalExportFiles])
+
+  useEffect(() =>
+  {
+    if (!isDevExportServer) return
+    if (localExportFilesSorted.length === 0)
+    {
+      setSelectedLocalExportFile('')
+      return
+    }
+    setSelectedLocalExportFile((prev) =>
+    {
+      if (prev && localExportFilesSorted.some((f) => f.name === prev))
+      {
+        return prev
+      }
+      return localExportFilesSorted[0]!.name
+    })
+  }, [localExportFilesSorted])
+
+  useEffect(() =>
+  {
+    try
+    {
+      if (selectedLocalExportFile)
+      {
+        localStorage.setItem(LS_LAST_EXPORT_FILE, selectedLocalExportFile)
+      } else
+      {
+        localStorage.removeItem(LS_LAST_EXPORT_FILE)
+      }
+    } catch
+    {
+      /* ignore */
+    }
+  }, [selectedLocalExportFile])
 
   return (
     <div className="min-h-screen eve-ui-root text-eve-text">
@@ -343,16 +529,16 @@ function App() {
                   className="flex w-full min-w-0 items-baseline justify-between text-sm font-bold uppercase text-eve-bright/95 [text-shadow:0_0_12px_rgba(236,238,242,0.08)] sm:text-base"
                   aria-hidden="true"
                 >
-                  {'Market'.split('').map((ch, i) => (
-                    <span key={i} className="inline-block leading-none">
-                      {ch}
+                  { 'Market'.split('').map((ch, i) => (
+                    <span key={ i } className="inline-block leading-none">
+                      { ch }
                     </span>
-                  ))}
+                  )) }
                 </div>
               </div>
             </span>
           </h1>
-          <p className="sr-only">{tickerScreenReader}</p>
+          <p className="sr-only">{ tickerScreenReader }</p>
           <div
             className="relative mt-3 mx-auto w-full max-w-4xl overflow-hidden rounded-sm border border-eve-border/50 bg-eve-bg/55 shadow-eve-inset [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(42,49,66,0.12)_3px,transparent_4px)]"
             aria-hidden
@@ -366,25 +552,24 @@ function App() {
                   ◆
                 </span>
                 <span
-                  className={`shrink-0 font-tabular-nums ${
-                    loading
+                  className={ `shrink-0 font-tabular-nums ${ loading
                       ? 'text-eve-accent/90'
                       : fileRows === null
                         ? 'text-eve-muted/55'
                         : 'text-eve-cyan/95'
-                  }`}
-                  title={tableTitle}
+                    }` }
+                  title={ tableTitle }
                 >
-                  {tableTicker}
+                  { tableTicker }
                 </span>
                 <span className="shrink-0 text-eve-muted/45" aria-hidden>
                   |
                 </span>
                 <span
                   className="shrink-0 text-eve-gold-bright/90"
-                  title={`Регион ESI-выгрузки: ${getExportRegionLabel(tickerRegionId)}`}
+                  title={ `Регион ESI-выгрузки: ${ getExportRegionLabel(tickerRegionId) }` }
                 >
-                  {regionTickerUpper}
+                  { regionTickerUpper }
                 </span>
                 <span className="shrink-0 text-eve-muted/45" aria-hidden>
                   |
@@ -393,7 +578,7 @@ function App() {
                   className="shrink-0 text-eve-cyan/95"
                   title="Порог «дорогой» единицы (млн ISK)"
                 >
-                  &gt;{priceMlnForTicker}M
+                  &gt;{ priceMlnForTicker }M
                 </span>
                 <span className="shrink-0 text-eve-muted/45" aria-hidden>
                   |
@@ -402,9 +587,9 @@ function App() {
                   className="shrink-0 text-eve-cyan/90"
                   title="Broker (buy) и sales tax, %"
                 >
-                  {feeTicker}
+                  { feeTicker }
                 </span>
-                {import.meta.env.DEV ? (
+                { import.meta.env.DEV ? (
                   <>
                     <span className="shrink-0 text-eve-muted/45" aria-hidden>
                       |
@@ -413,7 +598,7 @@ function App() {
                       DEV
                     </span>
                   </>
-                ) : null}
+                ) : null }
                 <span className="shrink-0 text-eve-muted/45" aria-hidden>
                   |
                 </span>
@@ -427,8 +612,8 @@ function App() {
                 </span>
                 <span className="shrink-0 sm:max-w-none">
                   <span className="text-eve-bright/88">
-                    Фильтры и сортировка по <span className="text-eve-cyan/95">марже</span>,{' '}
-                    <span className="text-eve-cyan/95">спреду</span> в ISK и{' '}
+                    Фильтры и сортировка по <span className="text-eve-cyan/95">марже</span>,{ ' ' }
+                    <span className="text-eve-cyan/95">спреду</span> в ISK и{ ' ' }
                     <span className="text-eve-cyan/95">обороту</span>
                   </span>
                 </span>
@@ -441,146 +626,230 @@ function App() {
           </div>
         </header>
 
-        <div className="eve-panel mb-4 overflow-hidden">
-          <div className="divide-y divide-eve-border/50">
-            <div className="p-3 sm:p-4">
-              <h2 className="eve-section-title mb-3">Локальный Excel</h2>
-              <FileDropzone
-                onFile={onFile}
-                disabled={loading}
-                embedded
-              />
-            </div>
-            <div className="p-3 sm:p-4">
-              <ExportBar
-                onLoadBuffer={loadFromBuffer}
-                disabled={loading}
-                brokerFeePct={brokerFeePct}
-                salesTaxPct={salesTaxPct}
-                highPriceThresholdIsk={highPriceThresholdIsk}
-                onBrokerFeeChange={onBrokerFeeChange}
-                onSalesTaxChange={onSalesTaxChange}
-                brokerInputRef={setBrokerInputEl}
-                taxInputRef={setTaxInputEl}
-                onMessageChange={setExportMsg}
-              />
-            </div>
-          </div>
+        <div className="eve-panel mb-4 overflow-hidden p-3 sm:p-4">
+          <ExportBar
+            onLoadBuffer={ loadFromBuffer }
+            disabled={ loading }
+            hideReadyExportsSection
+            hideLocalFileOpenSection
+            hideEsiSection
+            brokerFeePct={ brokerFeePct }
+            salesTaxPct={ salesTaxPct }
+            highPriceThresholdIsk={ highPriceThresholdIsk }
+            onBrokerFeeChange={ onBrokerFeeChange }
+            onSalesTaxChange={ onSalesTaxChange }
+            onMessageChange={ setExportMsg }
+          />
         </div>
 
-        {error && (
+        { error && (
           <div
             className="eve-panel mt-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
             role="alert"
           >
-            {error}
+            { error }
           </div>
-        )}
+        ) }
 
-        {rows !== null && (
-          <>
-            {exportMsg && (
-              <p className="mb-3 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
-                {exportMsg}
-              </p>
-            )}
-            <div className="mt-4 flex flex-wrap items-center justify-end gap-1.5 border-b border-eve-accent/20 pb-3">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={(e) => {
-                      onPreset(p.id)
-                      e.currentTarget.blur()
-                    }}
-                    className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${
-                      activePreset === p.id
-                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
-                        : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    onApplyAllPresets()
-                    e.currentTarget.blur()
-                  }}
-                  className={`rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${
-                    activePreset === PRESET_ALL_ID
-                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
-                      : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
-                  }`}
-                >
-                  Применить все
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    onResetFilters()
-                    e.currentTarget.blur()
-                  }}
-                  className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface hover:border-eve-muted/50 hover:text-eve-bright"
-                >
-                  Сбросить фильтры
-                </button>
-            </div>
-            <div className="mb-2 mt-3 flex flex-col gap-3">
-              <label className="flex flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:items-center">
-                <span className="max-w-[20rem]">
-                  Порог цены 1 ед. (млн ISK): выше — снижается выгодность
-                  (маржа в оценке и цвет ячейки маржи)
-                </span>
-                <input
-                  ref={setPriceInputEl}
-                  type="number"
-                  min={0.1}
-                  step={1}
-                  className="w-24 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-                  value={priceThresholdMln}
-                  onChange={(e) => {
-                    const n = Number(e.target.value.replace(',', '.'))
-                    if (!Number.isFinite(n) || n < 0.1) return
-                    setPriceThresholdMln(n)
-                    try {
-                      localStorage.setItem(LS_PRICE_MLN, String(n))
-                    } catch {
-                      /* ignore */
-                    }
-                  }}
+        <div className="eve-panel p-1.5">
+          { (isDevExportServer || exportMsg) && (
+            <>
+              <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+              <h3 className="eve-section-title mb-2">Источник таблицы</h3>
+              { isDevExportServer && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
+                    <span className="shrink-0">Файл</span>
+                    <select
+                      className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                      value={ selectedLocalExportFile }
+                      onChange={ (e) => setSelectedLocalExportFile(e.target.value) }
+                      disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
+                    >
+                      { localExportFilesSorted.length === 0 ? (
+                        <option value="">— папка пуста —</option>
+                      ) : (
+                        localExportFilesSorted.map((f) => (
+                          <option key={ f.name } value={ f.name }>
+                            { f.name } ({ Math.round(f.size / 1024) } KB)
+                          </option>
+                        ))
+                      ) }
+                    </select>
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={
+                        loading ||
+                        localExportLoading ||
+                        localExportFilesSorted.length === 0 ||
+                        !selectedLocalExportFile
+                      }
+                      onClick={ () => void onOpenSelectedLocalExportFile() }
+                      className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                      title="Открыть в таблицу выбранный файл из exports/"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Открыть
+                    </button>
+                    <button
+                      type="button"
+                      onClick={ () => void refreshLocalExportFiles() }
+                      disabled={ loading || localExportLoading }
+                      className="inline-flex items-center justify-center rounded border border-eve-border/80 p-1.5 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright disabled:opacity-50"
+                      title="Обновить список из exports/"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </div>
+                  <div className="sm:ml-auto">
+                    <FileDropzone
+                      onFile={ onFile }
+                      disabled={ loading || localExportLoading }
+                      embedded
+                    />
+                  </div>
+                </div>
+              ) }
+              <div className="mt-2">
+                <h3 className="eve-section-title mb-2">Готовые выгрузки</h3>
+                <div className="flex flex-wrap gap-2">
+                  { EXPORT_REGIONS.map((region) => (
+                    <button
+                      key={ region.id }
+                      type="button"
+                      disabled={ loading }
+                      onClick={ () => void onDownloadReadyExport(region) }
+                      className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                      title={
+                        isDevExportServer
+                          ? `Скачать в exports/${ region.fileName }`
+                          : 'Открыть в новой вкладке'
+                      }
+                    >
+                      <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      { region.label }
+                    </button>
+                  )) }
+                </div>
+              </div>
+              <div className="mt-3">
+                <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
+                <ExportBar
+                  onLoadBuffer={ loadFromBuffer }
+                  disabled={ loading }
+                  hideReadyExportsSection
+                  hideLocalFileOpenSection
+                  hideMarketLogsSection
+                  brokerFeePct={ brokerFeePct }
+                  salesTaxPct={ salesTaxPct }
+                  highPriceThresholdIsk={ highPriceThresholdIsk }
+                  onBrokerFeeChange={ onBrokerFeeChange }
+                  onSalesTaxChange={ onSalesTaxChange }
+                  onMessageChange={ setExportMsg }
                 />
-                <span className="tabular-nums text-eve-muted/90" title="В ISK">
-                  = {formatInteger(highPriceThresholdIsk)} ISK
-                </span>
-              </label>
-            </div>
-            <div className="eve-panel p-1.5">
-              <MarketTable
-                data={rows}
-                columnFilters={columnFilters}
-                onColumnFiltersChange={setColumnFilters}
-                highPriceThresholdIsk={highPriceThresholdIsk}
-                copiedNameKeys={copiedNameKeys}
-                onNameCopied={onNameCopied}
+              </div>
+
+              </section>
+              { exportMsg && (
+                <p className="my-2 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
+                  { exportMsg }
+                </p>
+              ) }
+            </>
+          ) }
+          <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5 pb-2">
+            { PRESETS.map((p) => (
+              <button
+                key={ p.id }
+                type="button"
+                onClick={ (e) =>
+                {
+                  onPreset(p.id)
+                  e.currentTarget.blur()
+                } }
+                className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === p.id
+                    ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                    : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+                  }` }
+              >
+                { p.label }
+              </button>
+            )) }
+            <button
+              type="button"
+              onClick={ (e) =>
+              {
+                onApplyAllPresets()
+                e.currentTarget.blur()
+              } }
+              className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === PRESET_ALL_ID
+                  ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                  : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+                }` }
+            >
+              Применить все
+            </button>
+            <button
+              type="button"
+              onClick={ (e) =>
+              {
+                onResetFilters()
+                e.currentTarget.blur()
+              } }
+              className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface hover:border-eve-muted/50 hover:text-eve-bright"
+            >
+              Сбросить фильтры
+            </button>
+          </div>
+          <div className="mb-2 flex flex-col gap-3">
+            <label className="flex flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:items-center">
+              <span className="max-w-[20rem]">
+                Дорогим товаром считать (влияет на выгодность)
+              </span>
+              <input
+                ref={ setPriceInputEl }
+                type="number"
+                min={ 0.1 }
+                step={ 1 }
+                className="w-24 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                value={ priceThresholdMln }
+                onChange={ (e) =>
+                {
+                  const n = Number(e.target.value.replace(',', '.'))
+                  if (!Number.isFinite(n) || n < 0.1) return
+                  setPriceThresholdMln(n)
+                  try
+                  {
+                    localStorage.setItem(LS_PRICE_MLN, String(n))
+                  } catch
+                  {
+                    /* ignore */
+                  }
+                } }
               />
-            </div>
-          </>
-        )}
+              <span className="tabular-nums text-eve-muted/90" title="В ISK">
+                = { formatInteger(highPriceThresholdIsk) } ISK
+              </span>
+            </label>
+          </div>
+          <MarketTable
+            data={ rows ?? [] }
+            columnFilters={ columnFilters }
+            onColumnFiltersChange={ setColumnFilters }
+            emptyMessage={ tableEmptyMessage }
+            highPriceThresholdIsk={ highPriceThresholdIsk }
+            copiedNameKeys={ copiedNameKeys }
+            onNameCopied={ onNameCopied }
+          />
+        </div>
 
-        {rows === null && !error && !loading && (
-          <p className="mt-4 text-center text-sm text-eve-muted/90">
-            Пока нет данных. Выберите выгрузку (например liq_*.xlsx) или
-            загрузите локальный файл.
-          </p>
-        )}
-
-        {loading && (
+        { loading && (
           <p className="mt-4 text-center text-sm font-semibold uppercase tracking-wider text-eve-accent/90">
             Загрузка…
           </p>
-        )}
+        ) }
       </div>
     </div>
   )

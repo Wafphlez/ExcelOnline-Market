@@ -88,6 +88,7 @@ type MarketTableProps = {
   data: MarketRow[]
   columnFilters: ColumnFiltersState
   onColumnFiltersChange: OnChangeFn<ColumnFiltersState>
+  emptyMessage?: string
   /** Выше этой цены за ед. (ISK) снижаем «эквивалентную» маржу в цветах и теплоте строки */
   highPriceThresholdIsk: number
   /** Ключи marketRowCopyKey: название копировали в этой сессии файла */
@@ -116,6 +117,7 @@ export function MarketTable({
   data,
   columnFilters,
   onColumnFiltersChange,
+  emptyMessage = 'Ни одна строка не подходит под фильтры',
   highPriceThresholdIsk,
   copiedNameKeys,
   onNameCopied,
@@ -390,7 +392,7 @@ export function MarketTable({
                 colSpan={columns.length}
                 className="p-6 text-center text-eve-muted/90"
               >
-                Ни одна строка не подходит под фильтры
+                {emptyMessage}
               </td>
             </tr>
           ) : (
