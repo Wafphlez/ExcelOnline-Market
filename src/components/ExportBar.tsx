@@ -917,18 +917,18 @@ export function ExportBar({
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
-          <label className="flex min-w-[18rem] flex-1 items-center gap-2 sm:ml-[20vw] sm:pl-3">
-            <span className="shrink-0 text-eve-muted/95">Путь к папке market logs</span>
-            <input
-              type="text"
-              value={marketLogsPath}
-              onChange={(e) => setMarketLogsPath(e.target.value)}
-              placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
-              className="min-w-[14rem] flex-1 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-              disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
-            />
-          </label>
         </div>
+        <label className="mb-2 flex w-full items-center gap-2 text-xs text-eve-muted/95">
+          <span className="shrink-0">Путь к папке market logs</span>
+          <input
+            type="text"
+            value={marketLogsPath}
+            onChange={(e) => setMarketLogsPath(e.target.value)}
+            placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
+            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+            disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
+          />
+        </label>
         <p className="mb-2 text-[11px] text-eve-muted/85">{marketLogInfo}</p>
         <div className="space-y-2">
           {(marketLogRows.length > 0
@@ -953,7 +953,7 @@ export function ExportBar({
                 key={`${r.name || 'empty'}-${idx}`}
                 className="rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
               >
-                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2 text-xs">
                   <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Item name

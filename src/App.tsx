@@ -626,35 +626,27 @@ function App()
           </div>
         </header>
 
-        <div className="eve-panel mb-4 overflow-hidden p-3 sm:p-4">
-          <ExportBar
-            onLoadBuffer={ loadFromBuffer }
-            disabled={ loading }
-            hideReadyExportsSection
-            hideLocalFileOpenSection
-            hideEsiSection
-            brokerFeePct={ brokerFeePct }
-            salesTaxPct={ salesTaxPct }
-            highPriceThresholdIsk={ highPriceThresholdIsk }
-            onBrokerFeeChange={ onBrokerFeeChange }
-            onSalesTaxChange={ onSalesTaxChange }
-            onMessageChange={ setExportMsg }
-          />
-        </div>
-
-        { error && (
-          <div
-            className="eve-panel mt-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
-            role="alert"
-          >
-            { error }
-          </div>
-        ) }
-
-        <div className="eve-panel p-1.5">
-          { (isDevExportServer || exportMsg) && (
-            <>
-              <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          <aside className="w-full lg:w-[30%] lg:min-w-[320px]">
+            <div className="eve-panel mb-4 p-1.5">
+              <ExportBar
+                onLoadBuffer={ loadFromBuffer }
+                disabled={ loading }
+                hideReadyExportsSection
+                hideLocalFileOpenSection
+                hideEsiSection
+                brokerFeePct={ brokerFeePct }
+                salesTaxPct={ salesTaxPct }
+                highPriceThresholdIsk={ highPriceThresholdIsk }
+                onBrokerFeeChange={ onBrokerFeeChange }
+                onSalesTaxChange={ onSalesTaxChange }
+                onMessageChange={ setExportMsg }
+              />
+            </div>
+            <div className="eve-panel p-1.5">
+              { (isDevExportServer || exportMsg) && (
+                <>
+                  <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
               <h3 className="eve-section-title mb-2">Источник таблицы</h3>
               { isDevExportServer && (
                 <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -751,58 +743,73 @@ function App()
                 />
               </div>
 
-              </section>
-              { exportMsg && (
-                <p className="my-2 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
-                  { exportMsg }
-                </p>
+                  </section>
+                  { exportMsg && (
+                    <p className="my-2 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
+                      { exportMsg }
+                    </p>
+                  ) }
+                </>
               ) }
-            </>
-          ) }
-          <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5 pb-2">
-            { PRESETS.map((p) => (
-              <button
-                key={ p.id }
-                type="button"
-                onClick={ (e) =>
-                {
-                  onPreset(p.id)
-                  e.currentTarget.blur()
-                } }
-                className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === p.id
-                    ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
-                    : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
-                  }` }
+            </div>
+          </aside>
+
+          <main className="w-full lg:w-[70%]">
+            { error && (
+              <div
+                className="eve-panel mb-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
+                role="alert"
               >
-                { p.label }
-              </button>
-            )) }
-            <button
-              type="button"
-              onClick={ (e) =>
-              {
-                onApplyAllPresets()
-                e.currentTarget.blur()
-              } }
-              className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === PRESET_ALL_ID
-                  ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
-                  : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
-                }` }
-            >
-              Применить все
-            </button>
-            <button
-              type="button"
-              onClick={ (e) =>
-              {
-                onResetFilters()
-                e.currentTarget.blur()
-              } }
-              className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface hover:border-eve-muted/50 hover:text-eve-bright"
-            >
-              Сбросить фильтры
-            </button>
-          </div>
+                { error }
+              </div>
+            ) }
+            <div className="eve-panel p-1.5">
+              <div className="mb-1 flex flex-wrap items-center justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={ (e) =>
+                  {
+                    onApplyAllPresets()
+                    e.currentTarget.blur()
+                  } }
+                  className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === PRESET_ALL_ID
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                      : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+                    }` }
+                >
+                  Применить все
+                </button>
+                <button
+                  type="button"
+                  onClick={ (e) =>
+                  {
+                    onResetFilters()
+                    e.currentTarget.blur()
+                  } }
+                  className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface hover:border-eve-muted/50 hover:text-eve-bright"
+                >
+                  Сбросить фильтры
+                </button>
+              </div>
+              <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5 pb-2">
+                { PRESETS.map((p) => (
+                  <button
+                    key={ p.id }
+                    type="button"
+                    onClick={ (e) =>
+                    {
+                      onPreset(p.id)
+                      e.currentTarget.blur()
+                    } }
+                    className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === p.id
+                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                        : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+                      }` }
+                  >
+                    { p.label }
+                  </button>
+                )) }
+              </div>
           <div className="mb-2 flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:items-center">
               <span className="max-w-[20rem]">
@@ -843,6 +850,8 @@ function App()
             copiedNameKeys={ copiedNameKeys }
             onNameCopied={ onNameCopied }
           />
+            </div>
+          </main>
         </div>
 
         { loading && (
