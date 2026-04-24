@@ -52,6 +52,54 @@ const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const DEFAULT_BROKER_FEE_PCT = 1.4
 const DEFAULT_SALES_TAX_PCT = 4.2
 
+function asNumberRange(v: unknown): { min: number | null; max: number | null } | null
+{
+  if (!v || typeof v !== 'object') return null
+  const maybe = v as { min?: unknown; max?: unknown }
+  const min = maybe.min === null || typeof maybe.min === 'number' ? (maybe.min ?? null) : null
+  const max = maybe.max === null || typeof maybe.max === 'number' ? (maybe.max ?? null) : null
+  return { min, max }
+}
+
+function presetFilterMatches(
+  columnFilters: ColumnFiltersState,
+  id: keyof MarketRow,
+  expected: unknown
+): boolean
+{
+  const current = columnFilters.find((f) => f.id === id)
+  if (!current) return false
+  const expectedRange = asNumberRange(expected)
+  if (!expectedRange) return Object.is(current.value, expected)
+  const currentRange = asNumberRange(current.value)
+  if (!currentRange) return false
+  if (expectedRange.min !== null && currentRange.min !== expectedRange.min) return false
+  if (expectedRange.max !== null && currentRange.max !== expectedRange.max) return false
+  return true
+}
+
+function getActivePresetIds(columnFilters: ColumnFiltersState): string[]
+{
+  return PRESETS
+    .filter((preset) =>
+      preset.buildFilters().every((f) => presetFilterMatches(columnFilters, f.id, f.value))
+    )
+    .map((preset) => preset.id)
+}
+
+function buildFiltersFromPresetIds(ids: Set<string>): ColumnFiltersState
+{
+  let next: ColumnFiltersState = []
+  for (const preset of PRESETS)
+  {
+    if (ids.has(preset.id))
+    {
+      next = applyPreset(next, preset)
+    }
+  }
+  return next
+}
+
 function readStoredPriceMln(): number
 {
   try
@@ -280,18 +328,33 @@ function App()
     [brokerFeePct, salesTaxPct]
   )
 
+  const activePresetTicker = useMemo(() =>
+  {
+    if (!activePreset || activePreset === PRESET_ALL_ID) return 'ALL'
+    const preset = PRESETS.find((p) => p.id === activePreset)
+    return preset?.label.toUpperCase() ?? activePreset.toUpperCase()
+  }, [activePreset])
+
+  const filtersTicker = useMemo(() => String(columnFilters.length), [columnFilters.length])
+  const activePresetIds = useMemo(() => getActivePresetIds(columnFilters), [columnFilters])
+  const activePresetIdsSet = useMemo(() => new Set(activePresetIds), [activePresetIds])
+  const isAllPresetsActive = activePresetIds.length === PRESETS.length
+  const isNoPresetsActive = activePresetIds.length === 0
+
   const tickerScreenReader = useMemo(
     () =>
       `Excel Online Market. ${ tableTitle }. Регион ESI: ${ getExportRegionLabel(
         tickerRegionId
       ) }. Порог дорогой единицы больше ${ priceMlnForTicker } млн ISK. Broker ${ brokerFeePct }%, налог ${ salesTaxPct }%. ` +
-      'Фильтры и сортировка по марже, спреду в ISK и обороту.',
+      `Пресет: ${ activePresetTicker }. Активных фильтров: ${ filtersTicker }.`,
     [
       tableTitle,
       tickerRegionId,
       priceMlnForTicker,
       brokerFeePct,
       salesTaxPct,
+      activePresetTicker,
+      filtersTicker,
     ]
   )
 
@@ -451,11 +514,23 @@ function App()
 
   const onPreset = useCallback((id: string) =>
   {
-    const p = PRESETS.find((x) => x.id === id)
-    if (!p) return
-    setActivePreset(id)
-    setColumnFilters((prev) => applyPreset(prev, p))
-  }, [])
+    setColumnFilters((prev) =>
+    {
+      const nextIds = new Set(getActivePresetIds(prev))
+      if (nextIds.has(id)) nextIds.delete(id)
+      else nextIds.add(id)
+      return buildFiltersFromPresetIds(nextIds)
+    })
+    setActivePreset(() =>
+    {
+      const nextIds = new Set(activePresetIds)
+      if (nextIds.has(id)) nextIds.delete(id)
+      else nextIds.add(id)
+      if (nextIds.size === PRESETS.length) return PRESET_ALL_ID
+      if (nextIds.size === 1) return Array.from(nextIds)[0] ?? null
+      return null
+    })
+  }, [activePresetIds])
 
   const onApplyAllPresets = useCallback(() =>
   {
@@ -511,9 +586,9 @@ function App()
   }, [selectedLocalExportFile])
 
   return (
-    <div className="min-h-screen eve-ui-root text-eve-text">
-      <div className="w-full px-4 py-6">
-        <header className="mb-6 text-center">
+    <div className="h-screen overflow-hidden eve-ui-root text-eve-text">
+      <div className="flex h-full w-full flex-col px-4 py-6">
+        <header className="mb-0 shrink-0 text-center">
           <div
             className="eve-chrome-top mb-4 mx-auto max-w-md"
             aria-hidden
@@ -540,14 +615,14 @@ function App()
           </h1>
           <p className="sr-only">{ tickerScreenReader }</p>
           <div
-            className="relative mt-3 mx-auto w-full max-w-4xl overflow-hidden rounded-sm border border-eve-border/50 bg-eve-bg/55 shadow-eve-inset [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(42,49,66,0.12)_3px,transparent_4px)]"
+            className="relative mt-3 w-full overflow-hidden rounded-sm border border-eve-border/50 bg-eve-bg/55 shadow-eve-inset [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(42,49,66,0.12)_3px,transparent_4px)]"
             aria-hidden
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-eve-cyan/75 via-eve-accent/40 to-eve-cyan/50" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-0.5 bg-gradient-to-b from-eve-cyan/30 via-eve-accent/25 to-eve-cyan/30 opacity-40" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-eve-cyan/30 via-eve-accent/55 to-eve-cyan/30" />
             <div className="overflow-x-auto overscroll-x-contain">
-              <p className="font-eve flex min-h-[2.5rem] min-w-min items-center justify-center gap-x-1.5 px-3 py-2 text-center text-[9px] font-semibold leading-snug text-eve-bright/95 [word-spacing:0.12em] [letter-spacing:0.08em] [text-shadow:0_0_8px_rgba(236,238,242,0.04)] sm:gap-x-2 sm:px-4 sm:py-1.5 sm:text-[10px] sm:whitespace-nowrap sm:[word-spacing:0.2em] sm:[letter-spacing:0.1em]">
+              <p className="font-eve flex min-h-[1.9rem] min-w-min items-center justify-center gap-x-1.5 px-3 py-1 text-center text-[8px] font-semibold leading-snug text-eve-bright/95 [word-spacing:0.12em] [letter-spacing:0.08em] [text-shadow:0_0_8px_rgba(236,238,242,0.04)] sm:gap-x-2 sm:px-4 sm:py-1 sm:text-[9px] sm:whitespace-nowrap sm:[word-spacing:0.2em] sm:[letter-spacing:0.1em]">
                 <span className="shrink-0 text-eve-muted/55" aria-hidden>
                   ◆
                 </span>
@@ -606,16 +681,14 @@ function App()
                 <span className="shrink-0 text-eve-muted/45" aria-hidden>
                   |
                 </span>
-                <span className="shrink-0 text-eve-gold-bright/90">Excel с рынком</span>
+                <span className="shrink-0 text-eve-gold-bright/90" title="Активный пресет">
+                  PRESET { activePresetTicker }
+                </span>
                 <span className="shrink-0 text-eve-muted/45" aria-hidden>
                   |
                 </span>
-                <span className="shrink-0 sm:max-w-none">
-                  <span className="text-eve-bright/88">
-                    Фильтры и сортировка по <span className="text-eve-cyan/95">марже</span>,{ ' ' }
-                    <span className="text-eve-cyan/95">спреду</span> в ISK и{ ' ' }
-                    <span className="text-eve-cyan/95">обороту</span>
-                  </span>
+                <span className="shrink-0 text-eve-bright/88" title="Количество активных фильтров">
+                  FILTERS { filtersTicker }
                 </span>
                 <span className="shrink-0 text-eve-muted/55" aria-hidden>
                   ◆
@@ -626,9 +699,9 @@ function App()
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          <aside className="w-full lg:w-[30%] lg:min-w-[320px]">
-            <div className="eve-panel mt-4 p-1.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 lg:flex-row lg:items-start lg:overflow-hidden">
+          <aside className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:w-[30%] lg:min-w-[320px] lg:overflow-y-auto lg:pr-1">
+            <div className="eve-panel p-1.5">
               <ExportBar
                 onLoadBuffer={ loadFromBuffer }
                 disabled={ loading }
@@ -758,7 +831,7 @@ function App()
             </div>
           </aside>
 
-          <main className="w-full lg:w-[70%]">
+          <main className="mt-4 w-full lg:mt-0 lg:flex lg:h-full lg:w-[70%] lg:flex-col lg:overflow-hidden lg:pl-1">
             { error && (
               <div
                 className="eve-panel mb-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
@@ -767,8 +840,8 @@ function App()
                 { error }
               </div>
             ) }
-            <div className="eve-panel p-1.5">
-              <div className="mb-1 flex flex-wrap items-center justify-end gap-1.5">
+            <div className="eve-panel p-1.5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+              <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5">
                 <button
                   type="button"
                   onClick={ (e) =>
@@ -776,7 +849,7 @@ function App()
                     onApplyAllPresets()
                     e.currentTarget.blur()
                   } }
-                  className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === PRESET_ALL_ID
+                  className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isAllPresetsActive
                       ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
                       : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
                     }` }
@@ -790,7 +863,10 @@ function App()
                     onResetFilters()
                     e.currentTarget.blur()
                   } }
-                  className="rounded border border-eve-border/80 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-eve-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface hover:border-eve-muted/50 hover:text-eve-bright"
+                  className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isNoPresetsActive
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                      : 'border-eve-border/80 text-eve-muted hover:border-eve-muted/50 hover:text-eve-bright'
+                    }` }
                 >
                   Сбросить фильтры
                 </button>
@@ -805,7 +881,7 @@ function App()
                       onPreset(p.id)
                       e.currentTarget.blur()
                     } }
-                    className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePreset === p.id
+                    className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePresetIdsSet.has(p.id)
                         ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
                         : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
                       }` }
@@ -845,15 +921,17 @@ function App()
               </span>
             </label>
           </div>
-          <MarketTable
-            data={ rows ?? [] }
-            columnFilters={ columnFilters }
-            onColumnFiltersChange={ setColumnFilters }
-            emptyMessage={ tableEmptyMessage }
-            highPriceThresholdIsk={ highPriceThresholdIsk }
-            copiedNameKeys={ copiedNameKeys }
-            onNameCopied={ onNameCopied }
-          />
+          <div className="lg:min-h-0 lg:flex-1">
+            <MarketTable
+              data={ rows ?? [] }
+              columnFilters={ columnFilters }
+              onColumnFiltersChange={ setColumnFilters }
+              emptyMessage={ tableEmptyMessage }
+              highPriceThresholdIsk={ highPriceThresholdIsk }
+              copiedNameKeys={ copiedNameKeys }
+              onNameCopied={ onNameCopied }
+            />
+          </div>
             </div>
           </main>
         </div>

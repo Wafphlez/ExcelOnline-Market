@@ -14,6 +14,43 @@ body {
   font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
   font-weight: 500;
   letter-spacing: 0.01em;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184, 150, 61, 0.65) #12161f;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(184, 150, 61, 0.62) #12161f;
+}
+
+/* EVE-like scrollbar chrome */
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #12161f;
+  border: 1px solid rgba(42, 49, 66, 0.75);
+}
+
+*::-webkit-scrollbar-thumb {
+  background:
+    linear-gradient(180deg, rgba(232, 212, 160, 0.9), rgba(184, 150, 61, 0.86) 46%, rgba(122, 98, 32, 0.88));
+  border: 1px solid rgba(33, 27, 13, 0.9);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 246, 210, 0.12),
+    0 0 8px rgba(184, 150, 61, 0.25);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background:
+    linear-gradient(180deg, rgba(244, 227, 178, 0.95), rgba(205, 170, 77, 0.92) 50%, rgba(145, 118, 40, 0.9));
+}
+
+*::-webkit-scrollbar-corner {
+  background: #12161f;
 }
 
 @layer components {

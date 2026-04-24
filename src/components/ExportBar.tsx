@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Download, FolderOpen, Globe, RefreshCw } from 'lucide-react'
+import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import { EXPORT_REGIONS, type ExportRegion } from '../lib/exportRegions'
 import {
   buildEsiLiquidityToExports,
@@ -248,6 +249,34 @@ export function ExportBar({
   )
   const [marketLogRows, setMarketLogRows] = useState<MarketLogSummaryRow[]>([])
   const [marketLogInfo, setMarketLogInfo] = useState<string>('Папка не выбрана')
+  const [brokerInputEl, setBrokerInputEl] = useState<HTMLInputElement | null>(null)
+  const [taxInputEl, setTaxInputEl] = useState<HTMLInputElement | null>(null)
+
+  const setBrokerInput = useCallback((el: HTMLInputElement | null) => {
+    setBrokerInputEl(el)
+    brokerInputRef?.(el)
+  }, [brokerInputRef])
+
+  const setTaxInput = useCallback((el: HTMLInputElement | null) => {
+    setTaxInputEl(el)
+    taxInputRef?.(el)
+  }, [taxInputRef])
+
+  useInputWheelNudge(brokerInputEl, {
+    step: 0.01,
+    bounds: { min: 0, max: 100 },
+    getValue: () => brokerFeePct,
+    onNudge: (next) => onBrokerFeeChange(Math.round(next * 100) / 100),
+    enabled: !(disabled || !marketExportLogsEnabled),
+  })
+
+  useInputWheelNudge(taxInputEl, {
+    step: 0.01,
+    bounds: { min: 0, max: 100 },
+    getValue: () => salesTaxPct,
+    onNudge: (next) => onSalesTaxChange(Math.round(next * 100) / 100),
+    enabled: !(disabled || !marketExportLogsEnabled),
+  })
 
   useEffect(() => {
     onMessageChange?.(msg)
@@ -880,12 +909,12 @@ export function ExportBar({
           <div className="flex flex-wrap items-center gap-1.5 pr-3">
             <span className="italic text-eve-muted">Broker fee:</span>
             <input
-              ref={brokerInputRef}
+              ref={setBrokerInput}
               type="number"
               min={0}
               max={100}
               step={0.01}
-              className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 appearance-none rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={brokerFeePct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -900,12 +929,12 @@ export function ExportBar({
           <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-0 sm:mt-0 sm:pl-3">
             <span className="italic text-eve-muted">Sales tax:</span>
             <input
-              ref={taxInputRef}
+              ref={setTaxInput}
               type="number"
               min={0}
               max={100}
               step={0.01}
-              className="w-20 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1 tabular-nums text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 appearance-none rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={salesTaxPct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -951,9 +980,9 @@ export function ExportBar({
             return (
               <article
                 key={`${r.name || 'empty'}-${idx}`}
-                className="rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
+                className="@container rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
               >
-                <div className="grid grid-cols-1 gap-2 text-xs">
+                <div className="grid grid-cols-1 gap-2 text-xs @[450px]:grid-cols-4">
                   <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Item name

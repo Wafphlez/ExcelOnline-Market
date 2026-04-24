@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   ExternalLink,
+  Store,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { MarketRow } from '../types/market'
@@ -136,6 +137,7 @@ export function MarketTable({
         return {
           id,
           accessorKey: id,
+          enableSorting: def.kind !== 'market',
           header:
             def.kind === 'market'
               ? () => (
@@ -261,9 +263,9 @@ export function MarketTable({
   })
 
   return (
-    <div className="w-full overflow-x-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
-      <table className="w-full min-w-[1140px] border-collapse text-left text-sm text-eve-text">
-        <thead className="bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
+    <div className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
+      <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-eve-text">
+        <thead className="sticky top-0 z-40 bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => {
@@ -277,8 +279,8 @@ export function MarketTable({
                     key={h.id}
                     className={
                       isMarketCol
-                        ? 'sticky top-0 z-10 w-10 min-w-10 max-w-10 border-b border-eve-accent/25 bg-eve-elevated px-0.5 py-2 text-center align-bottom font-semibold normal-case'
-                        : 'sticky top-0 z-10 max-w-[14rem] border-b border-eve-accent/25 bg-eve-elevated px-2 py-2 align-bottom font-semibold normal-case'
+                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-accent/25 bg-eve-elevated px-0.5 py-2 text-center align-bottom font-semibold normal-case shadow-[inset_0_-1px_0_rgba(184,150,61,0.25)]'
+                        : 'max-w-[14rem] border-b border-eve-accent/25 bg-eve-elevated px-2 py-2 align-bottom font-semibold normal-case shadow-[inset_0_-1px_0_rgba(184,150,61,0.25)]'
                     }
                   >
                     <div
@@ -339,11 +341,26 @@ export function MarketTable({
             {table.getAllLeafColumns().map((col) => {
               const def = COLUMN_DEF_BY_ID[col.id as ColumnId]
               const filterThNarrow = col.id === 'typeId'
+              if (def.kind === 'market') {
+                return (
+                  <th
+                    key={col.id}
+                    className="w-10 min-w-10 max-w-10 border-b border-eve-border/60 bg-eve-elevated p-0.5"
+                  >
+                    <div className="flex items-center justify-center py-1">
+                      <Store
+                        className="h-4 w-4 text-eve-gold/65"
+                        aria-hidden
+                      />
+                    </div>
+                  </th>
+                )
+              }
               if (def.kind === 'text') {
                 return (
                   <th
                     key={col.id}
-                    className="border-b border-eve-border p-1"
+                    className="border-b border-eve-border bg-eve-elevated p-1"
                   >
                     <input
                       className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1.5 py-1 text-xs text-eve-text shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
@@ -365,8 +382,8 @@ export function MarketTable({
                     key={col.id}
                     className={
                       filterThNarrow
-                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/60 bg-eve-elevated/30 p-0.5'
-                        : 'border-b border-eve-border/60 bg-eve-elevated/30 p-1'
+                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/60 bg-eve-elevated p-0.5'
+                        : 'border-b border-eve-border/60 bg-eve-elevated p-1'
                     }
                   >
                     <NumberRangeFilterInputs

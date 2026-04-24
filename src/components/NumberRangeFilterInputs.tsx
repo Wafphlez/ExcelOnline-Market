@@ -45,18 +45,32 @@ export function NumberRangeFilterInputs({
   const wheelStep = getFilterColumnWheelStep(columnId)
   const wheelBounds = getFilterColumnWheelBounds(columnId)
 
+  const formatShownValue = (value: number): string =>
+    isMargin ? String(Math.round(value)) : formatFilterNumberDisplay(value, columnId)
+
+  const minRawForNudge =
+    minDraft !== null ? minDraft : min === null ? '' : formatShownValue(min)
+  const maxRawForNudge =
+    maxDraft !== null ? maxDraft : max === null ? '' : formatShownValue(max)
+  const minCanNudge = minRawForNudge.trim() !== ''
+  const maxCanNudge = maxRawForNudge.trim() !== ''
+
   const applyRange = (nextMin: number | null, nextMax: number | null) => {
+    const normalizedMin =
+      nextMin === null ? null : isMargin ? Math.round(nextMin) : nextMin
+    const normalizedMax =
+      nextMax === null ? null : isMargin ? Math.round(nextMax) : nextMax
     if (nextMin === null && nextMax === null) onRangeChange(undefined)
     else {
       onRangeChange({
         min:
-          nextMin === null
+          normalizedMin === null
             ? null
-            : normalizeFilterNumberValue(nextMin, columnId),
+            : normalizeFilterNumberValue(normalizedMin, columnId),
         max:
-          nextMax === null
+          normalizedMax === null
             ? null
-            : normalizeFilterNumberValue(nextMax, columnId),
+            : normalizeFilterNumberValue(normalizedMax, columnId),
       })
     }
   }
@@ -70,7 +84,7 @@ export function NumberRangeFilterInputs({
           ? minDraft
           : min === null
             ? ''
-            : formatFilterNumberDisplay(min, columnId)
+            : formatShownValue(min)
       if (t.trim() === '') return 0
       return parseNumberInput(t) ?? 0
     },
@@ -78,6 +92,7 @@ export function NumberRangeFilterInputs({
       setMinDraft(null)
       applyRange(next, rangeRef.current.max)
     },
+    enabled: minCanNudge,
   })
 
   useInputWheelNudge(maxInputEl, {
@@ -89,7 +104,7 @@ export function NumberRangeFilterInputs({
           ? maxDraft
           : max === null
             ? ''
-            : formatFilterNumberDisplay(max, columnId)
+            : formatShownValue(max)
       if (t.trim() === '') return 0
       return parseNumberInput(t) ?? 0
     },
@@ -97,6 +112,7 @@ export function NumberRangeFilterInputs({
       setMaxDraft(null)
       applyRange(rangeRef.current.min, next)
     },
+    enabled: maxCanNudge,
   })
 
   useEffect(() => {
@@ -109,13 +125,13 @@ export function NumberRangeFilterInputs({
       ? minDraft
       : min === null
         ? ''
-        : formatFilterNumberDisplay(min, columnId)
+        : formatShownValue(min)
   const maxShown =
     maxDraft !== null
       ? maxDraft
       : max === null
         ? ''
-        : formatFilterNumberDisplay(max, columnId)
+        : formatShownValue(max)
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -137,7 +153,7 @@ export function NumberRangeFilterInputs({
               ? minDraft
               : min === null
                 ? ''
-                : formatFilterNumberDisplay(min, columnId)
+                : formatShownValue(min)
           setMinDraft(null)
           const n = raw.trim() === '' ? null : parseNumberInput(raw)
           applyRange(n, max)
@@ -162,7 +178,7 @@ export function NumberRangeFilterInputs({
               ? maxDraft
               : max === null
                 ? ''
-                : formatFilterNumberDisplay(max, columnId)
+                : formatShownValue(max)
           setMaxDraft(null)
           const n = raw.trim() === '' ? null : parseNumberInput(raw)
           applyRange(min, n)

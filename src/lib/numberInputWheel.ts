@@ -6,7 +6,7 @@ import type { ColumnId } from './columnLabels'
 export function getFilterColumnWheelStep(id: ColumnId): number {
   switch (id) {
     case 'margin':
-      return 0.1 // процент (0,1 %)
+      return 1 // целые проценты
     case 'buyToSellRatio':
       return 1 // процентов по оси 0…100
     case 'dayVolume':
