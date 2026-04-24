@@ -55,6 +55,11 @@ export function devExportFileUrl(fileName: string): string {
   return `${BASE}/file/${encodeURIComponent(fileName)}`
 }
 
+export function marketLogsStreamUrl(dirPath: string): string {
+  const q = encodeURIComponent(dirPath)
+  return `${BASE}/marketlogs/stream?dirPath=${q}`
+}
+
 export async function fetchLatestMarketLogFile(
   dirPath: string
 ): Promise<MarketLogLatestFile | null> {

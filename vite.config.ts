@@ -2,6 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse, Server } from 'node:http'
 import https from 'node:https'
+import { watch as fsWatch } from 'node:fs'
 import fs from 'node:fs/promises'
 import { URL } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
@@ -207,6 +208,70 @@ function devExportPlugin(): Plugin {
                   })
                 )
               }
+              return
+            }
+
+            if (req.method === 'GET' && pathname === '/__dev/export/marketlogs/stream') {
+              const reqUrl = new URL(req.url, 'http://127.0.0.1')
+              const dirPath = parseMarketLogsDirPath(reqUrl.searchParams.get('dirPath'))
+              if (!dirPath) {
+                res.statusCode = 400
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(JSON.stringify({ error: 'dirPath required' }))
+              }
+              try {
+                const st = await fs.stat(dirPath)
+                if (!st.isDirectory()) {
+                  res.statusCode = 400
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                  return res.end(JSON.stringify({ error: 'dirPath must be a directory' }))
+                }
+              } catch (e) {
+                res.statusCode = 500
+                res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                return res.end(
+                  JSON.stringify({
+                    error: e instanceof Error ? e.message : 'marketlogs stream failed',
+                  })
+                )
+              }
+
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+              res.setHeader('Cache-Control', 'no-cache, no-transform')
+              res.setHeader('Connection', 'keep-alive')
+              res.flushHeaders?.()
+              res.write(`event: ready\ndata: {"ok":true}\n\n`)
+
+              const heartbeat = setInterval(() => {
+                try {
+                  res.write(': ping\n\n')
+                } catch {
+                  /* ignore */
+                }
+              }, 20_000)
+
+              const watcher = fsWatch(dirPath, { persistent: true }, (eventType, fileName) => {
+                const file = String(fileName ?? '')
+                if (!file || !/\.txt$/i.test(file)) return
+                try {
+                  res.write(
+                    `event: marketlog\ndata: ${JSON.stringify({
+                      eventType,
+                      fileName: file,
+                    })}\n\n`
+                  )
+                } catch {
+                  /* ignore */
+                }
+              })
+
+              const close = () => {
+                clearInterval(heartbeat)
+                watcher.close()
+              }
+              req.on('close', close)
+              req.on('error', close)
               return
             }
 

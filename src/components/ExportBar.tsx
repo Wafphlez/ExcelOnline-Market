@@ -5,6 +5,7 @@ import {
   buildEsiLiquidityToExports,
   fetchLatestMarketLogFile,
   fetchMarketLogFileBuffer,
+  marketLogsStreamUrl,
   devExportFileUrl,
   downloadToExports,
   fetchEsiDevLogs,
@@ -35,6 +36,7 @@ import {
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
 const LS_ESI_MAX_TYPES = 'excelMarket_esiMaxTypes'
+const LS_ENABLE_MARKET_EXPORT_LOGS = 'excelMarket_enableMarketExportLogs'
 
 function readEsiMaxOrderPagesStr(): string {
   try {
@@ -66,6 +68,19 @@ function readLastExportFileName(): string {
   } catch {
     return ''
   }
+}
+
+function readEnableMarketExportLogs(): boolean {
+  try {
+    const v =
+      localStorage.getItem(LS_ENABLE_MARKET_EXPORT_LOGS) ??
+      localStorage.getItem('excelMarket_showMarketExportLogs')
+    if (v === '0') return false
+    if (v === '1') return true
+  } catch {
+    /* ignore */
+  }
+  return true
 }
 
 type ExportBarProps = {
@@ -220,6 +235,9 @@ export function ExportBar({
   const [esiTypesPhaseAt, setEsiTypesPhaseAt] = useState<number | null>(null)
   const [esiTimerTick, setEsiTimerTick] = useState(0)
   const [marketLogsPath, setMarketLogsPath] = useState(readMarketLogsPath)
+  const [marketExportLogsEnabled, setMarketExportLogsEnabled] = useState(
+    readEnableMarketExportLogs
+  )
   const [marketLogRows, setMarketLogRows] = useState<MarketLogSummaryRow[]>([])
   const [marketLogInfo, setMarketLogInfo] = useState<string>('Папка не выбрана')
 
@@ -366,7 +384,22 @@ export function ExportBar({
   }, [trimmedMarketLogsPath])
 
   useEffect(() => {
+    try {
+      localStorage.setItem(
+        LS_ENABLE_MARKET_EXPORT_LOGS,
+        marketExportLogsEnabled ? '1' : '0'
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [marketExportLogsEnabled])
+
+  useEffect(() => {
     if (!isDevExportServer) return
+    if (!marketExportLogsEnabled) {
+      setMarketLogInfo('Обработка market logs отключена')
+      return
+    }
     if (!trimmedMarketLogsPath) {
       setMarketLogRows([])
       setMarketLogInfo('Укажите путь к папке market logs')
@@ -442,12 +475,29 @@ export function ExportBar({
     }
 
     void poll()
-    const id = window.setInterval(() => void poll(), 700)
+    const streamUrl = marketLogsStreamUrl(trimmedMarketLogsPath)
+    let source: EventSource | null = null
+    try {
+      source = new EventSource(streamUrl)
+      source.onmessage = () => void poll()
+      source.addEventListener('marketlog', () => void poll())
+    } catch {
+      source = null
+    }
+    // Редкий fallback на случай потери SSE или сетевых сбоев.
+    const id = window.setInterval(() => void poll(), 5000)
     return () => {
       cancelled = true
+      if (source) source.close()
       clearInterval(id)
     }
-  }, [trimmedMarketLogsPath, brokerFeePct, salesTaxPct, highPriceThresholdIsk])
+  }, [
+    marketExportLogsEnabled,
+    trimmedMarketLogsPath,
+    brokerFeePct,
+    salesTaxPct,
+    highPriceThresholdIsk,
+  ])
 
   const onDownloadRegion = async (r: ExportRegion) => {
     setMsg(null)
@@ -814,7 +864,43 @@ export function ExportBar({
       )}
 
       <section className="rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-        <h3 className="eve-section-title mb-2">Market export logs</h3>
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h3 className="eve-section-title">Market export logs</h3>
+          <label className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={marketExportLogsEnabled}
+              aria-label="Включить обработку market export logs"
+              onClick={() => setMarketExportLogsEnabled((v) => !v)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 ${
+                marketExportLogsEnabled
+                  ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
+                  : 'border-eve-border/80 bg-eve-bg/80 text-eve-muted/90'
+              }`}
+            >
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/45 to-transparent"
+              />
+              <span
+                className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
+                  marketExportLogsEnabled
+                    ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
+                    : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
+                }`}
+              />
+            </button>
+          </label>
+        </div>
+        <div
+          className={`space-y-2 transition-opacity ${
+            marketExportLogsEnabled
+              ? 'opacity-100'
+              : 'pointer-events-none select-none opacity-45 saturate-50'
+          }`}
+          aria-disabled={!marketExportLogsEnabled}
+        >
         <div className="mb-2 flex flex-wrap items-center gap-0 text-xs text-eve-text">
           <div className="flex flex-wrap items-center gap-1.5 pr-3 sm:border-r sm:border-eve-border">
             <span className="italic text-eve-muted">Broker fee:</span>
@@ -832,6 +918,7 @@ export function ExportBar({
                 onBrokerFeeChange(n)
               }}
               aria-label="Broker fee, процент"
+              disabled={disabled || !marketExportLogsEnabled}
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
@@ -851,6 +938,7 @@ export function ExportBar({
                 onSalesTaxChange(n)
               }}
               aria-label="Sales tax, процент"
+              disabled={disabled || !marketExportLogsEnabled}
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
@@ -863,10 +951,9 @@ export function ExportBar({
             onChange={(e) => setMarketLogsPath(e.target.value)}
             placeholder="Например: C:\\Users\\...\\Documents\\EVE\\logs\\marketlogs"
             className="w-full rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-            disabled={disabled || !isDevExportServer}
+            disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
           />
         </label>
-        <p className="mb-2 text-[11px] text-eve-muted/95">{marketLogInfo}</p>
         <div className="space-y-2">
           {(marketLogRows.length > 0
             ? marketLogRows
@@ -926,6 +1013,7 @@ export function ExportBar({
               </article>
             )
           })}
+        </div>
         </div>
       </section>
 
