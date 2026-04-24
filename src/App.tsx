@@ -512,7 +512,7 @@ function App()
 
   return (
     <div className="min-h-screen eve-ui-root text-eve-text">
-      <div className="mx-auto max-w-[1600px] px-4 py-6">
+      <div className="w-full px-4 py-6">
         <header className="mb-6 text-center">
           <div
             className="eve-chrome-top mb-4 mx-auto max-w-md"
@@ -628,7 +628,7 @@ function App()
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <aside className="w-full lg:w-[30%] lg:min-w-[320px]">
-            <div className="eve-panel mb-4 p-1.5">
+            <div className="eve-panel mt-4 p-1.5">
               <ExportBar
                 onLoadBuffer={ loadFromBuffer }
                 disabled={ loading }
@@ -647,102 +647,106 @@ function App()
               { (isDevExportServer || exportMsg) && (
                 <>
                   <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-              <h3 className="eve-section-title mb-2">Источник таблицы</h3>
-              { isDevExportServer && (
-                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                  <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
-                    <span className="shrink-0">Файл</span>
-                    <select
-                      className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
-                      value={ selectedLocalExportFile }
-                      onChange={ (e) => setSelectedLocalExportFile(e.target.value) }
-                      disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
-                    >
-                      { localExportFilesSorted.length === 0 ? (
-                        <option value="">— папка пуста —</option>
-                      ) : (
-                        localExportFilesSorted.map((f) => (
-                          <option key={ f.name } value={ f.name }>
-                            { f.name } ({ Math.round(f.size / 1024) } KB)
-                          </option>
-                        ))
-                      ) }
-                    </select>
-                  </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={
-                        loading ||
-                        localExportLoading ||
-                        localExportFilesSorted.length === 0 ||
-                        !selectedLocalExportFile
-                      }
-                      onClick={ () => void onOpenSelectedLocalExportFile() }
-                      className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
-                      title="Открыть в таблицу выбранный файл из exports/"
-                    >
-                      <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      Открыть
-                    </button>
-                    <button
-                      type="button"
-                      onClick={ () => void refreshLocalExportFiles() }
-                      disabled={ loading || localExportLoading }
-                      className="inline-flex items-center justify-center rounded border border-eve-border/80 p-1.5 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright disabled:opacity-50"
-                      title="Обновить список из exports/"
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  </div>
-                  <div className="sm:ml-auto">
-                    <FileDropzone
-                      onFile={ onFile }
-                      disabled={ loading || localExportLoading }
-                      embedded
-                    />
-                  </div>
-                </div>
-              ) }
-              <div className="mt-2">
-                <h3 className="eve-section-title mb-2">Готовые выгрузки</h3>
-                <div className="flex flex-wrap gap-2">
-                  { EXPORT_REGIONS.map((region) => (
-                    <button
-                      key={ region.id }
-                      type="button"
-                      disabled={ loading }
-                      onClick={ () => void onDownloadReadyExport(region) }
-                      className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
-                      title={
-                        isDevExportServer
-                          ? `Скачать в exports/${ region.fileName }`
-                          : 'Открыть в новой вкладке'
-                      }
-                    >
-                      <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      { region.label }
-                    </button>
-                  )) }
-                </div>
-              </div>
-              <div className="mt-3">
-                <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
-                <ExportBar
-                  onLoadBuffer={ loadFromBuffer }
-                  disabled={ loading }
-                  hideReadyExportsSection
-                  hideLocalFileOpenSection
-                  hideMarketLogsSection
-                  brokerFeePct={ brokerFeePct }
-                  salesTaxPct={ salesTaxPct }
-                  highPriceThresholdIsk={ highPriceThresholdIsk }
-                  onBrokerFeeChange={ onBrokerFeeChange }
-                  onSalesTaxChange={ onSalesTaxChange }
-                  onMessageChange={ setExportMsg }
-                />
-              </div>
+                    <h3 className="eve-section-title mb-2">Источник таблицы</h3>
+                    { isDevExportServer && (
+                      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
+                          <span className="shrink-0">Файл</span>
+                          <select
+                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            value={ selectedLocalExportFile }
+                            onChange={ (e) => setSelectedLocalExportFile(e.target.value) }
+                            disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
+                          >
+                            { localExportFilesSorted.length === 0 ? (
+                              <option value="">— папка пуста —</option>
+                            ) : (
+                              localExportFilesSorted.map((f) => (
+                                <option key={ f.name } value={ f.name }>
+                                  { f.name } ({ Math.round(f.size / 1024) } KB)
+                                </option>
+                              ))
+                            ) }
+                          </select>
+                        </label>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={ () => void refreshLocalExportFiles() }
+                            disabled={ loading || localExportLoading }
+                            className="inline-flex h-8 w-8 items-center justify-center rounded border border-eve-border/80 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright disabled:opacity-50"
+                            title="Обновить список из exports/"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              loading ||
+                              localExportLoading ||
+                              localExportFilesSorted.length === 0 ||
+                              !selectedLocalExportFile
+                            }
+                            onClick={ () => void onOpenSelectedLocalExportFile() }
+                            className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                            title="Открыть в таблицу выбранный файл из exports/"
+                          >
+                            <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            Открыть
+                          </button>
+                        </div>
+                        <div className="flex w-full items-center gap-2 text-xs text-eve-muted">
+                          <span>Выбрать локальный файл .xlsx/.xls</span>
+                          <div className="ml-auto">
+                            <FileDropzone
+                              onFile={ onFile }
+                              disabled={ loading || localExportLoading }
+                              embedded
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) }
+                  </section>
 
+                  <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                    <h3 className="eve-section-title mb-2">Готовые выгрузки</h3>
+                    <div className="flex flex-wrap gap-2">
+                      { EXPORT_REGIONS.map((region) => (
+                        <button
+                          key={ region.id }
+                          type="button"
+                          disabled={ loading }
+                          onClick={ () => void onDownloadReadyExport(region) }
+                          className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                          title={
+                            isDevExportServer
+                              ? `Скачать в exports/${ region.fileName }`
+                              : 'Открыть в новой вкладке'
+                          }
+                        >
+                          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          { region.label }
+                        </button>
+                      )) }
+                    </div>
+                  </section>
+
+                  <section className="mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                    <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
+                    <ExportBar
+                      onLoadBuffer={ loadFromBuffer }
+                      disabled={ loading }
+                      hideReadyExportsSection
+                      hideLocalFileOpenSection
+                      hideMarketLogsSection
+                      brokerFeePct={ brokerFeePct }
+                      salesTaxPct={ salesTaxPct }
+                      highPriceThresholdIsk={ highPriceThresholdIsk }
+                      onBrokerFeeChange={ onBrokerFeeChange }
+                      onSalesTaxChange={ onSalesTaxChange }
+                      onMessageChange={ setExportMsg }
+                    />
                   </section>
                   { exportMsg && (
                     <p className="my-2 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">

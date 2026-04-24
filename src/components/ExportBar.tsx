@@ -742,11 +742,11 @@ export function ExportBar({
 
       {!hideEsiSection && (
         <div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-sm">
-              <span className="shrink-0">Регион ESI</span>
+          <div className="space-y-2">
+            <label className="flex flex-col gap-1 text-xs text-eve-muted">
+              <span>Регион ESI</span>
               <select
-                className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
                 disabled={disabled || loading}
@@ -758,8 +758,8 @@ export function ExportBar({
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-2 text-xs text-eve-muted">
-              <span className="shrink-0">Типов</span>
+            <label className="flex flex-col gap-1 text-xs text-eve-muted">
+              <span>Типов</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -768,12 +768,12 @@ export function ExportBar({
                 value={esiMaxTypesStr}
                 onChange={(e) => setEsiMaxTypesStr(e.target.value)}
                 disabled={disabled || loading}
-                className="w-20 rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
                 title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
               />
             </label>
-            <label className="flex items-center gap-2 text-xs text-eve-muted">
-              <span className="shrink-0">Страниц</span>
+            <label className="flex flex-col gap-1 text-xs text-eve-muted">
+              <span>Страниц</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -782,10 +782,10 @@ export function ExportBar({
                 value={esiMaxPagesStr}
                 onChange={(e) => setEsiMaxPagesStr(e.target.value)}
                 disabled={disabled || loading}
-                className="w-20 rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-eve-text shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
               />
             </label>
-            <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <button
                 type="button"
                 disabled={disabled || loading || !selected}
