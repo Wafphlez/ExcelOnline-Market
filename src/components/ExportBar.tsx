@@ -107,6 +107,7 @@ type MarketLogSummaryRow = {
   profitIsk: number | null
   exportTime: string
   price: number
+  typeId: number | null
 }
 
 const LS_MARKETLOGS_PATH = 'excelMarket_marketLogsPath'
@@ -138,7 +139,10 @@ type ParsedMarketLog = {
   itemName: string
   bestSell: number | null
   bestBuy: number | null
+  typeId: number | null
 }
+
+const EVE_TYCOON_MARKET_URL = 'https://evetycoon.com/market/'
 
 function decodeMarketLogBuffer(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf)
@@ -169,7 +173,12 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
     .map((x) => x.trim())
     .filter(Boolean)
   if (lines.length < 2) {
-    return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell: null, bestBuy: null }
+    return {
+      itemName: parseItemNameFromMarketLogFile(fileName),
+      bestSell: null,
+      bestBuy: null,
+      typeId: null,
+    }
   }
   const headerLine = lines[0]!
     .replace(/^\uFEFF/, '')
@@ -180,14 +189,32 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
     .map((x) => x.trim().toLowerCase())
   const priceIdx = header.indexOf('price')
   const bidIdx = header.indexOf('bid')
+  const typeIdIdx = header.findIndex((h) =>
+    h === 'typeid' ||
+    h === 'type_id' ||
+    h === 'type id' ||
+    h === 'type'
+  )
   if (priceIdx < 0 || bidIdx < 0) {
-    return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell: null, bestBuy: null }
+    return {
+      itemName: parseItemNameFromMarketLogFile(fileName),
+      bestSell: null,
+      bestBuy: null,
+      typeId: null,
+    }
   }
   let bestSell: number | null = null
   let bestBuy: number | null = null
+  let typeId: number | null = null
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i]!.split(delimiter)
     if (cols.length <= Math.max(priceIdx, bidIdx)) continue
+    if (typeIdIdx >= 0 && typeId === null && cols.length > typeIdIdx) {
+      const maybeTypeId = Number(cols[typeIdIdx]?.trim())
+      if (Number.isFinite(maybeTypeId) && maybeTypeId > 0) {
+        typeId = Math.floor(maybeTypeId)
+      }
+    }
     const priceRaw = cols[priceIdx]?.trim().replace(',', '.')
     const bidRaw = cols[bidIdx]?.trim().toLowerCase()
     if (!priceRaw) continue
@@ -200,7 +227,7 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
       if (bestSell === null || price < bestSell) bestSell = price
     }
   }
-  return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell, bestBuy }
+  return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell, bestBuy, typeId }
 }
 
 export function ExportBar({
@@ -498,6 +525,7 @@ export function ExportBar({
             profitIsk: Number.isFinite(profitIsk) ? profitIsk : null,
             exportTime,
             price: parsed.bestSell,
+            typeId: parsed.typeId,
           },
         ]
         lastSeenKey = key
@@ -994,6 +1022,7 @@ export function ExportBar({
                   profitIsk: null,
                   exportTime: '',
                   price: 0,
+                  typeId: null,
                 } as MarketLogSummaryRow,
               ]
           ).map((r, idx) => {
@@ -1012,7 +1041,23 @@ export function ExportBar({
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Item name
                     </p>
-                    <p className="text-eve-bright/95">{r.name || '—'}</p>
+                    {r.name ? (
+                      r.typeId ? (
+                        <a
+                          href={`${EVE_TYCOON_MARKET_URL}${r.typeId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-eve-bright/95 underline-offset-2 transition-colors hover:text-eve-gold-bright hover:underline"
+                          title={`Открыть в EVE Tycoon: type ${r.typeId}`}
+                        >
+                          {r.name}
+                        </a>
+                      ) : (
+                        <p className="text-eve-bright/95">{r.name}</p>
+                      )
+                    ) : (
+                      <p className="text-eve-bright/95">—</p>
+                    )}
                   </div>
                   <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
