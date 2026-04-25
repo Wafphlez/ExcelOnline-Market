@@ -51,6 +51,13 @@ const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 
 const DEFAULT_BROKER_FEE_PCT = 1.4
 const DEFAULT_SALES_TAX_PCT = 4.2
+const REGION_TRADE_SYSTEM_BY_ID: Record<string, string> = {
+  'the-forge': 'Jita',
+  domain: 'Amarr',
+  heimatar: 'Rens',
+  'sinq-laison': 'Dodixie',
+  metropolis: 'Hek',
+}
 
 function asNumberRange(v: unknown): { min: number | null; max: number | null } | null
 {
@@ -791,7 +798,7 @@ function App()
                           type="button"
                           disabled={ loading }
                           onClick={ () => void onDownloadReadyExport(region) }
-                          className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                          className="group inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
                           title={
                             isDevExportServer
                               ? `Скачать в exports/${ region.fileName }`
@@ -799,7 +806,19 @@ function App()
                           }
                         >
                           <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          { region.label }
+                          <span className="relative inline-grid place-items-center">
+                            <span aria-hidden className="invisible">
+                              { (REGION_TRADE_SYSTEM_BY_ID[region.id]?.length ?? 0) > region.label.length
+                                ? REGION_TRADE_SYSTEM_BY_ID[region.id]
+                                : region.label }
+                            </span>
+                            <span className="absolute inset-0 grid place-items-center transition-opacity duration-200 group-hover:opacity-0">
+                              { region.label }
+                            </span>
+                            <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                              { REGION_TRADE_SYSTEM_BY_ID[region.id] ?? region.label }
+                            </span>
+                          </span>
                         </button>
                       )) }
                     </div>
