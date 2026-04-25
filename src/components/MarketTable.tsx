@@ -265,6 +265,25 @@ export function MarketTable({
                 </button>
               )
             }
+            if (id === 'type') {
+              const typeText = String(v ?? '').trim()
+              if (typeText === '') {
+                return <span className="text-eve-muted">—</span>
+              }
+              return (
+                <button
+                  type="button"
+                  className="line-clamp-2 max-w-full text-left text-xs font-medium text-eve-bright/95 underline decoration-transparent underline-offset-2 transition-colors hover:text-eve-accent hover:decoration-current"
+                  title="Клик — подставить в фильтр типа"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    ctx.table.getColumn('type')?.setFilterValue(typeText)
+                  }}
+                >
+                  {typeText}
+                </button>
+              )
+            }
             return formatByKindString(v, def.kind, id)
           },
           meta: { description: def.description, kind: def.kind },

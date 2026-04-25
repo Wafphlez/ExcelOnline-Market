@@ -50,8 +50,13 @@ describe('formatPercent', () => {
 })
 
 describe('formatIsk', () => {
-  it('uses two fraction digits', () => {
-    expect(formatIsk(1000)).toBe('1 000,00')
+  it('uses two fraction digits for values up to 3 integer digits', () => {
+    expect(formatIsk(999)).toBe('999,00')
+    expect(formatIsk(637.1)).toBe('637,10')
+  })
+  it('hides fraction digits for values with 4+ integer digits', () => {
+    expect(formatIsk(7_925)).toBe('7 925')
+    expect(formatIsk(11_520_000)).toBe('11 520 000')
   })
 })
 

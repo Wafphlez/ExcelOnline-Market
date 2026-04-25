@@ -27,7 +27,8 @@ export function formatWithSpaces(
 
 export function formatIsk(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—'
-  return formatWithSpaces(n, 2)
+  const integerDigits = Math.floor(Math.abs(n)).toString().length
+  return formatWithSpaces(n, integerDigits >= 4 ? 0 : 2)
 }
 
 export function formatInteger(n: number | null | undefined): string {
