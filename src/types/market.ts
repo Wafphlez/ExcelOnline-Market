@@ -1,6 +1,8 @@
 export type MarketRow = {
   /** EVE type id для ссылок (например EVE Tycoon); в файле опционален */
   typeId: number | null
+  /** Текстовый тип/категория предмета (например ship, module, ammo) */
+  type: string
   name: string
   dayVolume: number
   dayTurnover: number

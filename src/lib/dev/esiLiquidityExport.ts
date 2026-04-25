@@ -123,18 +123,31 @@ export function logEsiExportException(context: string, err: unknown): void {
 /* ---------- Локальный кэш GET /universe/types/{id}/ (имя не меняется, тянуть ESI смысла нет) ---------- */
 
 const TYPE_CACHE_FILE = 'esi-type-cache.json'
-const TYPE_CACHE_VERSION = 2
+const TYPE_CACHE_VERSION = 3
 type EsiTypePayload = {
   name?: string
+  group_id?: number
   [key: string]: unknown
 }
 type EsiTypeCacheEntry = { name: string; payload?: EsiTypePayload }
-type EsiTypeCacheFile = { v: number; types: Record<string, EsiTypeCacheEntry> }
+type EsiGroupCacheEntry = { name?: string; category_id?: number }
+type EsiCategoryCacheEntry = { name: string }
+type EsiTypeCacheFile = {
+  v: number
+  types: Record<string, EsiTypeCacheEntry>
+  groups?: Record<string, EsiGroupCacheEntry>
+  categories?: Record<string, EsiCategoryCacheEntry>
+}
 
 const typeNameById = new Map<number, string>()
 const typePayloadById = new Map<number, EsiTypePayload>()
 let typeNameCacheDirty = false
 const typeNameFetchInflight = new Map<number, Promise<string | undefined>>()
+const groupNameById = new Map<number, string>()
+const groupCategoryById = new Map<number, number>()
+const groupFetchInflight = new Map<number, Promise<string | undefined>>()
+const categoryNameById = new Map<number, string>()
+const categoryFetchInflight = new Map<number, Promise<string | undefined>>()
 
 /**
  * Один Promise на весь прогон: нельзя ставить «загружено» до await read,
@@ -170,8 +183,38 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
           }
         }
       }
+      if (j && j.groups && typeof j.groups === 'object') {
+        for (const [k, v] of Object.entries(j.groups)) {
+          const id = Number(k)
+          const entry = v as { name?: unknown; category_id?: unknown }
+          if (!Number.isInteger(id) || !entry || typeof entry !== 'object') {
+            continue
+          }
+          if (typeof entry.name === 'string' && entry.name) {
+            groupNameById.set(id, entry.name)
+          }
+          if (
+            typeof entry.category_id === 'number' &&
+            Number.isFinite(entry.category_id)
+          ) {
+            groupCategoryById.set(id, Math.floor(entry.category_id))
+          }
+        }
+      }
+      if (j && j.categories && typeof j.categories === 'object') {
+        for (const [k, v] of Object.entries(j.categories)) {
+          const id = Number(k)
+          const entry = v as { name?: unknown }
+          if (!Number.isInteger(id) || !entry || typeof entry !== 'object') {
+            continue
+          }
+          if (typeof entry.name === 'string' && entry.name) {
+            categoryNameById.set(id, entry.name)
+          }
+        }
+      }
       esiDevLog(
-        `кэш type names: из ${path.join('data', TYPE_CACHE_FILE)} — ${typeNameById.size} id`
+        `кэш type names: из ${path.join('data', TYPE_CACHE_FILE)} — types=${typeNameById.size}, groups=${groupNameById.size}/${groupCategoryById.size}, categories=${categoryNameById.size}`
       )
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code
@@ -190,12 +233,32 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
 async function persistTypeNameCacheToDisk(): Promise<void> {
   if (!typeNameCacheDirty) return
   const types: Record<string, EsiTypeCacheEntry> = {}
+  const groups: Record<string, EsiGroupCacheEntry> = {}
+  const categories: Record<string, EsiCategoryCacheEntry> = {}
   for (const [id, name] of typeNameById) {
     if (!name) continue
     const payload = typePayloadById.get(id)
     types[String(id)] = payload ? { name, payload } : { name }
   }
-  const out: EsiTypeCacheFile = { v: TYPE_CACHE_VERSION, types }
+  for (const [id, name] of groupNameById) {
+    const categoryId = groupCategoryById.get(id)
+    groups[String(id)] =
+      typeof categoryId === 'number' ? { name, category_id: categoryId } : { name }
+  }
+  for (const [id, categoryId] of groupCategoryById) {
+    const existing = groups[String(id)] ?? {}
+    groups[String(id)] = { ...existing, category_id: categoryId }
+  }
+  for (const [id, name] of categoryNameById) {
+    if (!name) continue
+    categories[String(id)] = { name }
+  }
+  const out: EsiTypeCacheFile = {
+    v: TYPE_CACHE_VERSION,
+    types,
+    groups,
+    categories,
+  }
   const dir = path.join(process.cwd(), 'data')
   try {
     await fs.mkdir(dir, { recursive: true })
@@ -206,7 +269,7 @@ async function persistTypeNameCacheToDisk(): Promise<void> {
     )
     typeNameCacheDirty = false
     esiDevLog(
-      `кэш type names: записан ${typeCachePath()} (${Object.keys(types).length} id)`
+      `кэш type names: записан ${typeCachePath()} (types=${Object.keys(types).length}, groups=${Object.keys(groups).length}, categories=${Object.keys(categories).length})`
     )
   } catch (e) {
     esiDevLog(
@@ -247,6 +310,108 @@ async function getEsiTypeName(typeId: number): Promise<string | undefined> {
     /* отклонения уже у вызывающих */
   })
   return p
+}
+
+type EsiGroupPayload = { name?: string; category_id?: number }
+type EsiCategoryPayload = { name?: string }
+
+async function getEsiGroupName(groupId: number): Promise<string | undefined> {
+  const mem = groupNameById.get(groupId)
+  if (mem) return mem
+  const wait = groupFetchInflight.get(groupId)
+  if (wait) return wait
+  const p = (async () => {
+    const res = await esiFetch<EsiGroupPayload>(`/universe/groups/${groupId}/`, {
+      language: 'en',
+    }).catch(() => ({} as EsiGroupPayload))
+    const name = typeof res.name === 'string' ? res.name : undefined
+    if (name) {
+      groupNameById.set(groupId, name)
+      typeNameCacheDirty = true
+    }
+    if (typeof res.category_id === 'number' && Number.isFinite(res.category_id)) {
+      groupCategoryById.set(groupId, Math.floor(res.category_id))
+      typeNameCacheDirty = true
+    }
+    return name
+  })()
+  groupFetchInflight.set(groupId, p)
+  p.finally(() => {
+    groupFetchInflight.delete(groupId)
+  }).catch(() => {
+    /* handled by callers */
+  })
+  return p
+}
+
+async function getEsiCategoryName(
+  categoryId: number
+): Promise<string | undefined> {
+  const mem = categoryNameById.get(categoryId)
+  if (mem) return mem
+  const wait = categoryFetchInflight.get(categoryId)
+  if (wait) return wait
+  const p = (async () => {
+    const res = await esiFetch<EsiCategoryPayload>(
+      `/universe/categories/${categoryId}/`,
+      { language: 'en' }
+    ).catch(() => ({} as EsiCategoryPayload))
+    const name = typeof res.name === 'string' ? res.name : undefined
+    if (name) {
+      categoryNameById.set(categoryId, name)
+      typeNameCacheDirty = true
+    }
+    return name
+  })()
+  categoryFetchInflight.set(categoryId, p)
+  p.finally(() => {
+    categoryFetchInflight.delete(categoryId)
+  }).catch(() => {
+    /* handled by callers */
+  })
+  return p
+}
+
+async function getEsiTypeCategory(typeId: number): Promise<string | undefined> {
+  await loadTypeNameCacheFromDiskIfNeeded()
+  let payload = typePayloadById.get(typeId)
+  if (!payload) {
+    await getEsiTypeName(typeId)
+    payload = typePayloadById.get(typeId)
+  }
+  let groupIdRaw = payload?.group_id
+  if (typeof groupIdRaw !== 'number' || !Number.isFinite(groupIdRaw)) {
+    const refreshed = await esiFetch<EsiTypePayload>(
+      `/universe/types/${typeId}/`,
+      { language: 'en' }
+    ).catch(() => ({} as EsiTypePayload))
+    if (refreshed.name) {
+      typeNameById.set(typeId, refreshed.name)
+    }
+    if (Object.keys(refreshed).length > 0) {
+      typePayloadById.set(typeId, refreshed)
+      typeNameCacheDirty = true
+    }
+    groupIdRaw = refreshed.group_id
+  }
+  if (typeof groupIdRaw !== 'number' || !Number.isFinite(groupIdRaw)) {
+    return undefined
+  }
+  const groupId = Math.floor(groupIdRaw)
+  const categoryId = groupCategoryById.get(groupId)
+  if (typeof categoryId === 'number') {
+    const cachedCategoryName = categoryNameById.get(categoryId)
+    if (cachedCategoryName) return cachedCategoryName
+    const categoryName = await getEsiCategoryName(categoryId)
+    if (categoryName) return categoryName
+  }
+  const groupName = await getEsiGroupName(groupId)
+  const loadedCategoryId = groupCategoryById.get(groupId)
+  if (typeof loadedCategoryId === 'number') {
+    const categoryName = await getEsiCategoryName(loadedCategoryId)
+    if (categoryName) return categoryName
+  }
+  return groupName
 }
 
 /** Имена типов не в очереди ордеров — качаем заранее, пока ещё идут sell/buy. */
@@ -426,6 +591,7 @@ async function esiFetch<T>(path: string, query: Record<string, string>): Promise
 
 export type LiquidityRow = {
   name: string
+  type: string
   type_id: number
   day_volume: number
   /** млн ISK, как в выгрузке для mapColumns (excelMillionsToIsk) */
@@ -864,7 +1030,7 @@ function bestBid(a: Agg): number | null {
 }
 
 /** Имя + `/markets/.../history/` — независимые async GET (без bid/ask из ордеров). */
-type TypeNameAndHistory = { name: string; hist: EsiHistoryDay[] }
+type TypeNameAndHistory = { name: string; type: string; hist: EsiHistoryDay[] }
 
 async function fetchTypeNameAndHistory(
   typeId: number,
@@ -875,8 +1041,10 @@ async function fetchTypeNameAndHistory(
     return null
   }
   let name = `Type ${typeId}`
-  const [typeName, hist] = await Promise.all([
+  let type = ''
+  const [typeName, typeCategory, hist] = await Promise.all([
     getEsiTypeName(typeId),
+    getEsiTypeCategory(typeId),
     esiFetch<EsiHistoryDay[]>(`/markets/${regionId}/history/`, {
       type_id: String(typeId),
     }).catch(() => [] as EsiHistoryDay[]),
@@ -884,10 +1052,13 @@ async function fetchTypeNameAndHistory(
   if (typeName) {
     name = typeName
   }
+  if (typeCategory) {
+    type = typeCategory
+  }
   if (!Array.isArray(hist) || hist.length === 0) {
     return null
   }
-  return { name, hist }
+  return { name, type, hist }
 }
 
 /** Bid/ask — из **финального** агрегата по ордерам; история/имя — с префетча или свежий запрос. */
@@ -910,6 +1081,7 @@ function composeLiquidityRow(
   }
   return {
     name: parts.name,
+    type: parts.type,
     type_id: typeId,
     day_volume: liq.dayAvgVolume,
     day_turnover: liq.dayTurnoverMln,
@@ -1061,6 +1233,7 @@ export async function buildLiquidityRows(
 export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Buffer {
   const sheetRows = rows.map((r) => ({
     name: r.name,
+    type: r.type,
     type_id: r.type_id,
     day_volume: r.day_volume,
     day_turnover: r.day_turnover,
@@ -1084,6 +1257,7 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
   return liquidityRowsToXlsxBuffer([
     {
       name: note,
+      type: '',
       type_id: 0,
       day_volume: 0,
       day_turnover: 0,

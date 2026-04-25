@@ -52,7 +52,7 @@ export async function listExportFiles(): Promise<ExportListItem[]> {
 }
 
 export function devExportFileUrl(fileName: string): string {
-  return `${BASE}/file/${encodeURIComponent(fileName)}`
+  return `${BASE}/file/${encodeURIComponent(fileName)}?v=${Date.now()}`
 }
 
 export function marketLogsStreamUrl(dirPath: string): string {

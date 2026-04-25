@@ -7,6 +7,7 @@ describe('liquidityRowsToXlsxBuffer', () => {
     const buf = liquidityRowsToXlsxBuffer([
       {
         name: 'Test Item',
+        type: 'Ship',
         type_id: 34,
         day_volume: 10,
         day_turnover: 1.5,

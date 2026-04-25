@@ -13,6 +13,7 @@ const ALIAS_TO_FIELD: Record<
   keyof Pick<
     MarketRow,
     | 'name'
+    | 'type'
     | 'typeId'
     | 'dayVolume'
     | 'dayTurnover'
@@ -25,9 +26,14 @@ const ALIAS_TO_FIELD: Record<
   name: 'name',
   item: 'name',
   item_name: 'name',
+  item_type: 'type',
+  type: 'type',
+  type_name: 'type',
+  type_text: 'type',
+  category: 'type',
+  group: 'type',
   type_id: 'typeId',
   typeid: 'typeId',
-  type: 'typeId',
   item_id: 'typeId',
   itemid: 'typeId',
   eve_type_id: 'typeId',
@@ -82,8 +88,21 @@ export function mapRawRow(
     const nk = normalizeKey(k)
     const field = ALIAS_TO_FIELD[nk]
     if (!field) continue
-    if (field === 'name') {
+    if (nk === 'type') {
+      const numericTypeId = toNumber(val)
+      if (
+        numericTypeId !== null &&
+        Number.isFinite(numericTypeId) &&
+        numericTypeId > 0
+      ) {
+        out.typeId = Math.floor(numericTypeId)
+      } else {
+        out.type = val === null || val === undefined ? '' : String(val)
+      }
+    } else if (field === 'name') {
       out.name = val === null || val === undefined ? '' : String(val)
+    } else if (field === 'type') {
+      out.type = val === null || val === undefined ? '' : String(val)
     } else if (field === 'typeId') {
       const n = toNumber(val)
       out.typeId =
@@ -120,6 +139,7 @@ export function mapRawRow(
     ok: true,
     value: {
       typeId: typeId,
+      type: typeof out.type === 'string' ? out.type : '',
       name: String(out.name),
       dayVolume: out.dayVolume as number,
       dayTurnover: excelMillionsToIsk(out.dayTurnover as number),

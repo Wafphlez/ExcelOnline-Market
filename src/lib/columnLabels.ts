@@ -25,6 +25,13 @@ export const COLUMN_DEFS: ColumnLabelDef[] = [
     kind: 'text',
   },
   {
+    id: 'type',
+    short: 'Тип предмета',
+    description:
+      'Текстовый тип/категория (например ship, module). Поддерживает текстовый фильтр с подсказками.',
+    kind: 'text',
+  },
+  {
     id: 'dayVolume',
     short: 'Сделок за сутки',
     description: 'Объём сделок за период (шт.).',

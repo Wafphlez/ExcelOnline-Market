@@ -6,6 +6,7 @@ const noFees = { brokerFee: 0, salesTax: 0 }
 
 const base: MarketRow = {
   typeId: null,
+  type: '',
   name: 'x',
   dayVolume: 10,
   dayTurnover: 1_000_000,
@@ -63,6 +64,7 @@ describe('computeAllMetrics', () => {
   it('adds entryScore 0–100 for each row', () => {
     const r: MarketRow = {
       typeId: null,
+      type: '',
       name: 'a',
       dayVolume: 1,
       dayTurnover: 2_000_000,

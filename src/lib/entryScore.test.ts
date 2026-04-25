@@ -5,6 +5,7 @@ import type { MarketRow } from '../types/market'
 function row(partial: Partial<MarketRow>): MarketRow {
   return {
     typeId: null,
+    type: '',
     name: 't',
     dayVolume: 1,
     dayTurnover: 1_000_000,

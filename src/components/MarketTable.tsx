@@ -126,6 +126,28 @@ export function MarketTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'entryScore', desc: true },
   ])
+  const nameFilterSuggestions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          data
+            .map((row) => row.name.trim())
+            .filter((value) => value.length > 0)
+        )
+      ).sort((a, b) => a.localeCompare(b, 'ru')),
+    [data]
+  )
+  const typeFilterSuggestions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          data
+            .map((row) => row.type.trim())
+            .filter((value) => value.length > 0)
+        )
+      ).sort((a, b) => a.localeCompare(b, 'en')),
+    [data]
+  )
 
   const columns = useMemo<ColumnDef<MarketRow>[]>(
     () =>
@@ -357,6 +379,8 @@ export function MarketTable({
                 )
               }
               if (def.kind === 'text') {
+                const isNameTextFilter = col.id === 'name'
+                const isTypeTextFilter = col.id === 'type'
                 return (
                   <th
                     key={col.id}
@@ -364,13 +388,40 @@ export function MarketTable({
                   >
                     <input
                       className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1.5 py-1 text-xs text-white shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
-                      placeholder="Содержит…"
+                      placeholder={
+                        isTypeTextFilter
+                          ? 'Введите тип (напр. shi)…'
+                          : isNameTextFilter
+                            ? 'Введите название…'
+                          : 'Содержит…'
+                      }
                       value={getTextValue(col.getFilterValue())}
                       onChange={(e) =>
                         col.setFilterValue(e.target.value || undefined)
                       }
                       aria-label={`Фильтр: ${def.short}`}
+                      list={
+                        isTypeTextFilter
+                          ? 'type-filter-suggestions'
+                          : isNameTextFilter
+                            ? 'name-filter-suggestions'
+                            : undefined
+                      }
                     />
+                    {isNameTextFilter ? (
+                      <datalist id="name-filter-suggestions">
+                        {nameFilterSuggestions.map((value) => (
+                          <option key={value} value={value} />
+                        ))}
+                      </datalist>
+                    ) : null}
+                    {isTypeTextFilter ? (
+                      <datalist id="type-filter-suggestions">
+                        {typeFilterSuggestions.map((value) => (
+                          <option key={value} value={value} />
+                        ))}
+                      </datalist>
+                    ) : null}
                   </th>
                 )
               }
