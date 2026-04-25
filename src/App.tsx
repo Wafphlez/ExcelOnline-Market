@@ -700,7 +700,7 @@ function App()
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col gap-1 lg:flex-row lg:items-start lg:overflow-hidden">
-          <aside className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:w-[30%] lg:min-w-[320px] lg:overflow-y-auto lg:pr-1">
+          <aside className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:w-[25%] lg:min-w-[320px] lg:overflow-y-auto lg:pr-1">
             <div className="eve-panel p-1.5">
               <ExportBar
                 onLoadBuffer={ loadFromBuffer }
@@ -831,7 +831,7 @@ function App()
             </div>
           </aside>
 
-          <main className="mt-4 w-full lg:mt-0 lg:flex lg:h-full lg:w-[70%] lg:flex-col lg:overflow-hidden lg:pl-1">
+          <main className="mt-4 w-full lg:mt-0 lg:flex lg:h-full lg:w-[75%] lg:flex-col lg:overflow-hidden lg:pl-1">
             { error && (
               <div
                 className="eve-panel mb-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
