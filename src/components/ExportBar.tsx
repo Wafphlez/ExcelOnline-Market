@@ -1047,7 +1047,7 @@ export function ExportBar({
                           href={`${EVE_TYCOON_MARKET_URL}${r.typeId}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-eve-bright/95 underline-offset-2 transition-colors hover:text-eve-gold-bright hover:underline"
+                          className="text-eve-bright/95 underline decoration-transparent underline-offset-2 transition-colors hover:text-eve-gold-bright hover:decoration-current"
                           title={`Открыть в EVE Tycoon: type ${r.typeId}`}
                         >
                           {r.name}

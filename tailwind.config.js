@@ -12,9 +12,9 @@ export default {
         'eve-elevated': '#12161f',
         'eve-border': '#2a3142',
         /** Основной акцент — «фирменное» золото Neocom */
-        'eve-accent': '#b8963d',
+        'eve-accent': '#d6ac3e',
         'eve-accent-hover': '#d4b55a',
-        'eve-gold': '#a88930',
+        'eve-gold': '#d6ac3e',
         'eve-gold-bright': '#e8d4a0',
         'eve-accent-muted': 'rgba(184, 150, 61, 0.12)',
         'eve-text': '#c8ccd6',

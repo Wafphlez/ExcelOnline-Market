@@ -247,8 +247,8 @@ export function MarketTable({
                   type="button"
                   className={
                     copied
-                      ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright transition-colors hover:underline'
-                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-white transition-colors hover:text-eve-accent hover:underline'
+                      ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current'
+                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-white underline decoration-transparent underline-offset-2 transition-colors hover:text-eve-accent hover:decoration-current'
                   }
                   title="Клик — копировать название"
                   onClick={async (e) => {
