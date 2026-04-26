@@ -24,6 +24,18 @@ export type EsiExportProgressState = {
   orderSellPageBarMax: number
   /** То же для Buy. */
   orderBuyPageBarMax: number
+  /** Запросы /markets/{region}/history/?type_id=... */
+  historyDone: number
+  historyTotal: number
+  /** Запросы /universe/types/{id}/ (только реальные HTTP, не cache-hit). */
+  universeTypesDone: number
+  universeTypesTotal: number
+  /** Запросы /universe/groups/{id}/ (реальные HTTP). */
+  universeGroupsDone: number
+  universeGroupsTotal: number
+  /** Запросы /universe/categories/{id}/ (реальные HTTP). */
+  universeCategoriesDone: number
+  universeCategoriesTotal: number
 }
 
 export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
@@ -37,4 +49,12 @@ export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
   unboundedOrderPages: false,
   orderSellPageBarMax: 0,
   orderBuyPageBarMax: 0,
+  historyDone: 0,
+  historyTotal: 0,
+  universeTypesDone: 0,
+  universeTypesTotal: 0,
+  universeGroupsDone: 0,
+  universeGroupsTotal: 0,
+  universeCategoriesDone: 0,
+  universeCategoriesTotal: 0,
 }

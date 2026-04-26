@@ -22,6 +22,7 @@ const USER_AGENT =
   'ExcelOnlineMarket/1.0 (dev; https://github.com/Wafphlez/ExcelOnline-Market)'
 
 const ESI_LOG_PREFIX = '[ESI export]'
+const ESI_REQUEST_GAP_MS = 20
 
 const MAX_DEV_LOG_LINES = 600
 const esiDevLogBuffer: string[] = []
@@ -291,17 +292,22 @@ async function getEsiTypeName(typeId: number): Promise<string | undefined> {
   const wait = typeNameFetchInflight.get(typeId)
   if (wait) return wait
   const p = (async () => {
-    const res = await esiFetch<EsiTypePayload>(
-      `/universe/types/${typeId}/`,
-      { language: 'en' }
-    ).catch(() => ({} as { name?: string }))
-    const n = res.name
-    if (n) {
-      typeNameById.set(typeId, n)
-      typePayloadById.set(typeId, res)
-      typeNameCacheDirty = true
+    esiProgress.universeTypesTotal += 1
+    try {
+      const res = await esiFetch<EsiTypePayload>(
+        `/universe/types/${typeId}/`,
+        { language: 'en' }
+      ).catch(() => ({} as { name?: string }))
+      const n = res.name
+      if (n) {
+        typeNameById.set(typeId, n)
+        typePayloadById.set(typeId, res)
+        typeNameCacheDirty = true
+      }
+      return n
+    } finally {
+      esiProgress.universeTypesDone += 1
     }
-    return n
   })()
   typeNameFetchInflight.set(typeId, p)
   p.finally(() => {
@@ -321,19 +327,24 @@ async function getEsiGroupName(groupId: number): Promise<string | undefined> {
   const wait = groupFetchInflight.get(groupId)
   if (wait) return wait
   const p = (async () => {
-    const res = await esiFetch<EsiGroupPayload>(`/universe/groups/${groupId}/`, {
-      language: 'en',
-    }).catch(() => ({} as EsiGroupPayload))
-    const name = typeof res.name === 'string' ? res.name : undefined
-    if (name) {
-      groupNameById.set(groupId, name)
-      typeNameCacheDirty = true
+    esiProgress.universeGroupsTotal += 1
+    try {
+      const res = await esiFetch<EsiGroupPayload>(`/universe/groups/${groupId}/`, {
+        language: 'en',
+      }).catch(() => ({} as EsiGroupPayload))
+      const name = typeof res.name === 'string' ? res.name : undefined
+      if (name) {
+        groupNameById.set(groupId, name)
+        typeNameCacheDirty = true
+      }
+      if (typeof res.category_id === 'number' && Number.isFinite(res.category_id)) {
+        groupCategoryById.set(groupId, Math.floor(res.category_id))
+        typeNameCacheDirty = true
+      }
+      return name
+    } finally {
+      esiProgress.universeGroupsDone += 1
     }
-    if (typeof res.category_id === 'number' && Number.isFinite(res.category_id)) {
-      groupCategoryById.set(groupId, Math.floor(res.category_id))
-      typeNameCacheDirty = true
-    }
-    return name
   })()
   groupFetchInflight.set(groupId, p)
   p.finally(() => {
@@ -352,16 +363,21 @@ async function getEsiCategoryName(
   const wait = categoryFetchInflight.get(categoryId)
   if (wait) return wait
   const p = (async () => {
-    const res = await esiFetch<EsiCategoryPayload>(
-      `/universe/categories/${categoryId}/`,
-      { language: 'en' }
-    ).catch(() => ({} as EsiCategoryPayload))
-    const name = typeof res.name === 'string' ? res.name : undefined
-    if (name) {
-      categoryNameById.set(categoryId, name)
-      typeNameCacheDirty = true
+    esiProgress.universeCategoriesTotal += 1
+    try {
+      const res = await esiFetch<EsiCategoryPayload>(
+        `/universe/categories/${categoryId}/`,
+        { language: 'en' }
+      ).catch(() => ({} as EsiCategoryPayload))
+      const name = typeof res.name === 'string' ? res.name : undefined
+      if (name) {
+        categoryNameById.set(categoryId, name)
+        typeNameCacheDirty = true
+      }
+      return name
+    } finally {
+      esiProgress.universeCategoriesDone += 1
     }
-    return name
   })()
   categoryFetchInflight.set(categoryId, p)
   p.finally(() => {
@@ -381,10 +397,16 @@ async function getEsiTypeCategory(typeId: number): Promise<string | undefined> {
   }
   let groupIdRaw = payload?.group_id
   if (typeof groupIdRaw !== 'number' || !Number.isFinite(groupIdRaw)) {
-    const refreshed = await esiFetch<EsiTypePayload>(
-      `/universe/types/${typeId}/`,
-      { language: 'en' }
-    ).catch(() => ({} as EsiTypePayload))
+    esiProgress.universeTypesTotal += 1
+    let refreshed: EsiTypePayload
+    try {
+      refreshed = await esiFetch<EsiTypePayload>(
+        `/universe/types/${typeId}/`,
+        { language: 'en' }
+      ).catch(() => ({} as EsiTypePayload))
+    } finally {
+      esiProgress.universeTypesDone += 1
+    }
     if (refreshed.name) {
       typeNameById.set(typeId, refreshed.name)
     }
@@ -485,6 +507,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
+/**
+ * Глобальный троттлинг исходящих запросов к ESI:
+ * между стартами соседних запросов держим паузу не меньше ESI_REQUEST_GAP_MS.
+ */
+let esiRequestThrottleTail: Promise<void> = Promise.resolve()
+let esiLastRequestStartedAt = 0
+
+async function awaitEsiRequestSlot(): Promise<void> {
+  const prev = esiRequestThrottleTail
+  let release!: () => void
+  esiRequestThrottleTail = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await prev
+  const waitMs = Math.max(
+    0,
+    ESI_REQUEST_GAP_MS - (Date.now() - esiLastRequestStartedAt)
+  )
+  if (waitMs > 0) {
+    await sleep(waitMs)
+  }
+  esiLastRequestStartedAt = Date.now()
+  release()
+}
+
 function buildEsiUrl(path: string, query: Record<string, string>): string {
   const p = path.startsWith('/') ? path : `/${path}`
   // Нельзя new URL(p, ESI_BASE): ведущий / заменяет путь и теряется сегмент /latest
@@ -497,12 +544,23 @@ function buildEsiUrl(path: string, query: Record<string, string>): string {
 }
 
 /** GET с повтором при 420/429/503/5xx. */
-async function esiFetch<T>(path: string, query: Record<string, string>): Promise<T> {
+async function esiFetch<T>(
+  path: string,
+  query: Record<string, string>,
+  shouldAbort?: () => boolean
+): Promise<T> {
   const qStr = formatEsiQuery(query)
   const label = qStr ? `${path}?${qStr}` : path
   for (let attempt = 0; attempt < 12; attempt++) {
+    if (shouldAbort?.()) {
+      throw new Error('ESI: page exhausted (skip queued request)')
+    }
     const url = buildEsiUrl(path, query)
     esiDevLog(`GET ${label} (попытка ${attempt + 1}) → esi.evetech.net`)
+    await awaitEsiRequestSlot()
+    if (shouldAbort?.()) {
+      throw new Error('ESI: page exhausted (skip queued request)')
+    }
     const t0 = Date.now()
     const { body, status, retryAfterSec } = await new Promise<{
       body: string
@@ -564,12 +622,9 @@ async function esiFetch<T>(path: string, query: Record<string, string>): Promise
       }
     }
     if (status === 420 || status === 429 || status === 503) {
-      const w = Math.max(
-        10_000,
-        retryAfterSec * 1000 || (attempt + 1) * 8000
-      )
+      const w = 10_000
       esiDevLog(
-        `← ${path} HTTP ${status}, ${ms} ms — пауза ${w} ms (retry-after/slip)`
+        `← ${path} HTTP ${status}, ${ms} ms — пауза ${w} ms (фиксированный retry interval)`
       )
       await sleep(w)
       continue
@@ -648,16 +703,20 @@ const ORDER_PAGE_OUTER_BACKOFF_MS = 1_200
 async function fetchOrderPageForSide(
   side: 'sell' | 'buy',
   regionId: number,
-  page: number
+  page: number,
+  shouldAbort?: () => boolean
 ): Promise<unknown> {
   const oneGet = () =>
     esiFetch<unknown>(`/markets/${regionId}/orders/`, {
       order_type: side,
       page: String(page),
-    })
+    }, shouldAbort)
   let lastErr: unknown
   for (let attempt = 0; attempt < ORDER_PAGE_OUTER_RETRIES; attempt++) {
     assertNotEsiForceStopped()
+    if (shouldAbort?.()) {
+      throw new Error('ESI: page exhausted (skip queued request)')
+    }
     if (isEsiStopRequested()) {
       throw new Error('ESI: остановка экспорта')
     }
@@ -760,6 +819,7 @@ async function fetchOrderBookSideStaggered(
   ) => void
 ): Promise<EsiMarketOrder[]> {
   const hardCap = maxPages
+  let discoveredEndPage: number | null = null
   const tasks: Promise<{
     page: number
     rows: EsiMarketOrder[]
@@ -775,15 +835,27 @@ async function fetchOrderBookSideStaggered(
         if (wait > 0) {
           await sleep(wait)
         }
+        if (discoveredEndPage !== null && p > discoveredEndPage) {
+          return { page: p, rows: [], endOfSide: true, aborted: true }
+        }
         assertNotEsiForceStopped()
         if (isEsiStopRequested()) {
           return { page: p, rows: [], endOfSide: true, aborted: true }
         }
         let data: unknown
         try {
-          data = await fetchOrderPageForSide(side, regionId, p)
+          data = await fetchOrderPageForSide(
+            side,
+            regionId,
+            p,
+            () => discoveredEndPage !== null && p > discoveredEndPage
+          )
         } catch (e) {
-          if (isEsiStopRequested()) {
+          const msg = e instanceof Error ? e.message : String(e)
+          if (
+            isEsiStopRequested() ||
+            /page exhausted \(skip queued request\)/i.test(msg)
+          ) {
             esiDevLog(
               `ордера ${side}: прервано (stagger) п.${p} — к объединению не пойдёт`
             )
@@ -792,6 +864,13 @@ async function fetchOrderBookSideStaggered(
           throw e
         }
         const parsed = parseEsiOrderPage(data, p, side, regionId)
+        if (parsed.endOfSide) {
+          // Сразу уменьшаем знаменатель progress/ETA, не дожидаясь завершения всей пачки.
+          setOrderSidePageBarActual(side, p)
+          if (discoveredEndPage === null || p < discoveredEndPage) {
+            discoveredEndPage = p
+          }
+        }
         onPageSuccess()
         onPageRows?.(side, p, parsed.rows)
         if (parsed.rows.length > 0) {
@@ -1045,9 +1124,15 @@ async function fetchTypeNameAndHistory(
   const [typeName, typeCategory, hist] = await Promise.all([
     getEsiTypeName(typeId),
     getEsiTypeCategory(typeId),
-    esiFetch<EsiHistoryDay[]>(`/markets/${regionId}/history/`, {
-      type_id: String(typeId),
-    }).catch(() => [] as EsiHistoryDay[]),
+    (async () => {
+      try {
+        return await esiFetch<EsiHistoryDay[]>(`/markets/${regionId}/history/`, {
+          type_id: String(typeId),
+        }).catch(() => [] as EsiHistoryDay[])
+      } finally {
+        esiProgress.historyDone += 1
+      }
+    })(),
   ])
   if (typeName) {
     name = typeName
@@ -1184,6 +1269,8 @@ export async function buildLiquidityRows(
   esiProgress.typeTotal = chosen.length
   esiProgress.typesDone = 0
   esiProgress.typeConcurrency = chosen.length
+  esiProgress.historyTotal = chosen.length
+  esiProgress.historyDone = 0
 
   const rowResults = await Promise.all(
     chosen.map(async ({ typeId }) => {

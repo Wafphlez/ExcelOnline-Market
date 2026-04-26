@@ -1,5 +1,6 @@
 import type { EsiExportProgressState } from '../lib/esiExportProgressTypes'
 import {
+  esiAllRequestsProgress01,
   esiOrdersProgress01,
   esiTypesProgress01,
   formatEsiEtaRemaining,
@@ -71,25 +72,32 @@ export function EsiExportProgressPanel({
   const p = progress
   const op = esiOrdersProgress01(p)
   const tp = esiTypesProgress01(p)
-  const showTypesEta = p.phase === 'types' && p.typeTotal > 0
-  const showOrderEta = p.phase === 'orders' && p.maxOrderPages > 0
+  const allReqP = esiAllRequestsProgress01(p)
+  const showUnifiedEta =
+    (p.phase === 'orders' || p.phase === 'types') && p.maxOrderPages > 0
 
   let etaNote = ''
   let etaValue: number | null = null
-  if (showTypesEta) {
+  if (showUnifiedEta) {
+    etaNote = 'все запросы ESI'
+    etaValue = linearEtaRemaining(allReqP, Math.max(0, elapsedSec))
+  } else if (p.phase === 'types' && p.typeTotal > 0) {
+    // Фолбэк для редких состояний: если общий ETA недоступен, оставляем старую логику по типам.
     etaNote = 'типы'
-    if (typesPhaseElapsedSec != null && typesPhaseElapsedSec > 0) {
-      etaValue = linearEtaRemaining(tp, typesPhaseElapsedSec)
-    } else {
-      etaValue = null
-    }
-  } else if (showOrderEta) {
+    etaValue =
+      typesPhaseElapsedSec != null && typesPhaseElapsedSec > 0
+        ? linearEtaRemaining(tp, typesPhaseElapsedSec)
+        : null
+  } else if (p.phase === 'orders' && p.maxOrderPages > 0) {
     etaNote = 'ордера'
     etaValue = linearEtaRemaining(op, Math.max(0, elapsedSec))
   }
 
   const etaText = formatEsiEtaRemaining(etaValue)
-  const showEta = showTypesEta || showOrderEta
+  const showEta =
+    showUnifiedEta ||
+    (p.phase === 'types' && p.typeTotal > 0) ||
+    (p.phase === 'orders' && p.maxOrderPages > 0)
   const sw = formatEsiStopwatch(elapsedSec)
 
   return (
@@ -159,6 +167,30 @@ export function EsiExportProgressPanel({
             current={p.typesDone}
             max={p.typeTotal}
             accentClass="bg-eve-accent/85"
+          />
+          <ProgressRow
+            label="History запросы"
+            current={p.historyDone}
+            max={p.historyTotal}
+            accentClass="bg-eve-cyan/70"
+          />
+          <ProgressRow
+            label="Universe types запросы"
+            current={p.universeTypesDone}
+            max={p.universeTypesTotal}
+            accentClass="bg-eve-gold/80"
+          />
+          <ProgressRow
+            label="Universe groups запросы"
+            current={p.universeGroupsDone}
+            max={p.universeGroupsTotal}
+            accentClass="bg-eve-gold/65"
+          />
+          <ProgressRow
+            label="Universe categories запросы"
+            current={p.universeCategoriesDone}
+            max={p.universeCategoriesTotal}
+            accentClass="bg-eve-gold/55"
           />
         </div>
       )}
