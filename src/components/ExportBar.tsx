@@ -981,6 +981,7 @@ export function ExportBar({
                 progress={esiProgress}
                 elapsedSec={esiElapsedSec}
                 typesPhaseElapsedSec={esiTypesPhaseElapsedSec}
+                includeSnapshotProgress={esiIncludeOrderSnapshot}
               />
             </div>
           )}

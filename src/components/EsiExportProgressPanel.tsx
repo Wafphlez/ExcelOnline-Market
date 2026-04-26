@@ -49,6 +49,8 @@ type EsiExportProgressPanelProps = {
   elapsedSec: number
   /** Секунд в фазе «типы»; null, пока фаза не types или нет отметки старта */
   typesPhaseElapsedSec: number | null
+  /** Показывать snapshot-прогресс (когда включена опция выгрузки snapshot) */
+  includeSnapshotProgress?: boolean
 }
 
 /**
@@ -58,6 +60,7 @@ export function EsiExportProgressPanel({
   progress,
   elapsedSec,
   typesPhaseElapsedSec,
+  includeSnapshotProgress = false,
 }: EsiExportProgressPanelProps) {
   const m = progress.maxOrderPages
   const sellM =
@@ -192,7 +195,7 @@ export function EsiExportProgressPanel({
             max={p.universeCategoriesTotal}
             accentClass="bg-eve-gold/55"
           />
-          {p.snapshotTotal > 0 && (
+          {includeSnapshotProgress && (
             <ProgressRow
               label="Snapshot ордеров"
               current={p.snapshotDone}
