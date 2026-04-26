@@ -13,6 +13,7 @@ import {
   clearEsiDevLogs,
   getEsiDevLogLines,
   getEsiExportProgressState,
+  isEsiForceStopError,
   logEsiExportException,
   requestEsiExportForceStop,
   requestEsiExportStop,
@@ -627,6 +628,20 @@ function devExportPlugin(): Plugin {
               } catch (e) {
                 const msg = e instanceof Error ? e.message : 'esi export failed'
                 const ms = Date.now() - esiPostStart
+                if (isEsiForceStopError(e)) {
+                  console.log(
+                    `[ESI export] dev сервер: POST /esi-liquidity — stop-force за ${ms} ms`
+                  )
+                  res.statusCode = 409
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+                  return res.end(
+                    JSON.stringify({
+                      error: msg,
+                      stopped: true,
+                      force: true,
+                    })
+                  )
+                }
                 logEsiExportException('сборка ESI / запись файла', e)
                 console.error(
                   `[ESI export] dev сервер: POST /esi-liquidity — ошибка за ${ms} ms:`,

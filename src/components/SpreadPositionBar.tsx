@@ -9,7 +9,7 @@ const SCAN = {
 } as const
 
 const TRACK =
-  'linear-gradient(90deg, rgba(22, 58, 50, 0.85) 0%, rgba(12, 14, 20, 0.98) 50%, rgba(75, 32, 32, 0.78) 100%)'
+  'linear-gradient(90deg, rgb(var(--eve-red-rgb) / 0.82) 0%, rgba(12, 14, 20, 0.98) 50%, rgb(var(--eve-green-rgb) / 0.9) 100%)'
 
 /**
  * Ось: 0 = buy, 0,5 = mid, 1 = sell. В стиле EVE: золотая кромка, зоны buy/sell,
@@ -50,14 +50,14 @@ export function SpreadPositionBar({ ratio }: Props) {
             className="absolute bottom-0 left-0 top-0 w-[45%] max-w-[50%]"
             style={{
               background:
-                'linear-gradient(90deg, rgba(50, 130, 95, 0.45) 0%, transparent 100%)',
+                'linear-gradient(90deg, rgb(var(--eve-red-rgb) / 0.42) 0%, transparent 100%)',
             }}
           />
           <div
             className="absolute bottom-0 right-0 top-0 w-[45%] max-w-[50%]"
             style={{
               background:
-                'linear-gradient(270deg, rgba(150, 55, 50, 0.42) 0%, transparent 100%)',
+                'linear-gradient(270deg, rgb(var(--eve-green-rgb) / 0.45) 0%, transparent 100%)',
             }}
           />
           <div
@@ -80,9 +80,9 @@ export function SpreadPositionBar({ ratio }: Props) {
         </div>
       </div>
       <div className="mt-0.5 flex items-baseline justify-between px-0.5 font-eve text-[7px] font-bold uppercase leading-none tracking-[0.2em] text-eve-muted/55">
-        <span className="text-eve-cyan/60">buy</span>
+        <span className="eve-red">buy</span>
         <span className="text-eve-gold/60">mid</span>
-        <span className="text-eve-danger/70">sell</span>
+        <span className="eve-green">sell</span>
       </div>
       <p className="mt-0.5 text-center font-eve text-[10px] font-bold tabular-nums tracking-wide text-eve-gold-bright/95 [text-shadow:0_0_8px_rgba(184,150,61,0.35)]">
         {formatRatio(t, 3)}

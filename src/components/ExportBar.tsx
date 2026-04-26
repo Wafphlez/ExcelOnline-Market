@@ -666,7 +666,11 @@ export function ExportBar({
         await onLoadBuffer(buf)
       }
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Ошибка ESI')
+      if (e instanceof Error && /ESI:\s*stop-force/i.test(e.message)) {
+        setMsg('Принудительная остановка выполнена: выгрузка прервана без сборки xlsx.')
+      } else {
+        setMsg(e instanceof Error ? e.message : 'Ошибка ESI')
+      }
     } finally {
       window.clearInterval(logPoll)
       window.clearTimeout(logKick)

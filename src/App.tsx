@@ -100,14 +100,14 @@ function buildCrossRegionRows(
     if (!r) continue
     if (!Number.isFinite(l.priceSell) || l.priceSell <= 0) continue
     if (!Number.isFinite(r.priceSell) || r.priceSell <= 0) continue
-    const avgPrice = (l.price + r.price) / 2
     out.push({
       typeId: l.typeId ?? r.typeId ?? null,
       type: l.type || r.type || '',
       name: l.name || r.name,
-      dayVolume: Math.min(l.dayVolume, r.dayVolume),
-      dayTurnover: Math.min(l.dayTurnover, r.dayTurnover),
-      price: Number.isFinite(avgPrice) ? avgPrice : l.price,
+      // Ликвидность и «средняя» берём по целевому рынку (регион 2, куда продаём).
+      dayVolume: r.dayVolume,
+      dayTurnover: r.dayTurnover,
+      price: r.price,
       // Для межрегионального сравнения: обе стороны — sell из выбранных регионов.
       priceSell: l.priceSell,
       priceBuy: r.priceSell,
@@ -1120,7 +1120,7 @@ function App()
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-1">
                             <div
-                              className="min-w-0 truncate rounded border border-eve-border/45 bg-eve-bg/55 px-1.5 py-0.5 text-[10px] font-semibold text-eve-gold"
+                              className="inline-flex min-h-[2.125rem] min-w-0 items-center truncate rounded border border-eve-border/45 bg-eve-bg/55 px-2 text-xs font-semibold text-eve-gold"
                               title="Выбранные регионы сравнения"
                             >
                               { compareLeftRegionLabel } → { compareRightRegionLabel }

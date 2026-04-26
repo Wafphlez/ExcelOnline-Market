@@ -149,13 +149,13 @@ export function EsiExportProgressPanel({
             label="Sell"
             current={p.sellPage}
             max={sellM}
-            accentClass="bg-eve-cyan/80"
+            accentClass="bg-eve-green"
           />
           <ProgressRow
             label="Buy"
             current={p.buyPage}
             max={buyM}
-            accentClass="bg-eve-danger/70"
+            accentClass="bg-eve-red"
           />
         </div>
       )}

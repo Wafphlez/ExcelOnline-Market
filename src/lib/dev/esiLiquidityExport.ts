@@ -33,6 +33,22 @@ let esiProgress: EsiExportProgressState = { ...ESI_EXPORT_PROGRESS_IDLE }
 let esiStopRequested = false
 /** Сигнал из POST /esi-stop-force: завершить сбор без сборки xlsx. */
 let esiForceStopRequested = false
+/** Активные HTTP-запросы к ESI для мгновенной отмены через stop-force. */
+const esiActiveRequestControllers = new Set<AbortController>()
+
+class EsiForceStopError extends Error {
+  constructor() {
+    super('ESI: stop-force (без сборки xlsx)')
+    this.name = 'EsiForceStopError'
+  }
+}
+
+export function isEsiForceStopError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === 'EsiForceStopError' || /ESI:\s*stop-force/i.test(err.message))
+  )
+}
 
 /** Клиент (кнопка «стоп») — между запросами ESI сработает на следующем шаге. */
 function requestEsiExportStopLog(): void {
@@ -55,12 +71,20 @@ export function requestEsiExportForceStop(): void {
     esiDevLog(
       'запрошен принудительный stop-force — остановка без сборки xlsx'
     )
+    for (const controller of Array.from(esiActiveRequestControllers)) {
+      try {
+        controller.abort()
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
 function clearEsiStopRequest(): void {
   esiStopRequested = false
   esiForceStopRequested = false
+  esiActiveRequestControllers.clear()
 }
 
 function isEsiStopRequested(): boolean {
@@ -73,8 +97,16 @@ function isEsiForceStopRequested(): boolean {
 
 function assertNotEsiForceStopped(): void {
   if (isEsiForceStopRequested()) {
-    throw new Error('ESI: stop-force (без сборки xlsx)')
+    throw new EsiForceStopError()
   }
+}
+
+function isAbortLikeError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  if (err.name === 'AbortError') return true
+  const code = (err as Error & { code?: unknown }).code
+  if (code === 'ABORT_ERR' || code === 'ERR_CANCELED') return true
+  return /aborted|abort/i.test(err.message)
 }
 
 export function getEsiExportProgressState(): EsiExportProgressState {
@@ -562,32 +594,51 @@ async function esiFetch<T>(
       throw new Error('ESI: page exhausted (skip queued request)')
     }
     const t0 = Date.now()
-    const { body, status } = await new Promise<{
-      body: string
-      status: number
-    }>((resolve, reject) => {
-      const req = https.get(
-        url,
-        {
-          headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
-        },
-        (incoming) => {
-          const chunks: Buffer[] = []
-          incoming.on('data', (c) => chunks.push(c as Buffer))
-          incoming.on('end', () => {
-            resolve({
-              body: Buffer.concat(chunks).toString('utf8'),
-              status: incoming.statusCode ?? 0,
+    const controller = new AbortController()
+    esiActiveRequestControllers.add(controller)
+    let body = ''
+    let status = 0
+    try {
+      const out = await new Promise<{
+        body: string
+        status: number
+      }>((resolve, reject) => {
+        const req = https.get(
+          url,
+          {
+            headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
+            signal: controller.signal,
+          },
+          (incoming) => {
+            const chunks: Buffer[] = []
+            incoming.on('data', (c) => chunks.push(c as Buffer))
+            incoming.on('end', () => {
+              resolve({
+                body: Buffer.concat(chunks).toString('utf8'),
+                status: incoming.statusCode ?? 0,
+              })
             })
-          })
-        }
-      )
-      req.on('error', reject)
-      req.setTimeout(120_000, () => {
-        req.destroy()
-        reject(new Error('ESI timeout'))
+          }
+        )
+        req.on('error', reject)
+        req.setTimeout(120_000, () => {
+          req.destroy()
+          reject(new Error('ESI timeout'))
+        })
       })
-    })
+      body = out.body
+      status = out.status
+    } catch (e) {
+      if (
+        isEsiForceStopRequested() &&
+        (isAbortLikeError(e) || shouldAbort?.())
+      ) {
+        throw new EsiForceStopError()
+      }
+      throw e
+    } finally {
+      esiActiveRequestControllers.delete(controller)
+    }
     const ms = Date.now() - t0
     if (status === 200) {
       esiDevLog(
@@ -697,6 +748,11 @@ const UNBOUNDED_ORDER_PAGES_SAFETY = 10_000
 const ORDER_PAGE_OUTER_RETRIES = 3
 const ORDER_PAGE_OUTER_BACKOFF_MS = 1_200
 
+function isSkipQueuedRequestError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /page exhausted \(skip queued request\)/i.test(msg)
+}
+
 /** Каждая страница — отдельный асинхронный GET (без глобальной цепочки sell/buy). */
 async function fetchOrderPageForSide(
   side: 'sell' | 'buy',
@@ -721,6 +777,10 @@ async function fetchOrderPageForSide(
     try {
       return await oneGet()
     } catch (e) {
+      if (isSkipQueuedRequestError(e)) {
+        // Это штатный «не запускать лишний запрос после конца пагинации», без ретраев.
+        throw e
+      }
       lastErr = e
       if (attempt < ORDER_PAGE_OUTER_RETRIES - 1) {
         const w = ORDER_PAGE_OUTER_BACKOFF_MS * (attempt + 1)
@@ -1217,7 +1277,20 @@ export async function buildLiquidityRows(
     preCandidates.sort((a, b) => b.activity - a.activity)
     for (const { typeId } of preCandidates.slice(0, o.maxTypes)) {
       if (typePrefetch.has(typeId)) continue
-      typePrefetch.set(typeId, fetchTypeNameAndHistory(typeId, regionId))
+      typePrefetch.set(
+        typeId,
+        fetchTypeNameAndHistory(typeId, regionId).catch((e) => {
+          if (isEsiForceStopError(e) || isEsiStopRequested()) {
+            return null
+          }
+          esiDevLog(
+            `prefetch type ${typeId}: пропуск (${
+              e instanceof Error ? e.message : String(e)
+            })`
+          )
+          return null
+        })
+      )
     }
   }
 

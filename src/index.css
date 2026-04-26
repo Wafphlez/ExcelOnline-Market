@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --eve-green-rgb: 50 130 95;
+  --eve-red-rgb: 150 55 50;
+}
+
 html,
 body,
 #root {
@@ -153,6 +158,18 @@ body {
 }
 
 @layer utilities {
+  .eve-green {
+    color: rgb(var(--eve-green-rgb) / 0.9);
+  }
+  .eve-red {
+    color: rgb(var(--eve-red-rgb) / 0.9);
+  }
+  .bg-eve-green {
+    background-color: rgb(var(--eve-green-rgb) / 0.45);
+  }
+  .bg-eve-red {
+    background-color: rgb(var(--eve-red-rgb) / 0.42);
+  }
   .font-tabular-nums {
     font-feature-settings: 'tnum' 1;
   }
