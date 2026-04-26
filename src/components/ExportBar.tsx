@@ -37,6 +37,7 @@ import {
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
 const LS_ESI_MAX_TYPES = 'excelMarket_esiMaxTypes'
+const LS_ESI_INCLUDE_ORDER_SNAPSHOT = 'excelMarket_esiIncludeOrderSnapshot'
 const LS_ENABLE_MARKET_EXPORT_LOGS = 'excelMarket_enableMarketExportLogs'
 
 function readEsiMaxOrderPagesStr(): string {
@@ -82,6 +83,14 @@ function readEnableMarketExportLogs(): boolean {
     /* ignore */
   }
   return true
+}
+
+function readEsiIncludeOrderSnapshot(): boolean {
+  try {
+    return localStorage.getItem(LS_ESI_INCLUDE_ORDER_SNAPSHOT) === '1'
+  } catch {
+    return false
+  }
 }
 
 type ExportBarProps = {
@@ -262,6 +271,9 @@ export function ExportBar({
   const [esiMaxTypesStr, setEsiMaxTypesStr] = useState(() =>
     readEsiMaxTypesStr()
   )
+  const [esiIncludeOrderSnapshot, setEsiIncludeOrderSnapshot] = useState(
+    readEsiIncludeOrderSnapshot
+  )
   const [selectedExportFile, setSelectedExportFile] = useState(
     readLastExportFileName
   )
@@ -437,6 +449,17 @@ export function ExportBar({
       /* ignore */
     }
   }, [esiMaxTypesStr])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        LS_ESI_INCLUDE_ORDER_SNAPSHOT,
+        esiIncludeOrderSnapshot ? '1' : '0'
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [esiIncludeOrderSnapshot])
 
   useEffect(() => {
     try {
@@ -645,6 +668,7 @@ export function ExportBar({
         orderPagesUntilExhausted: false,
         maxTypes,
         maxOrderPages,
+        includeOrderSnapshot: esiIncludeOrderSnapshot,
       })
       setMsg(
         `ESI: ${result.rowCount} позиций → exports/${result.fileName}${
@@ -877,6 +901,41 @@ export function ExportBar({
                 disabled={disabled || loading}
                 className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-white shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               />
+            </label>
+            <label className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
+              <div className="min-w-0">
+                <p className="font-semibold text-eve-bright/95">
+                  Выгрузить актуальные ордера
+                </p>
+                <p className="text-[10px] text-eve-muted/90">
+                  Добавляет top-of-book snapshot и лист orders_snapshot
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={esiIncludeOrderSnapshot}
+                aria-label="Выгружать актуальные ордера в snapshot"
+                onClick={() => setEsiIncludeOrderSnapshot((v) => !v)}
+                disabled={disabled || loading}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 disabled:opacity-50 ${
+                  esiIncludeOrderSnapshot
+                    ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
+                    : 'border-eve-border/80 bg-eve-bg/80 text-eve-muted/90'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/45 to-transparent"
+                />
+                <span
+                  className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
+                    esiIncludeOrderSnapshot
+                      ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
+                      : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
+                  }`}
+                />
+              </button>
             </label>
             <div className="flex flex-wrap items-center gap-2 pt-1 @[450px]:col-span-3 @[450px]:justify-end">
               <button

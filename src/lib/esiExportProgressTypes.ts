@@ -36,6 +36,9 @@ export type EsiExportProgressState = {
   /** Запросы /universe/categories/{id}/ (реальные HTTP). */
   universeCategoriesDone: number
   universeCategoriesTotal: number
+  /** Snapshot ордеров для выгрузки (top-of-book + sheet orders_snapshot). */
+  snapshotDone: number
+  snapshotTotal: number
 }
 
 export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
@@ -57,4 +60,6 @@ export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
   universeGroupsTotal: 0,
   universeCategoriesDone: 0,
   universeCategoriesTotal: 0,
+  snapshotDone: 0,
+  snapshotTotal: 0,
 }

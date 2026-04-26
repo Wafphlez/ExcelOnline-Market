@@ -196,6 +196,8 @@ export async function buildEsiLiquidityToExports(opts: {
   maxOrderPages?: number
   /** true — запрашивать все страницы ордеров, пока ESI не вернёт «нет страницы» */
   orderPagesUntilExhausted?: boolean
+  /** true — добавить top-of-book snapshot колонки + orders_snapshot лист */
+  includeOrderSnapshot?: boolean
 }): Promise<EsiLiquidityResult> {
   if (!isDevExportServer) {
     throw new Error(
@@ -211,6 +213,7 @@ export async function buildEsiLiquidityToExports(opts: {
       maxTypes: opts.maxTypes,
       maxOrderPages: opts.maxOrderPages,
       orderPagesUntilExhausted: opts.orderPagesUntilExhausted === true,
+      includeOrderSnapshot: opts.includeOrderSnapshot === true,
     }),
   })
   const t = await r.text()

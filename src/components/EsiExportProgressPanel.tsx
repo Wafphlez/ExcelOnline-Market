@@ -192,6 +192,14 @@ export function EsiExportProgressPanel({
             max={p.universeCategoriesTotal}
             accentClass="bg-eve-gold/55"
           />
+          {p.snapshotTotal > 0 && (
+            <ProgressRow
+              label="Snapshot ордеров"
+              current={p.snapshotDone}
+              max={p.snapshotTotal}
+              accentClass="bg-eve-accent/75"
+            />
+          )}
         </div>
       )}
     </div>

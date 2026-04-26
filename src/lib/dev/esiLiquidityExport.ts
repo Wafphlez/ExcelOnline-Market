@@ -487,12 +487,15 @@ export type EsiLiquidityExportOptions = {
    * `{"error":"Requested page does not exist!"}` или пустой массив; `maxOrderPages` не лимит.
    */
   orderPagesUntilExhausted: boolean
+  /** Добавить в xlsx snapshot top-of-book и отдельный лист orders_snapshot. */
+  includeOrderSnapshot: boolean
 }
 
 const DEFAULT_OPTS: EsiLiquidityExportOptions = {
   maxTypes: ESI_DEFAULT_MAX_TYPES,
   maxOrderPages: 90,
   orderPagesUntilExhausted: false,
+  includeOrderSnapshot: false,
 }
 
 /** Vite передаёт в opts явные `undefined` — без этого они затирают DEFAULT_OPTS при object spread. */
@@ -518,6 +521,9 @@ function mergeEsiOpts(
   }
   if (partial.orderPagesUntilExhausted !== undefined) {
     o.orderPagesUntilExhausted = partial.orderPagesUntilExhausted
+  }
+  if (partial.includeOrderSnapshot !== undefined) {
+    o.includeOrderSnapshot = partial.includeOrderSnapshot
   }
   return o
 }
@@ -703,6 +709,11 @@ export type LiquidityRow = {
   price: number
   price_sell: number
   price_bay: number
+  top_sell_now: number
+  top_buy_now: number
+  top_sell_volume_now: number
+  top_buy_volume_now: number
+  orders_snapshot_at: string
 }
 
 function parseEsiDate(d: string): Date {
@@ -1125,7 +1136,13 @@ export async function fetchAllMarketOrders(
   return [...sellOrders, ...buyOrders]
 }
 
-type Agg = { asks: number[]; bids: number[]; activity: number }
+type Agg = {
+  asks: number[]
+  bids: number[]
+  activity: number
+  askVolByPrice: Map<number, number>
+  bidVolByPrice: Map<number, number>
+}
 
 function aggregateByType(orders: EsiMarketOrder[]): Map<number, Agg> {
   const m = new Map<number, Agg>()
@@ -1144,12 +1161,29 @@ function mergeOrdersInto(
     touched.add(t)
     let a = m.get(t)
     if (!a) {
-      a = { asks: [], bids: [], activity: 0 }
+      a = {
+        asks: [],
+        bids: [],
+        activity: 0,
+        askVolByPrice: new Map<number, number>(),
+        bidVolByPrice: new Map<number, number>(),
+      }
       m.set(t, a)
     }
     a.activity += o.volume_remain
-    if (o.is_buy_order) a.bids.push(o.price)
-    else a.asks.push(o.price)
+    if (o.is_buy_order) {
+      a.bids.push(o.price)
+      a.bidVolByPrice.set(
+        o.price,
+        (a.bidVolByPrice.get(o.price) ?? 0) + Math.max(0, o.volume_remain)
+      )
+    } else {
+      a.asks.push(o.price)
+      a.askVolByPrice.set(
+        o.price,
+        (a.askVolByPrice.get(o.price) ?? 0) + Math.max(0, o.volume_remain)
+      )
+    }
   }
   for (const t of touched) {
     const a = m.get(t)
@@ -1209,7 +1243,8 @@ function composeLiquidityRow(
   typeId: number,
   byType: Map<number, Agg>,
   monthAgo: Date,
-  parts: TypeNameAndHistory | null
+  parts: TypeNameAndHistory | null,
+  snapshotAtIso: string
 ): LiquidityRow | null {
   const agg = byType.get(typeId)
   if (!agg) return null
@@ -1231,6 +1266,11 @@ function composeLiquidityRow(
     price: liq.last3AvgPrice,
     price_sell: priceSell,
     price_bay: priceBuy,
+    top_sell_now: priceSell,
+    top_buy_now: priceBuy,
+    top_sell_volume_now: agg.askVolByPrice.get(priceSell) ?? 0,
+    top_buy_volume_now: agg.bidVolByPrice.get(priceBuy) ?? 0,
+    orders_snapshot_at: snapshotAtIso,
   }
 }
 
@@ -1313,6 +1353,7 @@ export async function buildLiquidityRows(
     return { rows: [], stoppedEarly: stopped }
   }
   const byType = aggregateByType(orders)
+  const snapshotAtIso = new Date().toISOString()
   const candidates: { typeId: number; activity: number }[] = []
   for (const [typeId, agg] of byType) {
     const ask = bestAsk(agg)
@@ -1342,6 +1383,8 @@ export async function buildLiquidityRows(
   esiProgress.typeConcurrency = chosen.length
   esiProgress.historyTotal = chosen.length
   esiProgress.historyDone = 0
+  esiProgress.snapshotTotal = o.includeOrderSnapshot ? chosen.length : 0
+  esiProgress.snapshotDone = 0
 
   const rowResults = await Promise.all(
     chosen.map(async ({ typeId }) => {
@@ -1355,9 +1398,13 @@ export async function buildLiquidityRows(
           pref != null
             ? await pref
             : await fetchTypeNameAndHistory(typeId, regionId)
-        return composeLiquidityRow(typeId, byType, monthAgo, parts)
+        return composeLiquidityRow(typeId, byType, monthAgo, parts, snapshotAtIso)
       } finally {
         esiProgress.typesDone += 1
+        if (o.includeOrderSnapshot) {
+          // Snapshot top-of-book формируется из финального агрегата по каждому выбранному типу.
+          esiProgress.snapshotDone += 1
+        }
       }
     })
   )
@@ -1398,6 +1445,11 @@ export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Buffer {
     price: r.price,
     price_sell: r.price_sell,
     price_bay: r.price_bay,
+    top_sell_now: r.top_sell_now,
+    top_buy_now: r.top_buy_now,
+    top_sell_volume_now: r.top_sell_volume_now,
+    top_buy_volume_now: r.top_buy_volume_now,
+    orders_snapshot_at: r.orders_snapshot_at,
   }))
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(sheetRows, { cellDates: true })
@@ -1405,12 +1457,52 @@ export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Buffer {
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 }
 
+function appendOrdersSnapshotSheet(wb: XLSX.WorkBook, rows: LiquidityRow[]): void {
+  const snapRows = rows.map((r) => ({
+    type_id: r.type_id,
+    name: r.name,
+    type: r.type,
+    top_sell_now: r.top_sell_now,
+    top_sell_volume_now: r.top_sell_volume_now,
+    top_buy_now: r.top_buy_now,
+    top_buy_volume_now: r.top_buy_volume_now,
+    orders_snapshot_at: r.orders_snapshot_at,
+  }))
+  const ws = XLSX.utils.json_to_sheet(snapRows, { cellDates: true })
+  XLSX.utils.book_append_sheet(wb, ws, 'orders_snapshot')
+}
+
 function liquidityXlsxFromRowsOrEmptyStopNote(
   rows: LiquidityRow[],
-  note: string
+  note: string,
+  includeOrderSnapshot = false
 ): Buffer {
   if (rows.length > 0) {
-    return liquidityRowsToXlsxBuffer(rows)
+    if (!includeOrderSnapshot) {
+      return liquidityRowsToXlsxBuffer(rows)
+    }
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(
+      rows.map((r) => ({
+        name: r.name,
+        type: r.type,
+        type_id: r.type_id,
+        day_volume: r.day_volume,
+        day_turnover: r.day_turnover,
+        price: r.price,
+        price_sell: r.price_sell,
+        price_bay: r.price_bay,
+        top_sell_now: r.top_sell_now,
+        top_buy_now: r.top_buy_now,
+        top_sell_volume_now: r.top_sell_volume_now,
+        top_buy_volume_now: r.top_buy_volume_now,
+        orders_snapshot_at: r.orders_snapshot_at,
+      })),
+      { cellDates: true }
+    )
+    XLSX.utils.book_append_sheet(wb, ws, 'liquidity')
+    appendOrdersSnapshotSheet(wb, rows)
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
   }
   return liquidityRowsToXlsxBuffer([
     {
@@ -1422,6 +1514,11 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
       price: 0,
       price_sell: 0,
       price_bay: 0,
+      top_sell_now: 0,
+      top_buy_now: 0,
+      top_sell_volume_now: 0,
+      top_buy_volume_now: 0,
+      orders_snapshot_at: new Date().toISOString(),
     },
   ])
 }
@@ -1433,7 +1530,8 @@ export async function buildEsiLiquidityXlsx(
   const t0 = Date.now()
   try {
     assertNotEsiForceStopped()
-    const { rows, stoppedEarly } = await buildLiquidityRows(regionId, opts)
+    const mergedOpts = mergeEsiOpts(opts)
+    const { rows, stoppedEarly } = await buildLiquidityRows(regionId, mergedOpts)
     assertNotEsiForceStopped()
     if (rows.length === 0) {
       if (!stoppedEarly) {
@@ -1443,14 +1541,19 @@ export async function buildEsiLiquidityXlsx(
       }
       const buffer = liquidityXlsxFromRowsOrEmptyStopNote(
         [],
-        'Принудительный стоп — нет полных строк (нужны bid+ask по типам).'
+        'Принудительный стоп — нет полных строк (нужны bid+ask по типам).',
+        mergedOpts.includeOrderSnapshot
       )
       esiDevLog(
         `xlsx (частично): 0 позиций, ${buffer.length} B, ${((Date.now() - t0) / 1000).toFixed(1)} s`
       )
       return { buffer, rowCount: 0, partial: true }
     }
-    const buffer = liquidityRowsToXlsxBuffer(rows)
+    const buffer = liquidityXlsxFromRowsOrEmptyStopNote(
+      rows,
+      '',
+      mergedOpts.includeOrderSnapshot
+    )
     esiDevLog(
       `xlsx: ${rows.length} строк, ${buffer.length} B файла, всего ${((Date.now() - t0) / 1000).toFixed(1)} s${stoppedEarly ? ' (частично, стоп)' : ''}`
     )

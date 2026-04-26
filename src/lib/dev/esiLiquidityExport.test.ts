@@ -14,6 +14,11 @@ describe('liquidityRowsToXlsxBuffer', () => {
         price: 100,
         price_sell: 102,
         price_bay: 99,
+        top_sell_now: 102,
+        top_buy_now: 99,
+        top_sell_volume_now: 500,
+        top_buy_volume_now: 300,
+        orders_snapshot_at: '2026-01-01T00:00:00.000Z',
       },
     ])
     const ab = buf.buffer.slice(

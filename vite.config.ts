@@ -530,6 +530,7 @@ function devExportPlugin(): Plugin {
                 maxTypes?: number
                 maxOrderPages?: number
                 orderPagesUntilExhausted?: boolean
+                includeOrderSnapshot?: boolean
                 fileName?: string
               }
               let raw: string
@@ -594,6 +595,7 @@ function devExportPlugin(): Plugin {
                     j.maxOrderPages > 0
                       ? Math.min(ESI_MAX_ORDER_PAGES_USER_CAP, j.maxOrderPages)
                       : undefined,
+                  includeOrderSnapshot: j.includeOrderSnapshot === true,
                 })
                 const baseName =
                   typeof j.fileName === 'string' &&
