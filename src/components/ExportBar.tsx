@@ -38,6 +38,7 @@ const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
 const LS_ESI_MAX_TYPES = 'excelMarket_esiMaxTypes'
 const LS_ESI_INCLUDE_ORDER_SNAPSHOT = 'excelMarket_esiIncludeOrderSnapshot'
+const LS_ESI_TRADE_HUB_ONLY = 'excelMarket_esiTradeHubOnly'
 const LS_ENABLE_MARKET_EXPORT_LOGS = 'excelMarket_enableMarketExportLogs'
 
 function readEsiMaxOrderPagesStr(): string {
@@ -88,6 +89,14 @@ function readEnableMarketExportLogs(): boolean {
 function readEsiIncludeOrderSnapshot(): boolean {
   try {
     return localStorage.getItem(LS_ESI_INCLUDE_ORDER_SNAPSHOT) === '1'
+  } catch {
+    return false
+  }
+}
+
+function readEsiTradeHubOnly(): boolean {
+  try {
+    return localStorage.getItem(LS_ESI_TRADE_HUB_ONLY) === '1'
   } catch {
     return false
   }
@@ -274,6 +283,7 @@ export function ExportBar({
   const [esiIncludeOrderSnapshot, setEsiIncludeOrderSnapshot] = useState(
     readEsiIncludeOrderSnapshot
   )
+  const [esiTradeHubOnly, setEsiTradeHubOnly] = useState(readEsiTradeHubOnly)
   const [selectedExportFile, setSelectedExportFile] = useState(
     readLastExportFileName
   )
@@ -326,6 +336,7 @@ export function ExportBar({
 
   const selected = regions.find((r) => r.id === selectedId) ?? regions[0]
   const trimmedMarketLogsPath = marketLogsPath.trim()
+  const selectedHubName = selected?.tradeHubName ?? 'торгового хаба выбранного региона'
 
   /** Только .xlsx/.xls из exports/, свежие сверху */
   const exportFilesSorted = useMemo(() => {
@@ -460,6 +471,17 @@ export function ExportBar({
       /* ignore */
     }
   }, [esiIncludeOrderSnapshot])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        LS_ESI_TRADE_HUB_ONLY,
+        esiTradeHubOnly ? '1' : '0'
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [esiTradeHubOnly])
 
   useEffect(() => {
     try {
@@ -669,6 +691,8 @@ export function ExportBar({
         maxTypes,
         maxOrderPages,
         includeOrderSnapshot: esiIncludeOrderSnapshot,
+        tradeHubOnly: esiTradeHubOnly,
+        tradeHubLocationId: selected.tradeHubLocationId,
       })
       setMsg(
         `ESI: ${result.rowCount} позиций → exports/${result.fileName}${
@@ -931,6 +955,41 @@ export function ExportBar({
                 <span
                   className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
                     esiIncludeOrderSnapshot
+                      ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
+                      : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
+                  }`}
+                />
+              </button>
+            </label>
+            <label className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
+              <div className="min-w-0">
+                <p className="font-semibold text-eve-bright/95">
+                  Выгрузить только торговый хаб
+                </p>
+                <p className="text-[10px] text-eve-muted/90">
+                  {`Фильтр по ${selectedHubName}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={esiTradeHubOnly}
+                aria-label="Выгружать только ордера торгового хаба"
+                onClick={() => setEsiTradeHubOnly((v) => !v)}
+                disabled={disabled || loading}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 disabled:opacity-50 ${
+                  esiTradeHubOnly
+                    ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
+                    : 'border-eve-border/80 bg-eve-bg/80 text-eve-muted/90'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/45 to-transparent"
+                />
+                <span
+                  className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
+                    esiTradeHubOnly
                       ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
                       : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
                   }`}

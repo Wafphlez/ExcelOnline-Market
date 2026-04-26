@@ -22,6 +22,7 @@ import {
   ESI_MAX_ORDER_PAGES_USER_CAP,
   ESI_MAX_TYPES_USER_CAP,
 } from './src/lib/esiOrderPageLimits'
+import { EXPORT_REGIONS } from './src/lib/exportRegions'
 
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '.')
@@ -68,6 +69,18 @@ function formatFileDateRu(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const yyyy = String(d.getFullYear())
   return `${dd}.${mm}.${yyyy}`
+}
+
+/** Только [a-zA-Z0-9._-] — иначе `isSafeFileName` отклонит `liquidity-esi-…`. */
+function toSafeFileToken(v: string): string {
+  const cleaned = v
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, ' ')
+    // Без «._» как диапазона: иначе в класс попадает почти весь ASCII и ломается санитизация.
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return cleaned || 'region'
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -531,6 +544,8 @@ function devExportPlugin(): Plugin {
                 maxOrderPages?: number
                 orderPagesUntilExhausted?: boolean
                 includeOrderSnapshot?: boolean
+                tradeHubOnly?: boolean
+                tradeHubLocationId?: number
                 fileName?: string
               }
               let raw: string
@@ -596,12 +611,22 @@ function devExportPlugin(): Plugin {
                       ? Math.min(ESI_MAX_ORDER_PAGES_USER_CAP, j.maxOrderPages)
                       : undefined,
                   includeOrderSnapshot: j.includeOrderSnapshot === true,
+                  tradeHubOnly: j.tradeHubOnly === true,
+                  tradeHubLocationId:
+                    typeof j.tradeHubLocationId === 'number' && Number.isFinite(j.tradeHubLocationId)
+                      ? Math.floor(j.tradeHubLocationId)
+                      : undefined,
                 })
+                const regionMeta = EXPORT_REGIONS.find((x) => x.esiRegionId === rid)
+                const fileRegionToken =
+                  j.tradeHubOnly === true && regionMeta?.tradeHubName
+                    ? toSafeFileToken(regionMeta.tradeHubName)
+                    : toSafeFileToken(regionMeta?.label ?? String(rid))
                 const baseName =
                   typeof j.fileName === 'string' &&
                   /^[a-zA-Z0-9._-]+\.xlsx$/.test(j.fileName)
                     ? j.fileName
-                    : `liquidity-esi-${rid}-${formatFileDateRu(new Date())}.xlsx`
+                    : `liquidity-esi-${fileRegionToken}-${formatFileDateRu(new Date())}.xlsx`
                 if (!isSafeFileName(baseName)) {
                   res.statusCode = 400
                   return res.end('bad filename')

@@ -198,6 +198,10 @@ export async function buildEsiLiquidityToExports(opts: {
   orderPagesUntilExhausted?: boolean
   /** true — добавить top-of-book snapshot колонки + orders_snapshot лист */
   includeOrderSnapshot?: boolean
+  /** true — оставить только ордера торгового хаба (по location_id). */
+  tradeHubOnly?: boolean
+  /** location_id торгового хаба для фильтрации ордеров. */
+  tradeHubLocationId?: number
 }): Promise<EsiLiquidityResult> {
   if (!isDevExportServer) {
     throw new Error(
@@ -214,6 +218,11 @@ export async function buildEsiLiquidityToExports(opts: {
       maxOrderPages: opts.maxOrderPages,
       orderPagesUntilExhausted: opts.orderPagesUntilExhausted === true,
       includeOrderSnapshot: opts.includeOrderSnapshot === true,
+      tradeHubOnly: opts.tradeHubOnly === true,
+      tradeHubLocationId:
+        typeof opts.tradeHubLocationId === 'number' && Number.isFinite(opts.tradeHubLocationId)
+          ? Math.floor(opts.tradeHubLocationId)
+          : undefined,
     }),
   })
   const t = await r.text()

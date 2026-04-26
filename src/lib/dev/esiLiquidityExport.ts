@@ -489,6 +489,9 @@ export type EsiLiquidityExportOptions = {
   orderPagesUntilExhausted: boolean
   /** Добавить в xlsx snapshot top-of-book и отдельный лист orders_snapshot. */
   includeOrderSnapshot: boolean
+  /** Оставить только ордера конкретного торгового хаба (по location_id). */
+  tradeHubOnly: boolean
+  tradeHubLocationId?: number
 }
 
 const DEFAULT_OPTS: EsiLiquidityExportOptions = {
@@ -496,6 +499,7 @@ const DEFAULT_OPTS: EsiLiquidityExportOptions = {
   maxOrderPages: 90,
   orderPagesUntilExhausted: false,
   includeOrderSnapshot: false,
+  tradeHubOnly: false,
 }
 
 /** Vite передаёт в opts явные `undefined` — без этого они затирают DEFAULT_OPTS при object spread. */
@@ -525,6 +529,12 @@ function mergeEsiOpts(
   if (partial.includeOrderSnapshot !== undefined) {
     o.includeOrderSnapshot = partial.includeOrderSnapshot
   }
+  if (partial.tradeHubOnly !== undefined) {
+    o.tradeHubOnly = partial.tradeHubOnly
+  }
+  if (partial.tradeHubLocationId !== undefined) {
+    o.tradeHubLocationId = partial.tradeHubLocationId
+  }
   return o
 }
 
@@ -533,6 +543,7 @@ type EsiMarketOrder = {
   is_buy_order: boolean
   price: number
   volume_remain: number
+  location_id: number
 }
 
 type EsiHistoryDay = {
@@ -1296,6 +1307,22 @@ export async function buildLiquidityRows(
   esiDevLog(
     `строки ликвидности: region=${regionId}, orderPagesUntilExhausted=${o.orderPagesUntilExhausted}, maxOrderPages=${o.maxOrderPages}, maxTypes=${o.maxTypes}; sell|buy|history+имя — независимые async: по мере прихода страниц ордеров стартует префетч /markets/.../history/ и имени; bid/ask в строке — по финальному агрегату; кэш имён — data/${TYPE_CACHE_FILE}`
   )
+  if (o.tradeHubOnly) {
+    esiDevLog(
+      `режим торгового хаба: location_id=${o.tradeHubLocationId ?? 'не задан'} (фильтрация по location_id)`
+    )
+  }
+
+  const filterHubOrders = (
+    rows: readonly EsiMarketOrder[]
+  ): EsiMarketOrder[] => {
+    if (!o.tradeHubOnly) return [...rows]
+    const hubLocationId = o.tradeHubLocationId
+    if (typeof hubLocationId !== 'number' || !Number.isFinite(hubLocationId)) {
+      return []
+    }
+    return rows.filter((x) => x.location_id === hubLocationId)
+  }
 
   const partialByType = new Map<number, Agg>()
   const typePrefetch = new Map<number, Promise<TypeNameAndHistory | null>>()
@@ -1304,8 +1331,9 @@ export async function buildLiquidityRows(
     _page: number,
     rows: EsiMarketOrder[]
   ) => void = (_side, _page, rows) => {
-    if (rows.length === 0) return
-    mergeOrdersInto(partialByType, rows)
+    const hubRows = filterHubOrders(rows)
+    if (hubRows.length === 0) return
+    mergeOrdersInto(partialByType, hubRows)
     const preCandidates: { typeId: number; activity: number }[] = []
     for (const [typeId, agg] of partialByType) {
       const ask = bestAsk(agg)
@@ -1340,11 +1368,12 @@ export async function buildLiquidityRows(
     o.orderPagesUntilExhausted,
     onOrderPageRows
   )
+  const filteredOrders = filterHubOrders(orders)
   assertNotEsiForceStopped()
   esiDevLog(
-    `ордера собраны: ${orders.length} шт. за ${((Date.now() - tAll) / 1000).toFixed(1)} s`
+    `ордера собраны: ${orders.length} шт., после фильтра хаба: ${filteredOrders.length} шт. за ${((Date.now() - tAll) / 1000).toFixed(1)} s`
   )
-  if (orders.length === 0) {
+  if (filteredOrders.length === 0) {
     const stopped = isEsiStopRequested()
     esiProgress = { ...ESI_EXPORT_PROGRESS_IDLE }
     if (stopped) {
@@ -1352,7 +1381,7 @@ export async function buildLiquidityRows(
     }
     return { rows: [], stoppedEarly: stopped }
   }
-  const byType = aggregateByType(orders)
+  const byType = aggregateByType(filteredOrders)
   const snapshotAtIso = new Date().toISOString()
   const candidates: { typeId: number; activity: number }[] = []
   for (const [typeId, agg] of byType) {
