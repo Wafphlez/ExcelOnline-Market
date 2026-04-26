@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInputWheelNudge } from './hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
-import { Download, FolderOpen, RefreshCw } from 'lucide-react'
+import { ArrowLeftRight, Download, FolderOpen, RefreshCw } from 'lucide-react'
 import { ExportBar } from './components/ExportBar'
 import { FileDropzone } from './components/FileDropzone'
 import { MarketTable } from './components/MarketTable'
 import { computeAllMetrics } from './lib/computeMetrics'
+import { computeEntryScore } from './lib/entryScore'
 import { DEFAULT_HIGH_PRICE_THRESHOLD_ISK } from './lib/pricePenalty'
 import { formatInteger } from './lib/formatNumber'
 import { mapRawRows } from './lib/mapColumns'
@@ -57,6 +58,113 @@ const REGION_TRADE_SYSTEM_BY_ID: Record<string, string> = {
   heimatar: 'Rens',
   'sinq-laison': 'Dodixie',
   metropolis: 'Hek',
+}
+
+function detectRegionLabelFromExportFileName(fileName: string): string {
+  const byReady = EXPORT_REGIONS.find((r) => r.fileName === fileName)
+  if (byReady) return byReady.label
+  const m = /liquidity-esi-(\d+)-/i.exec(fileName)
+  if (m) {
+    const rid = Number(m[1])
+    const byEsiId = EXPORT_REGIONS.find((r) => r.esiRegionId === rid)
+    if (byEsiId) return byEsiId.label
+    return `Region ${rid}`
+  }
+  return fileName.replace(/\.(xlsx|xls)$/i, '')
+}
+
+function marketRowJoinKey(row: MarketRow): string {
+  if (
+    row.typeId !== null &&
+    Number.isFinite(row.typeId) &&
+    row.typeId > 0
+  ) {
+    return `id:${Math.floor(row.typeId)}`
+  }
+  return `name:${row.name.trim().toLowerCase()}`
+}
+
+function buildCrossRegionRows(
+  leftRows: MarketRow[],
+  rightRows: MarketRow[]
+): MarketRow[] {
+  const rightByKey = new Map<string, MarketRow>()
+  for (const r of rightRows) {
+    const k = marketRowJoinKey(r)
+    if (!rightByKey.has(k)) rightByKey.set(k, r)
+  }
+  const out: MarketRow[] = []
+  for (const l of leftRows) {
+    const k = marketRowJoinKey(l)
+    const r = rightByKey.get(k)
+    if (!r) continue
+    if (!Number.isFinite(l.priceSell) || l.priceSell <= 0) continue
+    if (!Number.isFinite(r.priceSell) || r.priceSell <= 0) continue
+    const avgPrice = (l.price + r.price) / 2
+    out.push({
+      typeId: l.typeId ?? r.typeId ?? null,
+      type: l.type || r.type || '',
+      name: l.name || r.name,
+      dayVolume: Math.min(l.dayVolume, r.dayVolume),
+      dayTurnover: Math.min(l.dayTurnover, r.dayTurnover),
+      price: Number.isFinite(avgPrice) ? avgPrice : l.price,
+      // Для межрегионального сравнения: обе стороны — sell из выбранных регионов.
+      priceSell: l.priceSell,
+      priceBuy: r.priceSell,
+      margin: null,
+      buyToSellRatio: null,
+      spreadIsk: null,
+      entryScore: null,
+    })
+  }
+  return out
+}
+
+function computeCrossRegionMetrics(
+  rows: MarketRow[],
+  options: {
+    highPriceThresholdIsk: number
+    brokerFee: number
+    salesTax: number
+  }
+): MarketRow[] {
+  const { brokerFee, salesTax, highPriceThresholdIsk } = options
+  return rows.map((r) => {
+    const sourceSell = r.priceSell
+    const targetSell = r.priceBuy
+    let margin: number | null = null
+    if (targetSell !== 0 && Number.isFinite(targetSell)) {
+      const cost = sourceSell * (1 + brokerFee)
+      const revenue = targetSell * (1 - salesTax - brokerFee)
+      const m = (revenue - cost) / targetSell
+      margin = Number.isFinite(m) ? m : null
+    }
+
+    let buyToSellRatio: number | null = null
+    const denom = targetSell - sourceSell
+    if (Math.abs(denom) > 1e-9) {
+      const t = (r.price - sourceSell) / denom
+      buyToSellRatio = Number.isFinite(t) ? t : null
+    }
+
+    const spreadIsk =
+      Number.isFinite(sourceSell) && Number.isFinite(targetSell)
+        ? targetSell - sourceSell
+        : null
+
+    const withCore: MarketRow = {
+      ...r,
+      margin,
+      buyToSellRatio,
+      spreadIsk,
+      entryScore: null,
+    }
+
+    return {
+      ...withCore,
+      entryScore: computeEntryScore(withCore, { highPriceThresholdIsk }),
+    }
+  })
 }
 
 function asNumberRange(v: unknown): { min: number | null; max: number | null } | null
@@ -186,6 +294,17 @@ function App()
   const [selectedLocalExportFile, setSelectedLocalExportFile] = useState(
     readLastExportFileName
   )
+  const [compareLeftFile, setCompareLeftFile] = useState('')
+  const [compareRightFile, setCompareRightFile] = useState('')
+  const [compareLeftRowsCache, setCompareLeftRowsCache] = useState<MarketRow[] | null>(null)
+  const [compareRightRowsCache, setCompareRightRowsCache] = useState<MarketRow[] | null>(null)
+  const [compareAppliedFiles, setCompareAppliedFiles] = useState<{
+    leftFile: string
+    rightFile: string
+  } | null>(null)
+  const [isCrossRegionMode, setIsCrossRegionMode] = useState(false)
+  const [priceSellHeader, setPriceSellHeader] = useState<string | null>(null)
+  const [priceBuyHeader, setPriceBuyHeader] = useState<string | null>(null)
 
   const highPriceThresholdIsk = priceThresholdMln * 1_000_000
 
@@ -252,12 +371,16 @@ function App()
   {
     if (fileRows === null) return null
     if (fileRows.length === 0) return []
-    return computeAllMetrics(fileRows, {
+    const metricsOptions = {
       highPriceThresholdIsk,
       brokerFee: brokerFeePct / 100,
       salesTax: salesTaxPct / 100,
-    })
-  }, [fileRows, highPriceThresholdIsk, brokerFeePct, salesTaxPct])
+    }
+    if (isCrossRegionMode) {
+      return computeCrossRegionMetrics(fileRows, metricsOptions)
+    }
+    return computeAllMetrics(fileRows, metricsOptions)
+  }, [fileRows, highPriceThresholdIsk, brokerFeePct, salesTaxPct, isCrossRegionMode])
   const tableEmptyMessage = fileRows === null
     ? 'Нет данных: выберите файл для загрузки таблицы.'
     : 'Ни одна строка не подходит под фильтры'
@@ -268,6 +391,14 @@ function App()
       .filter((f) => /\.(xlsx|xls)$/i.test(f.name))
       .sort((a, b) => b.mtime.localeCompare(a.mtime) || a.name.localeCompare(b.name))
   }, [localExportFiles])
+  const compareLeftRegionLabel = useMemo(
+    () => (compareLeftFile ? detectRegionLabelFromExportFileName(compareLeftFile) : '—'),
+    [compareLeftFile]
+  )
+  const compareRightRegionLabel = useMemo(
+    () => (compareRightFile ? detectRegionLabelFromExportFileName(compareRightFile) : '—'),
+    [compareRightFile]
+  )
 
   const [tickerRegionId, setTickerRegionId] = useState(() =>
     readLastExportRegionId()
@@ -415,35 +546,160 @@ function App()
     }
   }, [])
 
+  const mapRowsFromBuffer = useCallback((buf: ArrayBuffer): MarketRow[] =>
+  {
+    const { rows: raw } = parseMarketWorkbook(buf)
+    const mapped = mapRawRows(raw)
+    if (!mapped.ok)
+    {
+      throw new Error(
+        `Не удалось прочитать строку ${ mapped.rowIndex + 1 }: не хватает колонок (${ mapped.error.column }).`
+      )
+    }
+    return mapped.rows
+  }, [])
+
+  const applyCrossRegionComparison = useCallback((
+    leftRows: MarketRow[],
+    rightRows: MarketRow[],
+    leftFile: string,
+    rightFile: string
+  ) =>
+  {
+    const merged = buildCrossRegionRows(leftRows, rightRows)
+    const fromLabel = detectRegionLabelFromExportFileName(leftFile)
+    const toLabel = detectRegionLabelFromExportFileName(rightFile)
+    setFileRows(merged)
+    setIsCrossRegionMode(true)
+    setCopiedNameKeys(new Set())
+    setPriceSellHeader(`Sell ${ fromLabel }, ISK`)
+    setPriceBuyHeader(`Sell ${ toLabel }, ISK`)
+    setExportMsg(
+      merged.length > 0
+        ? `Сравнение регионов (${ fromLabel } → ${ toLabel }): совпавших позиций ${ merged.length }.`
+        : `Сравнение регионов (${ fromLabel } → ${ toLabel }): совпадений не найдено.`
+    )
+  }, [])
+
   const loadFromBuffer = useCallback(async (buf: ArrayBuffer) =>
   {
     setError(null)
     setLoading(true)
     try
     {
-      const { rows: raw } = parseMarketWorkbook(buf)
-      const mapped = mapRawRows(raw)
-      if (!mapped.ok)
-      {
-        setError(
-          `Не удалось прочитать строку ${ mapped.rowIndex + 1 }: не хватает колонок (${ mapped.error.column }).`
-        )
-        setFileRows(null)
-        setCopiedNameKeys(new Set())
-        return
-      }
-      setFileRows(mapped.rows)
+      const rows = mapRowsFromBuffer(buf)
+      setFileRows(rows)
+      setIsCrossRegionMode(false)
+      setCompareLeftRowsCache(null)
+      setCompareRightRowsCache(null)
+      setCompareAppliedFiles(null)
+      setPriceSellHeader(null)
+      setPriceBuyHeader(null)
       setCopiedNameKeys(new Set())
     } catch (e)
     {
       setError(e instanceof Error ? e.message : 'Ошибка чтения файла')
       setFileRows(null)
+      setIsCrossRegionMode(false)
       setCopiedNameKeys(new Set())
     } finally
     {
       setLoading(false)
     }
-  }, [])
+  }, [mapRowsFromBuffer])
+
+  const onApplyCrossRegionFiles = useCallback(async () =>
+  {
+    if (!compareLeftFile || !compareRightFile) return
+    if (compareLeftFile === compareRightFile)
+    {
+      setExportMsg('Выберите два разных файла для сравнения регионов.')
+      return
+    }
+    setError(null)
+    setExportMsg(null)
+    setLoading(true)
+    try
+    {
+      const [leftRes, rightRes] = await Promise.all([
+        fetch(devExportFileUrl(compareLeftFile)),
+        fetch(devExportFileUrl(compareRightFile)),
+      ])
+      if (!leftRes.ok || !rightRes.ok)
+      {
+        setExportMsg('Один из выбранных файлов не найден в exports/. Обновите список.')
+        return
+      }
+      const [leftBuf, rightBuf] = await Promise.all([
+        leftRes.arrayBuffer(),
+        rightRes.arrayBuffer(),
+      ])
+      const [leftRows, rightRows] = [
+        mapRowsFromBuffer(leftBuf),
+        mapRowsFromBuffer(rightBuf),
+      ]
+      setCompareLeftRowsCache(leftRows)
+      setCompareRightRowsCache(rightRows)
+      setCompareAppliedFiles({
+        leftFile: compareLeftFile,
+        rightFile: compareRightFile,
+      })
+      applyCrossRegionComparison(
+        leftRows,
+        rightRows,
+        compareLeftFile,
+        compareRightFile
+      )
+    } catch (e)
+    {
+      setExportMsg(e instanceof Error ? e.message : 'Ошибка сравнения файлов регионов')
+    } finally
+    {
+      setLoading(false)
+    }
+  }, [
+    compareLeftFile,
+    compareRightFile,
+    mapRowsFromBuffer,
+    applyCrossRegionComparison,
+  ])
+
+  const onSwapCompareFiles = useCallback(() =>
+  {
+    if (!compareLeftFile || !compareRightFile) return
+    const nextLeft = compareRightFile
+    const nextRight = compareLeftFile
+    setCompareLeftFile(nextLeft)
+    setCompareRightFile(nextRight)
+    if (
+      compareAppliedFiles &&
+      compareLeftRowsCache &&
+      compareRightRowsCache &&
+      compareAppliedFiles.leftFile === compareLeftFile &&
+      compareAppliedFiles.rightFile === compareRightFile
+    )
+    {
+      setCompareLeftRowsCache(compareRightRowsCache)
+      setCompareRightRowsCache(compareLeftRowsCache)
+      setCompareAppliedFiles({
+        leftFile: nextLeft,
+        rightFile: nextRight,
+      })
+      applyCrossRegionComparison(
+        compareRightRowsCache,
+        compareLeftRowsCache,
+        nextLeft,
+        nextRight
+      )
+    }
+  }, [
+    compareLeftFile,
+    compareRightFile,
+    compareAppliedFiles,
+    compareLeftRowsCache,
+    compareRightRowsCache,
+    applyCrossRegionComparison,
+  ])
 
   const onOpenSelectedLocalExportFile = useCallback(async () =>
   {
@@ -519,6 +775,12 @@ function App()
     [loadFromBuffer]
   )
 
+  const onExportBarOpenedFile = useCallback((fileName: string) =>
+  {
+    setSelectedLocalExportFile(fileName)
+    void refreshLocalExportFiles()
+  }, [refreshLocalExportFiles])
+
   const onPreset = useCallback((id: string) =>
   {
     setColumnFilters((prev) =>
@@ -572,6 +834,27 @@ function App()
         return prev
       }
       return localExportFilesSorted[0]!.name
+    })
+  }, [localExportFilesSorted])
+
+  useEffect(() =>
+  {
+    if (!isDevExportServer) return
+    if (localExportFilesSorted.length === 0)
+    {
+      setCompareLeftFile('')
+      setCompareRightFile('')
+      return
+    }
+    setCompareLeftFile((prev) =>
+    {
+      if (prev && localExportFilesSorted.some((f) => f.name === prev)) return prev
+      return localExportFilesSorted[0]!.name
+    })
+    setCompareRightFile((prev) =>
+    {
+      if (prev && localExportFilesSorted.some((f) => f.name === prev)) return prev
+      return localExportFilesSorted[1]?.name ?? localExportFilesSorted[0]!.name
     })
   }, [localExportFilesSorted])
 
@@ -711,6 +994,7 @@ function App()
             <div className="eve-panel p-1.5">
               <ExportBar
                 onLoadBuffer={ loadFromBuffer }
+                onOpenedExportFile={ onExportBarOpenedFile }
                 disabled={ loading }
                 hideReadyExportsSection
                 hideLocalFileOpenSection
@@ -727,7 +1011,7 @@ function App()
               { (isDevExportServer || exportMsg) && (
                 <>
                   <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                    <h3 className="eve-section-title mb-2">Источник таблицы</h3>
+                    <h3 className="eve-section-title mb-2">Торговля в одном регионе</h3>
                     { isDevExportServer && (
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
@@ -789,6 +1073,89 @@ function App()
                     ) }
                   </section>
 
+                  { isDevExportServer && (
+                    <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                      <h3 className="eve-section-title mb-2">
+                        Торговля между регионами
+                      </h3>
+                      <div className="flex flex-col gap-2.5">
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-eve-muted">
+                          <span className="shrink-0">Регион 1</span>
+                          <select
+                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            value={ compareLeftFile }
+                            onChange={ (e) => setCompareLeftFile(e.target.value) }
+                            disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
+                          >
+                            { localExportFilesSorted.length === 0 ? (
+                              <option value="">— папка пуста —</option>
+                            ) : (
+                              localExportFilesSorted.map((f) => (
+                                <option key={ `cmp-left-${ f.name }` } value={ f.name }>
+                                  { f.name }
+                                </option>
+                              ))
+                            ) }
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 items-center gap-2 text-xs text-eve-muted">
+                          <span className="shrink-0">Регион 2</span>
+                          <select
+                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            value={ compareRightFile }
+                            onChange={ (e) => setCompareRightFile(e.target.value) }
+                            disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
+                          >
+                            { localExportFilesSorted.length === 0 ? (
+                              <option value="">— папка пуста —</option>
+                            ) : (
+                              localExportFilesSorted.map((f) => (
+                                <option key={ `cmp-right-${ f.name }` } value={ f.name }>
+                                  { f.name }
+                                </option>
+                              ))
+                            ) }
+                          </select>
+                        </label>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex min-w-0 items-center gap-1">
+                            <div
+                              className="min-w-0 truncate rounded border border-eve-border/45 bg-eve-bg/55 px-1.5 py-0.5 text-[10px] font-semibold text-eve-gold"
+                              title="Выбранные регионы сравнения"
+                            >
+                              { compareLeftRegionLabel } → { compareRightRegionLabel }
+                            </div>
+                            <button
+                              type="button"
+                              onClick={ onSwapCompareFiles }
+                              disabled={ loading || localExportLoading }
+                              className="inline-flex items-center justify-center rounded border border-eve-border/80 bg-eve-bg/70 p-1.5 text-eve-bright/95 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                              title="Поменять регионы местами"
+                              aria-label="Поменять выбранные регионы местами"
+                            >
+                              <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={ () => void onApplyCrossRegionFiles() }
+                            disabled={
+                              loading ||
+                              localExportLoading ||
+                              !compareLeftFile ||
+                              !compareRightFile
+                            }
+                            className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                          >
+                            Применить сравнение
+                          </button>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  ) }
+
                   <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                     <h3 className="eve-section-title mb-2">Готовые выгрузки</h3>
                     <div className="flex flex-wrap gap-2">
@@ -828,6 +1195,7 @@ function App()
                     <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
                     <ExportBar
                       onLoadBuffer={ loadFromBuffer }
+                      onOpenedExportFile={ onExportBarOpenedFile }
                       disabled={ loading }
                       hideReadyExportsSection
                       hideLocalFileOpenSection
@@ -949,6 +1317,8 @@ function App()
               highPriceThresholdIsk={ highPriceThresholdIsk }
               copiedNameKeys={ copiedNameKeys }
               onNameCopied={ onNameCopied }
+              priceSellHeader={ priceSellHeader }
+              priceBuyHeader={ priceBuyHeader }
             />
           </div>
             </div>

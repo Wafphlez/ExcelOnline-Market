@@ -95,6 +95,10 @@ type MarketTableProps = {
   /** Ключи marketRowCopyKey: название копировали в этой сессии файла */
   copiedNameKeys: ReadonlySet<string>
   onNameCopied: (key: string) => void
+  /** Переопределение заголовка колонки priceSell (например для межрегионального сравнения) */
+  priceSellHeader?: string | null
+  /** Переопределение заголовка колонки priceBuy (например для межрегионального сравнения) */
+  priceBuyHeader?: string | null
 }
 
 const emptyText = ''
@@ -122,6 +126,8 @@ export function MarketTable({
   highPriceThresholdIsk,
   copiedNameKeys,
   onNameCopied,
+  priceSellHeader = null,
+  priceBuyHeader = null,
 }: MarketTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'entryScore', desc: true },
@@ -174,7 +180,11 @@ export function MarketTable({
                     <span className="sr-only">{def.short} — {def.description}</span>
                   </span>
                 )
-              : def.short,
+              : id === 'priceSell' && priceSellHeader
+                ? priceSellHeader
+                : id === 'priceBuy' && priceBuyHeader
+                  ? priceBuyHeader
+                  : def.short,
           filterFn: isText
             ? textFilter
             : filterAsPercentOfRatio
@@ -289,7 +299,7 @@ export function MarketTable({
           meta: { description: def.description, kind: def.kind },
         } as ColumnDef<MarketRow>
       }),
-    [highPriceThresholdIsk, copiedNameKeys, onNameCopied]
+    [highPriceThresholdIsk, copiedNameKeys, onNameCopied, priceSellHeader, priceBuyHeader]
   )
 
   const table = useReactTable({

@@ -86,6 +86,7 @@ function readEnableMarketExportLogs(): boolean {
 
 type ExportBarProps = {
   onLoadBuffer: (buf: ArrayBuffer) => void | Promise<void>
+  onOpenedExportFile?: (fileName: string) => void
   disabled?: boolean
   hideReadyExportsSection?: boolean
   hideLocalFileOpenSection?: boolean
@@ -232,6 +233,7 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
 
 export function ExportBar({
   onLoadBuffer,
+  onOpenedExportFile,
   disabled,
   hideReadyExportsSection = false,
   hideLocalFileOpenSection = false,
@@ -578,6 +580,7 @@ export function ExportBar({
       setMsg(`Сохранено: exports/${r.fileName}`)
       await refreshList()
       setSelectedExportFile(r.fileName)
+      onOpenedExportFile?.(r.fileName)
       try {
         localStorage.setItem(LS_LAST_EXPORT_FILE, r.fileName)
       } catch {
@@ -650,6 +653,7 @@ export function ExportBar({
       )
       await refreshList()
       setSelectedExportFile(result.fileName)
+      onOpenedExportFile?.(result.fileName)
       try {
         localStorage.setItem(LS_LAST_EXPORT_FILE, result.fileName)
       } catch {
@@ -718,6 +722,7 @@ export function ExportBar({
       }
       const buf = await res.arrayBuffer()
       await onLoadBuffer(buf)
+      onOpenedExportFile?.(selectedExportFile)
       setMsg(`Открыт: ${selectedExportFile}`)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Ошибка открытия')

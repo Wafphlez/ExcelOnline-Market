@@ -562,10 +562,9 @@ async function esiFetch<T>(
       throw new Error('ESI: page exhausted (skip queued request)')
     }
     const t0 = Date.now()
-    const { body, status, retryAfterSec } = await new Promise<{
+    const { body, status } = await new Promise<{
       body: string
       status: number
-      retryAfterSec: number
     }>((resolve, reject) => {
       const req = https.get(
         url,
@@ -579,7 +578,6 @@ async function esiFetch<T>(
             resolve({
               body: Buffer.concat(chunks).toString('utf8'),
               status: incoming.statusCode ?? 0,
-              retryAfterSec: Number(incoming.headers['retry-after'] ?? 0),
             })
           })
         }
