@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import
   {
     aggregateMarketFeeDeltasFromJournal,
+    aggregateMarketFeeDeltasFromJournalEstimated,
     aggregateTradeProfitByType,
     aggregateTradesByDay,
     buildWalletBalanceSeries,
@@ -313,6 +314,122 @@ describe('capitalMetrics', () => {
       buildWalletJournalRefIdToTypeMap(tr)
     )
     expect(m.get(10)).toBe(-50)
+  })
+
+  it('aggregateMarketFeeDeltasFromJournalEstimated spreads unmatched tax by sell isk', () => {
+    const journal: EveWalletJournalEntry[] = [
+      { id: 1, date: '2024-01-10T00:00:00Z', ref_type: 'transaction_tax', amount: -100 },
+    ]
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 1,
+        location_id: 1,
+        unit_price: 10,
+        quantity: 10,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 2,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 2,
+        location_id: 1,
+        unit_price: 30,
+        quantity: 10,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const m = aggregateMarketFeeDeltasFromJournalEstimated(
+      journal,
+      buildWalletTransactionIdToTypeMap(tr),
+      buildWalletJournalRefIdToTypeMap(tr),
+      tr
+    )
+    expect(m.get(1)).toBeCloseTo(-25, 5)
+    expect(m.get(2)).toBeCloseTo(-75, 5)
+  })
+
+  it('aggregateMarketFeeDeltasFromJournalEstimated still applies strict match first', () => {
+    const journal: EveWalletJournalEntry[] = [
+      {
+        id: 1,
+        date: '2024-01-10T00:00:00Z',
+        ref_type: 'transaction_tax',
+        amount: -10,
+        context_id: 2,
+        context_id_type: 'market_transaction_id',
+      },
+      { id: 2, date: '2024-01-10T00:00:00Z', ref_type: 'transaction_tax', amount: -90 },
+    ]
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 2,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 100,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const m = aggregateMarketFeeDeltasFromJournalEstimated(
+      journal,
+      buildWalletTransactionIdToTypeMap(tr),
+      buildWalletJournalRefIdToTypeMap(tr),
+      tr
+    )
+    expect(m.get(10)).toBe(-100)
+  })
+
+  it('aggregateMarketFeeDeltasFromJournalEstimated splits unmatched broker by sell/buy pools', () => {
+    const journal: EveWalletJournalEntry[] = [
+      { id: 1, date: '2024-01-10T00:00:00Z', ref_type: 'brokers_fee', amount: -300 },
+    ]
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 1,
+        location_id: 1,
+        unit_price: 100,
+        quantity: 1,
+        client_id: 0,
+        is_buy: true,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 2,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 2,
+        location_id: 1,
+        unit_price: 200,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const m = aggregateMarketFeeDeltasFromJournalEstimated(
+      journal,
+      buildWalletTransactionIdToTypeMap(tr),
+      buildWalletJournalRefIdToTypeMap(tr),
+      tr
+    )
+    // Σ sell=200, Σ buy=100 → 2/3 broker to sell side (type 2), 1/3 to buy (type 1)
+    expect(m.get(1)).toBeCloseTo(-100, 5)
+    expect(m.get(2)).toBeCloseTo(-200, 5)
   })
 
   it('aggregateMarketFeeDeltasFromJournal maps brokers_fee via journal ref_id', () => {

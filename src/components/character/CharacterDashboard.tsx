@@ -21,6 +21,7 @@ import
     ComposedChart,
     Legend,
     Line,
+    LineChart,
     ResponsiveContainer,
     Tooltip,
     XAxis,
@@ -38,7 +39,7 @@ import { getAccessToken, getRefreshToken } from '../../lib/eve/authStore'
 import { fetchTypeNameMap } from '../../lib/eve/characterEsi'
 import
   {
-    aggregateMarketFeeDeltasFromJournal,
+    aggregateMarketFeeDeltasFromJournalEstimated,
     aggregateMarketFeesByDay,
     aggregateTradeProfitByType,
     aggregateTradesByDay,
@@ -48,6 +49,7 @@ import
     filterJournalInRange,
     filterTransactionsInRange,
     findDashboardRange,
+    MS_DAY,
     oldestJournalTimeMs,
     sumJournalInRange,
     type DashboardRangeId,
@@ -167,6 +169,38 @@ export function CharacterDashboard(
     return aggregateTradesByDay(tx)
   }, [state, period])
 
+  /**
+   * Рыночные транзакции за скользящие 30 дней: ровно 30 точек (дата UTC)
+   * — для линейного графика с нулевыми днями без сделок.
+   */
+  const transactionsLast30DaysSeries = useMemo(() =>
+  {
+    if (state.status !== 'ready') return []
+    const toMs = Date.now()
+    const fromMs = toMs - 30 * MS_DAY
+    const tx = filterTransactionsInRange(
+      state.data.transactions,
+      fromMs,
+      toMs
+    )
+    const agg = aggregateTradesByDay(tx)
+    const byDay = new Map(agg.map((d) => [d.day, d]))
+    const rows: { day: string; netIsk: number }[] = []
+    for (let i = 29; i >= 0; i--)
+    {
+      const d = new Date(toMs - i * MS_DAY)
+      const key = d.toISOString().slice(0, 10)
+      const r = byDay.get(key)
+      const sell = r?.sellIsk ?? 0
+      const buy = r?.buyIsk ?? 0
+      rows.push({
+        day: key,
+        netIsk: sell - buy,
+      })
+    }
+    return rows
+  }, [state])
+
   const tradeNetSeries = useMemo(() =>
   {
     if (state.status !== 'ready' || !period) return []
@@ -221,10 +255,16 @@ export function CharacterDashboard(
       period.fromMs,
       period.toMs
     )
-    return aggregateMarketFeeDeltasFromJournal(
+    const tx = filterTransactionsInRange(
+      state.data.transactions,
+      period.fromMs,
+      period.toMs
+    )
+    return aggregateMarketFeeDeltasFromJournalEstimated(
       journalR,
       buildWalletTransactionIdToTypeMap(state.data.transactions),
-      buildWalletJournalRefIdToTypeMap(state.data.transactions)
+      buildWalletJournalRefIdToTypeMap(state.data.transactions),
+      tx
     )
   }, [state, period])
 
@@ -547,12 +587,44 @@ export function CharacterDashboard(
                     <code className="text-eve-bright/75">brokers_fee</code>
                     { ' ' }(ставка, переставление) и{ ' ' }
                     <code className="text-eve-bright/75">transaction_tax</code>
-                    { ' ' }— в «Прибыль» с тем знаком, что в кошельке (оба обычно уходят в минус).
-                    Распределение по типу — по связке{ ' ' }
-                    <code className="text-eve-bright/75">context_id</code> → market transaction
-                    { ' ' }или{ ' ' }
-                    <code className="text-eve-bright/75">ref_id</code> → journal_id сделки; без связи —
-                    строка &laquo;Прочие комиссии (журнал)&raquo;.
+                    { ' ' }— в «Прибыль» с тем знаком, что в кошельке. Если ESI даёт привязку к сделке (
+                    { ' ' }
+                    <code className="text-eve-bright/75">context_id</code>
+                    { ' ' }/
+                    { ' ' }
+                    <code className="text-eve-bright/75">ref_id</code>
+                    { ' ' }
+                    к market transaction), комиссия идёт в этот тип. Иначе — оценка: налог
+                    { ' ' }
+                    <code className="text-eve-bright/75">transaction_tax</code>
+                    { ' ' }по{ ' ' }
+                    <code className="text-eve-bright/75">sell</code>
+                    { ' ' }по типу; брокер — доля
+                    { ' ' }
+                    <code className="text-eve-bright/75">Σ sell</code>
+                    { ' ' }/ (
+                    { ' ' }
+                    <code className="text-eve-bright/75">Σ sell</code>
+                    { ' ' }+
+                    { ' ' }
+                    <code className="text-eve-bright/75">Σ buy</code>
+                    { ' ' })
+                    { ' ' }и доля
+                    { ' ' }
+                    <code className="text-eve-bright/75">Σ buy</code>
+                    { ' ' }/ (
+                    { ' ' }
+                    <code className="text-eve-bright/75">Σ sell</code>
+                    { ' ' }+
+                    { ' ' }
+                    <code className="text-eve-bright/75">Σ buy</code>
+                    { ' ' }
+                    ) по окну, затем по типу по
+                    { ' ' }
+                    <code className="text-eve-bright/75">sell</code>
+                    { ' ' }и{ ' ' }
+                    <code className="text-eve-bright/75">buy</code>
+                    { ' ' }соответственно. Остаток без сделок — &laquo;Прочие комиссии (журнал)&raquo;.
                   </p>
                   <p className="mb-1.5 text-[10px] text-eve-muted/90">
                     Период: { period?.label ?? '—' }, топ { ' ' }
@@ -819,6 +891,69 @@ export function CharacterDashboard(
                   ) }
                 </div>
 
+                <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <h3 className="eve-section-title mb-2">Транзакции за последние 30 дней</h3>
+                  <p className="mb-1 text-[10px] text-eve-muted/90">
+                    Одна линия: за день{ ' ' }
+                    <code className="text-eve-bright/75">продажа − покупка</code>
+                    { ' ' }по{ ' ' }
+                    <code className="text-eve-bright/75">wallet/transactions</code>
+                    { ' ' }(30 суток, скользящее окно; дни без сделок — 0).
+                  </p>
+                  { transactionsLast30DaysSeries.length > 0 ? (
+                    <div className="h-[260px] w-full min-w-0 sm:h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={ transactionsLast30DaysSeries }
+                          margin={ { top: 8, right: 8, left: 4, bottom: 0 } }
+                        >
+                          <CartesianGrid
+                            stroke={ CHART_COL.grid }
+                            strokeDasharray="3 3"
+                          />
+                          <XAxis
+                            dataKey="day"
+                            tick={ { fontSize: 8, fill: CHART_COL.tick } }
+                            tickFormatter={ (v) => String(v).slice(5, 10) }
+                            minTickGap={ 2 }
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis
+                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
+                            tickFormatter={ (n) => formatInteger(n as number) }
+                            width={ 52 }
+                          />
+                          <Tooltip
+                            contentStyle={ {
+                              background: 'rgba(16, 20, 28, 0.96)',
+                              border: '1px solid rgba(123, 142, 176, 0.45)',
+                              fontSize: 11,
+                            } }
+                            labelFormatter={ (d) => `Дата: ${ d }` }
+                            formatter={ (v: number) =>
+                            {
+                              if (v == null || !Number.isFinite(v)) return [ '—', 'Продажа − покупка' ]
+                              return [ iskFormatter(v), 'Продажа − покупка' ]
+                            } }
+                          />
+                          <Legend />
+                          <Line
+                            type="monotone"
+                            dataKey="netIsk"
+                            name="Продажа − покупка"
+                            stroke={ CHART_COL.wallet }
+                            strokeWidth={ 2.5 }
+                            dot={ false }
+                            activeDot={ { r: 3 } }
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-eve-muted">Нет данных ESI.</p>
+                  ) }
+                </div>
+
                 <div className="w-full min-w-0 max-w-full">
                   <ActiveMarketOrdersBlock
                     data={ state.data.activeMarketOrders }
@@ -868,11 +1003,12 @@ export function CharacterDashboard(
                             labelFormatter={ (l) => `Дата: ${ l }` }
                             formatter={ (v: number, name) =>
                             {
-                              if (name === 'sellIncome') return [ iskFormatter(v), 'Продажи за день' ]
-                              if (name === 'buyExpense') return [ iskFormatter(v), 'Покупки за день' ]
-                              if (name === 'feeDelta') return [ iskFormatter(v), 'Комиссии/налоги (journal)' ]
-                              if (name === 'netProfit') return [ iskFormatter(v), 'Чистый результат за день' ]
-                              return [ iskFormatter(v), 'Накопительный чистый результат' ]
+                              // Recharts передаёт сюда `name` с Bar/Line, не `dataKey`
+                              if (name === 'Продажи за день' || name === 'sellIncome') return [ iskFormatter(v), 'Продажи за день' ]
+                              if (name === 'Покупки за день' || name === 'buyExpense') return [ iskFormatter(v), 'Покупки за день' ]
+                              if (name === 'Комиссии/налоги' || name === 'feeDelta') return [ iskFormatter(v), 'Комиссии/налоги' ]
+                              if (name === 'Накопительный чистый результат' || name === 'cumulativeNet') return [ iskFormatter(v), 'Накопительный чистый результат' ]
+                              return [ iskFormatter(v), name ]
                             } }
                           />
                           <Legend />

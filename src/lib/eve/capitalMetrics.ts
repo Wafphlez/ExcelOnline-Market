@@ -398,6 +398,138 @@ export function aggregateMarketFeeDeltasFromJournal(
   return out
 }
 
+function refTypeIsSalesTax(ref: string): boolean
+{
+  const t = ref.trim().toLowerCase().split('-').join('_')
+  return t === 'transaction_tax' || t === 'sales_tax'
+}
+
+/**
+ * Брутто buy/sell по `type_id` за выбранные сделки (для весов оценочного распределения комиссий).
+ */
+export function grossBuySellIskByType(
+  transactions: EveWalletTransaction[]
+): Map<number, { buyIsk: number; sellIsk: number }>
+{
+  const m = new Map<number, { buyIsk: number; sellIsk: number }>()
+  for (const t of transactions)
+  {
+    const line = t.unit_price * t.quantity
+    if (!Number.isFinite(line)) continue
+    const g = m.get(t.type_id) ?? { buyIsk: 0, sellIsk: 0 }
+    if (t.is_buy) g.buyIsk += line
+    else g.sellIsk += line
+    m.set(t.type_id, g)
+  }
+  return m
+}
+
+function distributeAmountByWeights(
+  totalAmount: number,
+  weights: Map<number, number>
+): Map<number, number>
+{
+  const pos = [...weights.entries()].filter(
+    ([, w]) => Number.isFinite(w) && w > 0
+  )
+  if (pos.length === 0 || !Number.isFinite(totalAmount) || totalAmount === 0)
+  {
+    return new Map()
+  }
+  const wsum = pos.reduce((s, [, w]) => s + w, 0)
+  if (wsum <= 0) return new Map()
+  const out = new Map<number, number>()
+  let acc = 0
+  for (let i = 0; i < pos.length; i++)
+  {
+    const [id, w] = pos[i]!
+    if (i === pos.length - 1) out.set(id, totalAmount - acc)
+    else
+    {
+      const part = (totalAmount * w) / wsum
+      out.set(id, part)
+      acc += part
+    }
+  }
+  return out
+}
+
+/**
+ * Как `aggregateMarketFeeDeltasFromJournal`, но непривязанные к сделке суммы
+ * `transaction_tax` / `sales_tax` распределяются пропорционально обороту продаж по типу,
+ * `brokers_fee` / `broker_fee` без привязки: сумма делится по глобальным `Σ sell` / `Σ buy`,
+ * затем по `sellIsk` и `buyIsk` по типам. Остаток при нулевом обороте — в `UNMATCHED_FEE_TYPE_ID`.
+ */
+export function aggregateMarketFeeDeltasFromJournalEstimated(
+  journalInRange: EveWalletJournalEntry[],
+  transactionIdToType: ReadonlyMap<number, number>,
+  journalRefIdToType: ReadonlyMap<number, number>,
+  transactionsInRange: EveWalletTransaction[]
+): Map<number, number>
+{
+  const out = new Map<number, number>()
+  let unmatchedTax = 0
+  let unmatchedBroker = 0
+  for (const j of journalInRange)
+  {
+    if (!isMarketFeeRefType(j.ref_type)) continue
+    const amt = j.amount
+    if (!Number.isFinite(amt)) continue
+    const resolved = resolveTypeIdForMarketFee(
+      j,
+      transactionIdToType,
+      journalRefIdToType
+    )
+    if (resolved != null)
+    {
+      out.set(resolved, (out.get(resolved) ?? 0) + amt)
+    } else if (refTypeIsSalesTax(j.ref_type)) unmatchedTax += amt
+    else unmatchedBroker += amt
+  }
+  const gross = grossBuySellIskByType(transactionsInRange)
+  const sellW = new Map<number, number>()
+  const buyW = new Map<number, number>()
+  for (const [id, g] of gross)
+  {
+    if (g.sellIsk > 0) sellW.set(id, g.sellIsk)
+    if (g.buyIsk > 0) buyW.set(id, g.buyIsk)
+  }
+  const sumSell = [...sellW.values()].reduce((a, b) => a + b, 0)
+  const sumBuy = [...buyW.values()].reduce((a, b) => a + b, 0)
+  const activity = sumSell + sumBuy
+  for (const [id, d] of distributeAmountByWeights(unmatchedTax, sellW))
+  {
+    out.set(id, (out.get(id) ?? 0) + d)
+  }
+  if (unmatchedTax !== 0 && sellW.size === 0)
+  {
+    out.set(
+      UNMATCHED_FEE_TYPE_ID,
+      (out.get(UNMATCHED_FEE_TYPE_ID) ?? 0) + unmatchedTax
+    )
+  }
+  if (unmatchedBroker !== 0 && activity > 0)
+  {
+    const toSellPool = unmatchedBroker * (sumSell / activity)
+    const toBuyPool = unmatchedBroker - toSellPool
+    for (const [id, d] of distributeAmountByWeights(toSellPool, sellW))
+    {
+      out.set(id, (out.get(id) ?? 0) + d)
+    }
+    for (const [id, d] of distributeAmountByWeights(toBuyPool, buyW))
+    {
+      out.set(id, (out.get(id) ?? 0) + d)
+    }
+  } else if (unmatchedBroker !== 0)
+  {
+    out.set(
+      UNMATCHED_FEE_TYPE_ID,
+      (out.get(UNMATCHED_FEE_TYPE_ID) ?? 0) + unmatchedBroker
+    )
+  }
+  return out
+}
+
 export function filterJournalInRange(
   journal: EveWalletJournalEntry[],
   fromMs: number,
