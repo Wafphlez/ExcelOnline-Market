@@ -731,7 +731,7 @@ export function CharacterDashboard(
                   { tradeProfitWithNames.length > 0 ? (
                     <div className="max-h-[min(65vh,520px)] overflow-auto rounded border border-eve-border/40">
                       <table className="w-full min-w-0 text-left text-[11px] text-eve-bright/90">
-                        <thead className="sticky top-0 z-[1] bg-eve-elevated/95 text-eve-muted">
+                        <thead className="sticky top-0 z-10 bg-eve-elevated/95 text-eve-muted shadow-[0_1px_0_0_rgba(74,88,120,0.35)]">
                           <tr>
                             <th className="px-2 py-1.5 pr-1 font-semibold">Тип</th>
                             <th
@@ -801,13 +801,13 @@ export function CharacterDashboard(
                               title={ shareTitle }
                             >
                               <td
-                                className="relative z-[1] max-w-[9rem] truncate px-2 py-1.5 pr-1 font-medium text-eve-cyan/95"
+                                className="max-w-[9rem] truncate px-2 py-1.5 pr-1 font-medium text-eve-cyan/95"
                                 title={ r.name }
                               >
                                 { r.name }
                               </td>
                               <td
-                                className="relative z-[1] px-1 py-1.5 pr-2 align-middle"
+                                className="px-1 py-1.5 pr-2 align-middle"
                                 title={ shareTitle }
                               >
                                 <span
@@ -822,11 +822,11 @@ export function CharacterDashboard(
                                   { shareText }
                                 </span>
                               </td>
-                              <td className="relative z-[1] px-1 py-1.5 text-right tabular-nums text-eve-bright/95">
+                              <td className="px-1 py-1.5 text-right tabular-nums text-eve-bright/95">
                                 { formatInteger(r.quantitySold) }
                               </td>
                               <td
-                                className={ `relative z-[1] px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
+                                className={ `px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
                                   r.profit >= 0
                                     ? 'eve-green'
                                     : 'eve-red'
