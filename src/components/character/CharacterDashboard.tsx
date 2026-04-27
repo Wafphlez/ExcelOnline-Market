@@ -4,6 +4,7 @@ import
     useEffect,
     useMemo,
     useState,
+    type CSSProperties,
     type ReactNode,
   } from 'react'
 import
@@ -746,7 +747,7 @@ export function CharacterDashboard(
                           </tr>
                         </thead>
                         <tbody>
-                          { tradeProfitWithNames.map((r) =>
+                          { tradeProfitWithNames.map((r, i) =>
                           {
                             const profitShare = tradeProfitAbsSum > 0
                               ? (r.profit / tradeProfitAbsSum) * 100
@@ -768,58 +769,64 @@ export function CharacterDashboard(
                               else s = a.toFixed(0)
                               return neg ? `−${ s }%` : `${ s }%`
                             })()
+                            const stripe
+                              = i % 2 === 0
+                                ? 'bg-eve-bg/15'
+                                : ''
+                            const shareTitle = tradeProfitAbsSum > 0
+                              ? `${ profitShare.toFixed(1) }% (100×прибыль/Σ|прибыль|), Σ|приб.|=${ formatIsk(
+                                tradeProfitAbsSum
+                              ) } ISK`
+                              : '—'
+                            const w = Math.min(100, shareBarW)
+                            const barFill
+                              = r.profit > 0
+                                ? 'rgb(var(--eve-green-rgb) / 0.26)'
+                                : r.profit < 0
+                                    ? 'rgb(var(--eve-red-rgb) / 0.26)'
+                                    : null
+                            const rowBgStyle: CSSProperties | undefined
+                              = barFill != null && w > 0.001
+                                ? {
+                                    backgroundImage: `linear-gradient(to right, ${ barFill } 0%, ${ barFill } ${ w }%, transparent ${ w }%)`,
+                                  }
+                                : undefined
                             return (
                             <tr
                               key={ r.type_id }
-                              className="border-t border-eve-border/25 odd:bg-eve-bg/15"
+                              className={ `border-t border-eve-border/25 ${
+                                i === 0 ? 'border-t-0' : ''
+                              } ${ stripe }` }
+                              style={ rowBgStyle }
+                              title={ shareTitle }
                             >
                               <td
-                                className="max-w-[9rem] truncate px-2 py-1.5 pr-1 font-medium text-eve-cyan/95"
+                                className="relative z-[1] max-w-[9rem] truncate px-2 py-1.5 pr-1 font-medium text-eve-cyan/95"
                                 title={ r.name }
                               >
                                 { r.name }
                               </td>
-                              <td className="px-1 py-1.5 pr-2 align-middle">
-                                <div
-                                  className="flex min-w-[5rem] max-w-[10rem] items-center gap-1.5"
-                                  title={ tradeProfitAbsSum > 0
-                                    ? `${ profitShare.toFixed(1) }% (100×прибыль/Σ|прибыль|), Σ|приб.|=${ formatIsk(
-                                      tradeProfitAbsSum
-                                    ) } ISK`
-                                    : '—' }
+                              <td
+                                className="relative z-[1] px-1 py-1.5 pr-2 align-middle"
+                                title={ shareTitle }
+                              >
+                                <span
+                                  className={ `tabular-nums text-[9px] ${
+                                    r.profit > 0
+                                      ? 'eve-green'
+                                      : r.profit < 0
+                                          ? 'eve-red'
+                                          : 'text-eve-muted/70'
+                                  }` }
                                 >
-                                  <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-sm bg-eve-bg/55 ring-1 ring-inset ring-eve-border/30">
-                                    { r.profit > 0 && (
-                                    <div
-                                      className="h-full rounded-sm bg-eve-green"
-                                      style={ { width: `${ Math.min(100, shareBarW) }%` } }
-                                    />
-                                    ) }
-                                    { r.profit < 0 && (
-                                    <div
-                                      className="h-full rounded-sm bg-eve-red"
-                                      style={ { width: `${ Math.min(100, shareBarW) }%` } }
-                                    />
-                                    ) }
-                                  </div>
-                                  <span
-                                    className={ `shrink-0 tabular-nums text-[9px] ${
-                                      r.profit > 0
-                                        ? 'eve-green'
-                                        : r.profit < 0
-                                            ? 'eve-red'
-                                            : 'text-eve-muted/70'
-                                    }` }
-                                  >
-                                    { shareText }
-                                  </span>
-                                </div>
+                                  { shareText }
+                                </span>
                               </td>
-                              <td className="px-1 py-1.5 text-right tabular-nums text-eve-bright/95">
+                              <td className="relative z-[1] px-1 py-1.5 text-right tabular-nums text-eve-bright/95">
                                 { formatInteger(r.quantitySold) }
                               </td>
                               <td
-                                className={ `px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
+                                className={ `relative z-[1] px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
                                   r.profit >= 0
                                     ? 'eve-green'
                                     : 'eve-red'
