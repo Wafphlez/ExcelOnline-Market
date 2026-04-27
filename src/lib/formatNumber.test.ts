@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatFilterNumberDisplay,
   formatIsk,
+  formatIskMillionsShort,
   formatPercent,
   normalizeFilterNumberValue,
   formatWithSpaces,
@@ -57,6 +58,16 @@ describe('formatIsk', () => {
   it('hides fraction digits for values with 4+ integer digits', () => {
     expect(formatIsk(7_925)).toBe('7 925')
     expect(formatIsk(11_520_000)).toBe('11 520 000')
+  })
+})
+
+describe('formatIskMillionsShort', () => {
+  it('prints millions with m suffix', () => {
+    expect(formatIskMillionsShort(650_000_000)).toBe('650m')
+    expect(formatIskMillionsShort(89_900_000)).toBe('89.9m')
+  })
+  it('handles negative', () => {
+    expect(formatIskMillionsShort(-10_200_000)).toBe('−10.2m')
   })
 })
 

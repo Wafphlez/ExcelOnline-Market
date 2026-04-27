@@ -31,6 +31,20 @@ export function formatIsk(n: number | null | undefined): string {
   return formatWithSpaces(n, integerDigits >= 4 ? 0 : 2)
 }
 
+/**
+ * Краткое отображение ISK в миллионах: `650m`, `89,9m` (колонки «Trade profit»).
+ */
+export function formatIskMillionsShort(isk: number | null | undefined): string
+{
+  if (isk === null || isk === undefined || !Number.isFinite(isk)) return '—'
+  const m = isk / 1_000_000
+  const sign = m < 0 ? '−' : ''
+  const a = Math.abs(m)
+  if (a < 0.0005) return `${ sign }0m`
+  const fd = a >= 100 ? 0 : 1
+  return `${ sign }${ a.toFixed(fd) }m`
+}
+
 export function formatInteger(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '—'
   return formatWithSpaces(Math.round(n), 0)

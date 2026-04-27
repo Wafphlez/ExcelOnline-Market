@@ -1,6 +1,10 @@
 node_modules
 .cursor
 dist
+
+# Секреты и Client ID
+.env
+.env.*.local
 .DS_Store
 *.log
 .vite
