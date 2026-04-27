@@ -54,15 +54,97 @@ export function useCharacterDashboardData(
 ): {
   state: CharacterDashboardState
   refresh: () => void
+  refreshActiveMarketOrders: () => void
+  activeMarketOrdersRefreshing: boolean
 }
 {
   const [state, setState] = useState<CharacterDashboardState>({ status: 'idle' })
   const [version, setVersion] = useState(0)
+  const [activeMarketOrdersRefreshing, setActiveMarketOrdersRefreshing] = useState(false)
 
   const refresh = useCallback(() =>
   {
     setVersion((n) => n + 1)
   }, [])
+
+  const refreshActiveMarketOrders = useCallback(() =>
+  {
+    if (state.status !== 'ready' || activeMarketOrdersRefreshing) return
+    setActiveMarketOrdersRefreshing(true)
+    void (async () =>
+    {
+      try
+      {
+        const token = await ensureValidAccessToken()
+        if (!token)
+        {
+          setState((prev) =>
+          {
+            if (prev.status !== 'ready') return prev
+            return {
+              status: 'ready',
+              data: {
+                ...prev.data,
+                activeMarketOrdersError: 'Войдите через EVE SSO, чтобы обновить активные ордера.',
+              },
+            }
+          })
+          return
+        }
+
+        const characterId = prevCharacterId(state)
+        if (!characterId)
+        {
+          setState((prev) =>
+          {
+            if (prev.status !== 'ready') return prev
+            return {
+              status: 'ready',
+              data: {
+                ...prev.data,
+                activeMarketOrdersError: 'Не найден character_id — выполните вход заново.',
+              },
+            }
+          })
+          return
+        }
+
+        const activeMarketOrders = await loadActiveMarketOrdersData(
+          characterId,
+          token,
+          undefined
+        )
+        setState((prev) =>
+        {
+          if (prev.status !== 'ready') return prev
+          return {
+            status: 'ready',
+            data: {
+              ...prev.data,
+              activeMarketOrders,
+              activeMarketOrdersError: null,
+            },
+          }
+        })
+      } catch (e)
+      {
+        setState((prev) =>
+        {
+          if (prev.status !== 'ready') return prev
+          return {
+            status: 'ready',
+            data: {
+              ...prev.data,
+              activeMarketOrdersError: e instanceof Error ? e.message : 'Ордера: ошибка ESI',
+            },
+          }
+        })
+      } finally
+      {
+        setActiveMarketOrdersRefreshing(false)
+      }
+    })()
+  }, [activeMarketOrdersRefreshing, state])
 
   useEffect(() =>
   {
@@ -169,7 +251,13 @@ export function useCharacterDashboardData(
     return () => ac.abort()
   }, [enabled, version])
 
-  return { state, refresh }
+  return { state, refresh, refreshActiveMarketOrders, activeMarketOrdersRefreshing }
+}
+
+function prevCharacterId(state: CharacterDashboardState): number | null
+{
+  if (state.status === 'ready') return state.data.characterId
+  return getStoredCharacterId()
 }
 
 export type { TradeDayAgg }

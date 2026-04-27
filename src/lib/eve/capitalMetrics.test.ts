@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import
   {
+    aggregateMarketFeeDeltasFromJournal,
     aggregateTradeProfitByType,
     aggregateTradesByDay,
     buildWalletBalanceSeries,
+    buildWalletJournalRefIdToTypeMap,
+    buildWalletTransactionIdToTypeMap,
+    filterJournalInRange,
     filterNetWorthSeriesFrom,
     filterTransactionsInRange,
     sumJournalInRange,
@@ -265,5 +269,113 @@ describe('capitalMetrics', () => {
     expect(all.map((r) => r.type_id).sort((a, b) => a - b)).toEqual([1, 2])
     expect(rt).toHaveLength(1)
     expect(rt[0]!.type_id).toBe(2)
+  })
+
+  it('filterJournalInRange by date', () => {
+    const j: EveWalletJournalEntry[] = [
+      { id: 1, date: '2024-01-10T00:00:00Z', ref_type: 'x', amount: 1 },
+      { id: 2, date: '2024-06-15T12:00:00Z', ref_type: 'y', amount: 2 },
+    ]
+    const from = new Date('2024-01-01T00:00:00Z').getTime()
+    const to = new Date('2024-12-31T00:00:00Z').getTime()
+    expect(filterJournalInRange(j, from, to)).toHaveLength(2)
+  })
+
+  it('aggregateMarketFeeDeltasFromJournal maps tax via market_transaction_id', () => {
+    const journal: EveWalletJournalEntry[] = [
+      {
+        id: 10,
+        date: '2024-01-10T00:00:00Z',
+        ref_type: 'transaction_tax',
+        ref_id: 0,
+        amount: -50,
+        context_id: 2,
+        context_id_type: 'market_transaction_id',
+      },
+    ]
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 2,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 100,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const m = aggregateMarketFeeDeltasFromJournal(
+      journal,
+      buildWalletTransactionIdToTypeMap(tr),
+      buildWalletJournalRefIdToTypeMap(tr)
+    )
+    expect(m.get(10)).toBe(-50)
+  })
+
+  it('aggregateMarketFeeDeltasFromJournal maps brokers_fee via journal ref_id', () => {
+    const journal: EveWalletJournalEntry[] = [
+      {
+        id: 1,
+        date: '2024-01-10T00:00:00Z',
+        ref_type: 'brokers_fee',
+        ref_id: 99,
+        amount: -14,
+      },
+    ]
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-10T00:00:00Z',
+        type_id: 5,
+        location_id: 1,
+        unit_price: 10,
+        quantity: 1,
+        client_id: 0,
+        is_buy: true,
+        is_personal: true,
+        journal_ref_id: 99,
+      },
+    ]
+    const m = aggregateMarketFeeDeltasFromJournal(
+      journal,
+      buildWalletTransactionIdToTypeMap(tr),
+      buildWalletJournalRefIdToTypeMap(tr)
+    )
+    expect(m.get(5)).toBe(-14)
+  })
+
+  it('aggregateTradeProfitByType includes journal fee in profit', () => {
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-01T00:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 100,
+        quantity: 1,
+        client_id: 0,
+        is_buy: true,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 2,
+        date: '2024-01-02T00:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 200,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const fees = new Map([[10, -42 as number]])
+    const rows = aggregateTradeProfitByType(tr, 10, 'all', 'fifo', fees)
+    expect(rows[0]!.profit).toBe(100 - 42)
   })
 })

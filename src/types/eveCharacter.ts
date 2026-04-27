@@ -27,12 +27,13 @@ export type EveWalletJournalEntry = {
   date: string
   ref_type: string
   ref_id?: number
+  /** Контекст (напр. `market_transaction_id` для налога/комиссии) — ESI. */
+  context_id?: number
+  context_id_type?: string
   first_party_id?: number
   second_party_id?: number
   amount: number
   balance?: number
-  context_id?: number
-  context_id_type?: string
   description?: string
   reason?: string
   tax?: number

@@ -130,6 +130,26 @@ export function aggregateTradesByDay(
     .sort((a, b) => a.day.localeCompare(b.day))
 }
 
+/**
+ * Сумма рыночных комиссий/налогов по дням (обычно отрицательная),
+ * включая `brokers_fee` / `transaction_tax` и алиасы.
+ */
+export function aggregateMarketFeesByDay(
+  journal: EveWalletJournalEntry[]
+): Map<string, number>
+{
+  const out = new Map<string, number>()
+  for (const j of journal)
+  {
+    if (!isMarketFeeRefType(j.ref_type)) continue
+    if (!Number.isFinite(j.amount)) continue
+    const day = j.date.slice(0, 10)
+    if (!day) continue
+    out.set(day, (out.get(day) ?? 0) + j.amount)
+  }
+  return out
+}
+
 export type TopType = { type_id: number; isk: number; qty: number }
 
 export function topTradedTypes(
@@ -164,7 +184,7 @@ export type TradeProfitByType = {
   sellIsk: number
   /**
    * Либо реализация по FIFO (см. `tradeProfitFifoForType`), либо брутто `sellIsk − buyIsk` —
-   * в зависимости от аргумента `how` в `aggregateTradeProfitByType`.
+   * плюс суммы из журнала по `brokers_fee` / `transaction_tax` (см. `feeDeltasByType`).
    */
   profit: number
 }
@@ -256,11 +276,147 @@ function tradeProfitGrossForType(
   }
 }
 
+/** Синтетический `type_id` для комиссий журнала, не привязанных к типу. */
+export const UNMATCHED_FEE_TYPE_ID = 0
+
+/**
+ * `transaction_id` сделки → `type_id` (вся выгрузка, для сопоставления с journalist fees).
+ */
+export function buildWalletTransactionIdToTypeMap(
+  transactions: EveWalletTransaction[]
+): ReadonlyMap<number, number>
+{
+  const m = new Map<number, number>()
+  for (const t of transactions)
+  {
+    m.set(t.transaction_id, t.type_id)
+  }
+  return m
+}
+
+/**
+ * `journal_ref_id` из wallet transactions → `type_id` (связь комиссий с сделкой).
+ */
+export function buildWalletJournalRefIdToTypeMap(
+  transactions: EveWalletTransaction[]
+): ReadonlyMap<number, number>
+{
+  const m = new Map<number, number>()
+  for (const t of transactions)
+  {
+    if (t.journal_ref_id != null && t.journal_ref_id > 0) m.set(t.journal_ref_id, t.type_id)
+  }
+  return m
+}
+
+const FEE_JOURNAL_REF = new Set([
+  'brokers_fee',
+  'broker_fee',
+  'transaction_tax',
+  'sales_tax',
+])
+
+function isMarketFeeRefType(ref: string): boolean
+{
+  return FEE_JOURNAL_REF.has(ref.trim().toLowerCase().split('-').join('_'))
+}
+
+/**
+ * type_id | UNMATCHED_FEE_TYPE_ID → сумма `amount` (обычно отрицательная).
+ */
+function resolveTypeIdForMarketFee(
+  j: EveWalletJournalEntry,
+  transactionIdToType: ReadonlyMap<number, number>,
+  journalRefIdToType: ReadonlyMap<number, number>
+): number | null
+{
+  const toNum = (v: unknown): number | null =>
+  {
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    if (typeof v === 'string' && /^\d+$/.test(v.trim())) return Number(v.trim())
+    return null
+  }
+
+  const ct = j.context_id_type?.toLowerCase().split('-').join('_')
+  const contextId = toNum(j.context_id)
+  if (contextId != null && ct)
+  {
+    if (ct === 'market_transaction_id' || ct === 'markettransactionid' || ct.includes('market_transaction'))
+    {
+      const t = transactionIdToType.get(contextId)
+      if (t != null) return t
+    }
+  }
+  const refId = toNum(j.ref_id)
+  if (refId != null && refId > 0)
+  {
+    const t = journalRefIdToType.get(refId)
+    if (t != null) return t
+    // Некоторые записи ESI отдают `ref_id`, который совпадает с `transaction_id`.
+    const txType = transactionIdToType.get(refId)
+    if (txType != null) return txType
+  }
+  const ex = j.extra_info
+  if (ex && typeof ex === 'object' && !Array.isArray(ex))
+  {
+    const typeId = toNum((ex as { type_id?: unknown }).type_id)
+    if (typeId != null && typeId > 0) return typeId
+    const transactionId = toNum(
+      (ex as { transaction_id?: unknown; market_transaction_id?: unknown }).transaction_id
+      ?? (ex as { transaction_id?: unknown; market_transaction_id?: unknown }).market_transaction_id
+    )
+    if (transactionId != null)
+    {
+      const t = transactionIdToType.get(transactionId)
+      if (t != null) return t
+    }
+  }
+  return null
+}
+
+/**
+ * Суммирует налог с продаж и комиссии брокера (в т.ч. на переставление) из journal за интервал
+ * дат, раскладывая по `type_id` EVE там, где ESI привязывает к market transaction.
+ */
+export function aggregateMarketFeeDeltasFromJournal(
+  journalInRange: EveWalletJournalEntry[],
+  transactionIdToType: ReadonlyMap<number, number>,
+  journalRefIdToType: ReadonlyMap<number, number>
+): Map<number, number>
+{
+  const out = new Map<number, number>()
+  for (const j of journalInRange)
+  {
+    if (!isMarketFeeRefType(j.ref_type)) continue
+    const amt = j.amount
+    if (!Number.isFinite(amt)) continue
+    const tid =
+      resolveTypeIdForMarketFee(j, transactionIdToType, journalRefIdToType) ??
+      UNMATCHED_FEE_TYPE_ID
+    out.set(tid, (out.get(tid) ?? 0) + amt)
+  }
+  return out
+}
+
+export function filterJournalInRange(
+  journal: EveWalletJournalEntry[],
+  fromMs: number,
+  toMs: number
+): EveWalletJournalEntry[]
+{
+  return journal.filter((e) =>
+  {
+    const t = new Date(e.date).getTime()
+    return t >= fromMs && t <= toMs
+  })
+}
+
 export function aggregateTradeProfitByType(
   transactions: EveWalletTransaction[],
   limit: number,
   mode: TradeProfitByTypeMode = 'all',
-  how: TradeProfitHow = 'fifo'
+  how: TradeProfitHow = 'fifo',
+  feeDeltasByType: ReadonlyMap<number, number> | null = null
 ): TradeProfitByType[]
 {
   const byType = new Map<number, EveWalletTransaction[]>()
@@ -278,9 +434,33 @@ export function aggregateTradeProfitByType(
       : tradeProfitGrossForType(txs)
     rows.push({ type_id, quantitySold, buyIsk, sellIsk, profit })
   }
+  if (feeDeltasByType != null && feeDeltasByType.size > 0)
+  {
+    const byId = new Map(rows.map((r) => [r.type_id, { ...r }]))
+    for (const [typeId, delta] of feeDeltasByType)
+    {
+      if (!Number.isFinite(delta) || delta === 0) continue
+      const cur = byId.get(typeId)
+      if (cur) cur.profit += delta
+      else
+      {
+        byId.set(typeId, {
+          type_id: typeId,
+          quantitySold: 0,
+          buyIsk: 0,
+          sellIsk: 0,
+          profit: delta,
+        })
+      }
+    }
+    rows = [...byId.values()]
+  }
   if (mode === 'roundtrip')
   {
-    rows = rows.filter((r) => r.buyIsk > 0 && r.sellIsk > 0)
+    rows = rows.filter(
+      (r) => r.type_id === UNMATCHED_FEE_TYPE_ID
+        || (r.buyIsk > 0 && r.sellIsk > 0)
+    )
   }
   return rows
     .sort((a, b) => b.profit - a.profit)

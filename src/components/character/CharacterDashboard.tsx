@@ -38,10 +38,14 @@ import { getAccessToken, getRefreshToken } from '../../lib/eve/authStore'
 import { fetchTypeNameMap } from '../../lib/eve/characterEsi'
 import
   {
+    aggregateMarketFeeDeltasFromJournal,
+    aggregateMarketFeesByDay,
     aggregateTradeProfitByType,
     aggregateTradesByDay,
+    buildWalletJournalRefIdToTypeMap,
+    buildWalletTransactionIdToTypeMap,
     DASHBOARD_RANGE_PRESETS,
-    filterNetWorthSeriesFrom,
+    filterJournalInRange,
     filterTransactionsInRange,
     findDashboardRange,
     oldestJournalTimeMs,
@@ -49,6 +53,7 @@ import
     type DashboardRangeId,
     type TradeProfitByTypeMode,
     type TradeProfitHow,
+    UNMATCHED_FEE_TYPE_ID,
   } from '../../lib/eve/capitalMetrics'
 import
   {
@@ -101,7 +106,13 @@ export function CharacterDashboard(
   { bootMessage, onClearBootMessage }: CharacterDashboardProps
 ): JSX.Element
 {
-  const { state, refresh } = useCharacterDashboardData(true)
+  const
+    {
+      state,
+      refresh,
+      refreshActiveMarketOrders,
+      activeMarketOrdersRefreshing,
+    } = useCharacterDashboardData(true)
   const [rangeId, setRangeId] = useState<DashboardRangeId>('d30')
   const [tradeProfitMode, setTradeProfitMode] =
     useState<TradeProfitByTypeMode>('roundtrip')
@@ -145,15 +156,6 @@ export function CharacterDashboard(
     )
   }, [state, period])
 
-  const netWorthSeriesInRange = useMemo(() =>
-  {
-    if (state.status !== 'ready' || !period) return []
-    return filterNetWorthSeriesFrom(
-      state.data.netWorthSeries,
-      period.fromMs
-    )
-  }, [state, period])
-
   const tradeByDayInRange = useMemo(() =>
   {
     if (state.status !== 'ready' || !period) return []
@@ -165,8 +167,66 @@ export function CharacterDashboard(
     return aggregateTradesByDay(tx)
   }, [state, period])
 
+  const tradeNetSeries = useMemo(() =>
+  {
+    if (state.status !== 'ready' || !period) return []
+    const feesByDay = aggregateMarketFeesByDay(
+      filterJournalInRange(state.data.journal, period.fromMs, period.toMs)
+    )
+    const dayRows = new Map<string, { sellIncome: number; buyExpense: number; feeDelta: number }>()
+    for (const d of tradeByDayInRange)
+    {
+      dayRows.set(d.day, {
+        sellIncome: d.sellIsk,
+        buyExpense: d.buyIsk,
+        feeDelta: feesByDay.get(d.day) ?? 0,
+      })
+    }
+    for (const [day, feeDelta] of feesByDay)
+    {
+      if (dayRows.has(day)) continue
+      dayRows.set(day, {
+        sellIncome: 0,
+        buyExpense: 0,
+        feeDelta,
+      })
+    }
+
+    let cumulativeNet = 0
+    return [...dayRows.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, d]) =>
+    {
+      const netProfit = d.sellIncome - d.buyExpense + d.feeDelta
+      cumulativeNet += netProfit
+      return {
+        day,
+        sellIncome: d.sellIncome,
+        buyExpense: d.buyExpense,
+        feeDelta: d.feeDelta,
+        netProfit,
+        cumulativeNet,
+      }
+    })
+  }, [state, period, tradeByDayInRange])
+
   /** Сколько типов в таблице «торговая прибыль» (после сортировки по прибыли; хвост с убытками). */
   const TRADE_PROFIT_TOP_N = 200
+
+  const tradeFeeDeltas = useMemo(() =>
+  {
+    if (state.status !== 'ready' || !period) return null
+    const journalR = filterJournalInRange(
+      state.data.journal,
+      period.fromMs,
+      period.toMs
+    )
+    return aggregateMarketFeeDeltasFromJournal(
+      journalR,
+      buildWalletTransactionIdToTypeMap(state.data.transactions),
+      buildWalletJournalRefIdToTypeMap(state.data.transactions)
+    )
+  }, [state, period])
 
   const tradeProfitInRange = useMemo(() =>
   {
@@ -180,9 +240,10 @@ export function CharacterDashboard(
       tx,
       TRADE_PROFIT_TOP_N,
       tradeProfitMode,
-      tradeProfitHow
+      tradeProfitHow,
+      tradeFeeDeltas
     )
-  }, [state, period, tradeProfitMode, tradeProfitHow])
+  }, [state, period, tradeProfitMode, tradeProfitHow, tradeFeeDeltas])
 
   const journalCoverageHint = useMemo(() =>
   {
@@ -212,7 +273,9 @@ export function CharacterDashboard(
   useEffect(() =>
   {
     if (state.status !== 'ready') return
-    const ids = tradeProfitInRange.map((t) => t.type_id)
+    const ids = tradeProfitInRange
+      .map((t) => t.type_id)
+      .filter((id) => id > 0)
     const ac = new AbortController()
     void (async () =>
     {
@@ -249,7 +312,9 @@ export function CharacterDashboard(
     if (state.status !== 'ready') return []
     return tradeProfitInRange.map((t) => ({
       ...t,
-      name: typeLabels?.get(t.type_id) ?? `#${ t.type_id }`,
+      name: t.type_id === UNMATCHED_FEE_TYPE_ID
+        ? 'Прочие комиссии (журнал)'
+        : (typeLabels?.get(t.type_id) ?? `#${ t.type_id }`),
     }))
   }, [state, typeLabels, tradeProfitInRange])
 
@@ -476,6 +541,18 @@ export function CharacterDashboard(
                         «сырые» потоки); крупные закупки без продажи дают большой минус.
                       </>
                     ) }
+                  </p>
+                  <p className="mb-1 text-[10px] leading-snug text-eve-muted/90">
+                    К ней прибавляется журнал ESI за тот же период: строки{ ' ' }
+                    <code className="text-eve-bright/75">brokers_fee</code>
+                    { ' ' }(ставка, переставление) и{ ' ' }
+                    <code className="text-eve-bright/75">transaction_tax</code>
+                    { ' ' }— в «Прибыль» с тем знаком, что в кошельке (оба обычно уходят в минус).
+                    Распределение по типу — по связке{ ' ' }
+                    <code className="text-eve-bright/75">context_id</code> → market transaction
+                    { ' ' }или{ ' ' }
+                    <code className="text-eve-bright/75">ref_id</code> → journal_id сделки; без связи —
+                    строка &laquo;Прочие комиссии (журнал)&raquo;.
                   </p>
                   <p className="mb-1.5 text-[10px] text-eve-muted/90">
                     Период: { period?.label ?? '—' }, топ { ' ' }
@@ -746,24 +823,25 @@ export function CharacterDashboard(
                   <ActiveMarketOrdersBlock
                     data={ state.data.activeMarketOrders }
                     errorMessage={ state.data.activeMarketOrdersError }
+                    onRefresh={ refreshActiveMarketOrders }
+                    refreshing={ activeMarketOrdersRefreshing }
                   />
                 </div>
 
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-2">Динамика капитала</h3>
+                  <h3 className="eve-section-title mb-2">Доходность торговли</h3>
                   <p className="mb-1 text-[10px] text-eve-muted/90">
-                    Окно: { period?.label ?? '—' } (отсечка по дате точек).
+                    Период: { period?.label ?? '—' }.
                   </p>
                   <p className="mb-2 text-[10px] text-eve-muted/90">
-                    Линия «Net worth» = баланс по журналу + текущая оценка активов (последняя точка = полный капитал). Историческая
-                    стоимость инвентаря ESI не хранит — кривая кошелька остаётся без изменений, слой net worth показывает оценку
-                    &laquo;сейчас&raquo; в прошлом как ориентир.
+                    Столбцы — продажи, покупки и комиссии/налоги за день; линия — чистый накопительный результат{ ' ' }
+                    (<code className="text-eve-bright/75">sell - buy + fees</code>).
                   </p>
-                  { netWorthSeriesInRange.length > 0 ? (
+                  { tradeNetSeries.length > 0 ? (
                     <div className="h-[280px] w-full min-w-0 sm:h-[300px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart
-                          data={ netWorthSeriesInRange }
+                          data={ tradeNetSeries }
                           margin={ { top: 8, right: 8, bottom: 0, left: 4 } }
                         >
                           <CartesianGrid
@@ -771,10 +849,9 @@ export function CharacterDashboard(
                             strokeDasharray="3 3"
                           />
                           <XAxis
-                            dataKey="time"
+                            dataKey="day"
                             tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            tickFormatter={ (v) => String(v).slice(0, 10) }
-                            minTickGap={ 24 }
+                            minTickGap={ 18 }
                           />
                           <YAxis
                             tick={ { fontSize: 9, fill: CHART_COL.tick } }
@@ -791,36 +868,45 @@ export function CharacterDashboard(
                             labelFormatter={ (l) => `Дата: ${ l }` }
                             formatter={ (v: number, name) =>
                             {
-                              if (name === 'wallet') return [ iskFormatter(v), 'Кошелёк' ]
-                              return [ iskFormatter(v), 'Net worth' ]
+                              if (name === 'sellIncome') return [ iskFormatter(v), 'Продажи за день' ]
+                              if (name === 'buyExpense') return [ iskFormatter(v), 'Покупки за день' ]
+                              if (name === 'feeDelta') return [ iskFormatter(v), 'Комиссии/налоги (journal)' ]
+                              if (name === 'netProfit') return [ iskFormatter(v), 'Чистый результат за день' ]
+                              return [ iskFormatter(v), 'Накопительный чистый результат' ]
                             } }
                           />
                           <Legend />
-                          <Line
-                            type="monotone"
-                            dataKey="wallet"
-                            name="Кошелёк (журнал)"
-                            stroke={ CHART_COL.wallet }
-                            dot={ false }
-                            strokeWidth={ 2 }
+                          <Bar
+                            dataKey="sellIncome"
+                            name="Продажи за день"
+                            fill={ CHART_COL.sell }
+                            radius={ [ 2, 2, 0, 0 ] }
+                          />
+                          <Bar
+                            dataKey="buyExpense"
+                            name="Покупки за день"
+                            fill={ CHART_COL.buy }
+                            radius={ [ 2, 2, 0, 0 ] }
+                          />
+                          <Bar
+                            dataKey="feeDelta"
+                            name="Комиссии/налоги"
+                            fill="#f87171"
+                            radius={ [ 2, 2, 0, 0 ] }
                           />
                           <Line
                             type="monotone"
-                            dataKey="netWorth"
-                            name="Net worth (оценка)"
-                            stroke={ CHART_COL.net }
+                            dataKey="cumulativeNet"
+                            name="Накопительный чистый результат"
+                            stroke={ CHART_COL.wallet }
                             dot={ false }
                             strokeWidth={ 2 }
                           />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
-                  ) : state.data.netWorthSeries.length === 0 ? (
-                    <p className="text-sm text-eve-muted">Нет записей в кошельке для графика.</p>
                   ) : (
-                    <p className="text-sm text-eve-muted">
-                      В выбранном периоде нет точек (расширьте окно или смените период).
-                    </p>
+                    <p className="text-sm text-eve-muted">В выбранном периоде нет торговых сделок.</p>
                   ) }
                 </div>
 
