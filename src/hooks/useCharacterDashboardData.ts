@@ -18,6 +18,7 @@ import
     buildWalletBalanceSeries,
     pricesToMap,
     valueAssets,
+    valuePlexInAssets,
     type TimePoint,
     type TradeDayAgg,
   } from '../lib/eve/capitalMetrics'
@@ -42,6 +43,12 @@ export type CharacterDashboardBundle = {
   transactions: EveWalletTransaction[]
   assetsValue: number
   netWorth: number
+  /** ISK в эскроу активных buy-ордеров (как в клиенте: «рынок»). */
+  marketEscrowIsk: number
+  /**
+   * Оценка PLEX в инвентаре ESI; уже вошла в `assetsValue` — для подписи к тултипу клиента.
+   */
+  plexValueInAssetsIsk: number
   walletSeries: TimePoint[]
   netWorthSeries: { time: string; wallet: number; netWorth: number }[]
   tradeByDay: TradeDayAgg[]
@@ -117,12 +124,22 @@ export function useCharacterDashboardData(
         setState((prev) =>
         {
           if (prev.status !== 'ready') return prev
+          const marketEscrowIsk = activeMarketOrders?.buyTotalEscrowIsk ?? 0
+          const netWorth = prev.data.wallet + prev.data.assetsValue + marketEscrowIsk
+          const netWorthSeries = buildNetWorthOverlayPoints(
+            prev.data.walletSeries,
+            prev.data.assetsValue,
+            marketEscrowIsk
+          )
           return {
             status: 'ready',
             data: {
               ...prev.data,
               activeMarketOrders,
               activeMarketOrdersError: null,
+              marketEscrowIsk,
+              netWorth,
+              netWorthSeries,
             },
           }
         })
@@ -199,9 +216,8 @@ export function useCharacterDashboardData(
         if (ac.signal.aborted) return
         const priceMap = pricesToMap(pricesList)
         const assetsValue = valueAssets(byType, priceMap)
-        const netWorth = wallet + assetsValue
+        const plexValueInAssetsIsk = valuePlexInAssets(byType, priceMap)
         const walletSeries = buildWalletBalanceSeries(journal)
-        const netWorthSeries = buildNetWorthOverlayPoints(walletSeries, assetsValue)
         const tradeByDay = aggregateTradesByDay(transactions)
         const info: EveCharacterInfo = {
           ...character,
@@ -221,6 +237,13 @@ export function useCharacterDashboardData(
           activeMarketOrdersError = e instanceof Error ? e.message : 'Ордера: ошибка ESI'
         }
         if (ac.signal.aborted) return
+        const marketEscrowIsk = activeMarketOrders?.buyTotalEscrowIsk ?? 0
+        const netWorth = wallet + assetsValue + marketEscrowIsk
+        const netWorthSeries = buildNetWorthOverlayPoints(
+          walletSeries,
+          assetsValue,
+          marketEscrowIsk
+        )
         setState({
           status: 'ready',
           data: {
@@ -232,6 +255,8 @@ export function useCharacterDashboardData(
             transactions,
             assetsValue,
             netWorth,
+            marketEscrowIsk,
+            plexValueInAssetsIsk,
             walletSeries,
             netWorthSeries,
             tradeByDay,

@@ -18,10 +18,10 @@ import
     Bar,
     BarChart,
     CartesianGrid,
-    ComposedChart,
     Legend,
     Line,
     LineChart,
+    ReferenceLine,
     ResponsiveContainer,
     Tooltip,
     XAxis,
@@ -47,6 +47,7 @@ import
     buildWalletTransactionIdToTypeMap,
     DASHBOARD_RANGE_PRESETS,
     filterJournalInRange,
+    filterNetWorthSeriesFrom,
     filterTransactionsInRange,
     findDashboardRange,
     MS_DAY,
@@ -75,6 +76,10 @@ type CharacterDashboardProps = {
 const CHART_COL = {
   grid: 'rgba(74, 88, 120, 0.35)',
   tick: 'rgba(195, 204, 214, 0.55)',
+  /** Серая линия «динамика» (нетто за день) */
+  dynamics: 'rgba(148, 155, 168, 0.92)',
+  /** Горизонталь y = 0 */
+  zeroLine: 'rgba(115, 125, 142, 0.75)',
   wallet: '#5fd4e8',
   net: '#b8963d',
   buy: 'rgba(95, 212, 232, 0.85)',
@@ -201,6 +206,25 @@ export function CharacterDashboard(
     return rows
   }, [state])
 
+  /** Включает 0, чтобы ноль и линия сетки на 0 не «выпадали» из диапазона. */
+  const transactionsLast30DaysYDomain = useMemo((): [ number, number ] =>
+  {
+    const s = transactionsLast30DaysSeries
+    if (s.length === 0) return [ -1, 1 ]
+    const vals = s.map((d) => d.netIsk)
+    let dMin = Math.min(0, ...vals)
+    let dMax = Math.max(0, ...vals)
+    if (dMin === dMax)
+    {
+      if (dMin === 0) return [ -1, 1 ]
+      const pad = Math.max(Math.abs(dMin) * 0.05, 1e-6)
+      return [ dMin - pad, dMax + pad ]
+    }
+    const spread = dMax - dMin
+    const pad = Math.max(spread * 0.04, spread * 0.0001)
+    return [ dMin - pad, dMax + pad ]
+  }, [ transactionsLast30DaysSeries ])
+
   const tradeNetSeries = useMemo(() =>
   {
     if (state.status !== 'ready' || !period) return []
@@ -284,6 +308,32 @@ export function CharacterDashboard(
       tradeFeeDeltas
     )
   }, [state, period, tradeProfitMode, tradeProfitHow, tradeFeeDeltas])
+
+  /** Точки net worth в выбранном периоде (журнал кошелька + оценка активов на «сейчас»). */
+  const netWorthInPeriodSeries = useMemo(() =>
+  {
+    if (state.status !== 'ready' || !period) return []
+    const s = state.data.netWorthSeries
+    if (s.length === 0) return []
+    return filterNetWorthSeriesFrom(s, period.fromMs)
+  }, [state, period])
+
+  const netWorthChartYDomain = useMemo((): [ number, number ] =>
+  {
+    const s = netWorthInPeriodSeries
+    if (s.length === 0) return [ 0, 1 ]
+    const vals = s.map((p) => p.netWorth)
+    const dMin = Math.min(...vals)
+    const dMax = Math.max(...vals)
+    if (dMin === dMax)
+    {
+      const pad = Math.max(Math.abs(dMin) * 0.02, 1e6)
+      return [ dMin - pad, dMax + pad ]
+    }
+    const spread = dMax - dMin
+    const pad = Math.max(spread * 0.04, spread * 0.0001)
+    return [ dMin - pad, dMax + pad ]
+  }, [netWorthInPeriodSeries])
 
   const journalCoverageHint = useMemo(() =>
   {
@@ -472,7 +522,7 @@ export function CharacterDashboard(
 
           { state.status === 'ready' && (
             <div className="w-full min-w-0 max-w-full space-y-4">
-              <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
                 <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
                   <div className="flex items-start gap-3">
                     <img
@@ -504,9 +554,6 @@ export function CharacterDashboard(
                   <p className="mt-1 text-xl font-bold tabular-nums text-eve-gold-bright">
                     { iskFormatter(state.data.netWorth) }
                   </p>
-                  <p className="mt-1 text-[10px] text-eve-muted/90">
-                    Кошелёк + оценка активов по ESI <code>markets/prices</code> (средние/скорр.).
-                  </p>
                 </div>
                 <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
                   <p className="eve-kicker text-[10px]">Кошелёк (ISK)</p>
@@ -518,6 +565,18 @@ export function CharacterDashboard(
                   <p className="eve-kicker text-[10px]">Активы (оценка)</p>
                   <p className="mt-1 text-lg font-bold tabular-nums text-eve-accent/95">
                     { iskFormatter(state.data.assetsValue) }
+                  </p>
+                </div>
+                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                  <p className="eve-kicker text-[10px]">Эскроу (buy-ордера)</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-eve-amber-200/90">
+                    { iskFormatter(state.data.marketEscrowIsk) }
+                  </p>
+                </div>
+                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                  <p className="eve-kicker text-[10px]">PLEX в ассетах ESI (оценка)</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-eve-bright/95">
+                    { iskFormatter(state.data.plexValueInAssetsIsk) }
                   </p>
                 </div>
               </div>
@@ -556,86 +615,81 @@ export function CharacterDashboard(
                 ) }
               </div>
 
+              <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                <h3 className="eve-section-title mb-2">Динамика капитализации</h3>
+                { netWorthInPeriodSeries.length > 0 ? (
+                  <div className="h-[240px] w-full min-w-0 sm:h-[280px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={ netWorthInPeriodSeries }
+                        margin={ { top: 8, right: 8, left: 4, bottom: 0 } }
+                      >
+                        <CartesianGrid
+                          stroke={ CHART_COL.grid }
+                          strokeDasharray="3 3"
+                        />
+                        <XAxis
+                          dataKey="time"
+                          tick={ { fontSize: 8, fill: CHART_COL.tick } }
+                          tickFormatter={ (t: string) =>
+                          {
+                            const d = new Date(t)
+                            if (!Number.isFinite(d.getTime())) return t
+                            return d.toLocaleDateString('ru-RU', {
+                              day: '2-digit',
+                              month: '2-digit',
+                            })
+                          } }
+                          minTickGap={ 16 }
+                        />
+                        <YAxis
+                          domain={ netWorthChartYDomain }
+                          tick={ { fontSize: 9, fill: CHART_COL.tick } }
+                          tickFormatter={ (n) => formatInteger(n as number) }
+                          width={ 56 }
+                        />
+                        <Tooltip
+                          contentStyle={ {
+                            background: 'rgba(16, 20, 28, 0.96)',
+                            border: '1px solid rgba(123, 142, 176, 0.45)',
+                            fontSize: 11,
+                          } }
+                          labelFormatter={ (t) =>
+                            new Date(t).toLocaleString('ru-RU', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          }
+                          formatter={ (v: number) =>
+                            [ iskFormatter(v), 'Капитализация' ]
+                          }
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="netWorth"
+                          name="Net worth (ISK)"
+                          stroke={ CHART_COL.net }
+                          strokeWidth={ 2.25 }
+                          dot={ false }
+                          activeDot={ { r: 3 } }
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-eve-muted">
+                    Нет точек: в выгрузке журнала кошелька нет дат в выбранном периоде.
+                  </p>
+                ) }
+              </div>
+
               <div className="flex w-full min-w-0 max-w-full flex-col gap-4">
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-1">Торговая прибыль по типам</h3>
-                  <p className="mb-1 text-[10px] leading-snug text-eve-muted/90">
-                    { tradeProfitHow === 'fifo' ? (
-                      <>
-                        Прибыль — реализованная по{ ' ' }
-                        <abbr title="сначала купленное — сначала проданное" className="cursor-help border-b border-dotted border-eve-muted/50">
-                          FIFO
-                        </abbr>
-                        { ' ' }внутри выгрузки ESI: с продажи списывается себестоимость с ранних{ ' ' }
-                        <code className="text-eve-bright/75">buy</code>
-                        { ' ' }по{ ' ' }
-                        <code className="text-eve-bright/75">type_id</code>
-                        { ' ' }; непроданный остаток не даёт мнимого убытка. Продажа без{ ' ' }
-                        <code className="text-eve-bright/75">buy</code> в логе — вся в прибыль.
-                      </>
-                    ) : (
-                      <>
-                        Брутто: прибыль = сумма{ ' ' }
-                        <code className="text-eve-bright/75">sell</code> − сумма{ ' ' }
-                        <code className="text-eve-bright/75">buy</code> за период по типу (как
-                        «сырые» потоки); крупные закупки без продажи дают большой минус.
-                      </>
-                    ) }
-                  </p>
-                  <p className="mb-1 text-[10px] leading-snug text-eve-muted/90">
-                    К ней прибавляется журнал ESI за тот же период: строки{ ' ' }
-                    <code className="text-eve-bright/75">brokers_fee</code>
-                    { ' ' }(ставка, переставление) и{ ' ' }
-                    <code className="text-eve-bright/75">transaction_tax</code>
-                    { ' ' }— в «Прибыль» с тем знаком, что в кошельке. Если ESI даёт привязку к сделке (
-                    { ' ' }
-                    <code className="text-eve-bright/75">context_id</code>
-                    { ' ' }/
-                    { ' ' }
-                    <code className="text-eve-bright/75">ref_id</code>
-                    { ' ' }
-                    к market transaction), комиссия идёт в этот тип. Иначе — оценка: налог
-                    { ' ' }
-                    <code className="text-eve-bright/75">transaction_tax</code>
-                    { ' ' }по{ ' ' }
-                    <code className="text-eve-bright/75">sell</code>
-                    { ' ' }по типу; брокер — доля
-                    { ' ' }
-                    <code className="text-eve-bright/75">Σ sell</code>
-                    { ' ' }/ (
-                    { ' ' }
-                    <code className="text-eve-bright/75">Σ sell</code>
-                    { ' ' }+
-                    { ' ' }
-                    <code className="text-eve-bright/75">Σ buy</code>
-                    { ' ' })
-                    { ' ' }и доля
-                    { ' ' }
-                    <code className="text-eve-bright/75">Σ buy</code>
-                    { ' ' }/ (
-                    { ' ' }
-                    <code className="text-eve-bright/75">Σ sell</code>
-                    { ' ' }+
-                    { ' ' }
-                    <code className="text-eve-bright/75">Σ buy</code>
-                    { ' ' }
-                    ) по окну, затем по типу по
-                    { ' ' }
-                    <code className="text-eve-bright/75">sell</code>
-                    { ' ' }и{ ' ' }
-                    <code className="text-eve-bright/75">buy</code>
-                    { ' ' }соответственно. Остаток без сделок — &laquo;Прочие комиссии (журнал)&raquo;.
-                  </p>
-                  <p className="mb-1.5 text-[10px] text-eve-muted/90">
-                    Период: { period?.label ?? '—' }, топ { ' ' }
-                    { TRADE_PROFIT_TOP_N }.
-                    { ' ' }
-                    <span className="text-eve-muted/70">
-                      Зелёная полоса — прирост, красная — убыток. Доля = 100×прибыль/Σ|прибыль| по
-                      витрине (топ{ ' ' }
-                      { TRADE_PROFIT_TOP_N }).
-                    </span>
-                  </p>
+                  <h3 className="eve-section-title mb-2">Торговая прибыль по типам</h3>
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
                     <TabButton
                       active={ tradeProfitMode === 'roundtrip' }
@@ -830,17 +884,10 @@ export function CharacterDashboard(
                   ) : (
                     <p className="text-sm text-eve-muted">Нет сделок за период (или в режиме «Купля–продажа» нет пар buy+sell по типу).</p>
                   ) }
-                  { tradeProfitWithNames.length > 0 && (
-                    <p className="mt-1.5 text-[9px] leading-snug text-eve-muted/85">
-                      Σ|прибыль| по витрине (знаменатель для{ ' ' }%) ={ ' ' }
-                      { formatIsk(tradeProfitAbsSum) } ISK.
-                    </p>
-                  ) }
                 </div>
 
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                   <h3 className="eve-section-title mb-2">Сделки по дням (ISK)</h3>
-                  <p className="mb-1 text-[10px] text-eve-muted/90">Период: { period?.label ?? '—' }.</p>
                   { tradeByDayInRange.length > 0 ? (
                     <div className="h-[260px] w-full min-w-0 sm:h-[280px]">
                       <ResponsiveContainer width="100%" height="100%">
@@ -893,13 +940,6 @@ export function CharacterDashboard(
 
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                   <h3 className="eve-section-title mb-2">Транзакции за последние 30 дней</h3>
-                  <p className="mb-1 text-[10px] text-eve-muted/90">
-                    Одна линия: за день{ ' ' }
-                    <code className="text-eve-bright/75">продажа − покупка</code>
-                    { ' ' }по{ ' ' }
-                    <code className="text-eve-bright/75">wallet/transactions</code>
-                    { ' ' }(30 суток, скользящее окно; дни без сделок — 0).
-                  </p>
                   { transactionsLast30DaysSeries.length > 0 ? (
                     <div className="h-[260px] w-full min-w-0 sm:h-[300px]">
                       <ResponsiveContainer width="100%" height="100%">
@@ -919,6 +959,7 @@ export function CharacterDashboard(
                             interval="preserveStartEnd"
                           />
                           <YAxis
+                            domain={ transactionsLast30DaysYDomain }
                             tick={ { fontSize: 9, fill: CHART_COL.tick } }
                             tickFormatter={ (n) => formatInteger(n as number) }
                             width={ 52 }
@@ -932,16 +973,21 @@ export function CharacterDashboard(
                             labelFormatter={ (d) => `Дата: ${ d }` }
                             formatter={ (v: number) =>
                             {
-                              if (v == null || !Number.isFinite(v)) return [ '—', 'Продажа − покупка' ]
-                              return [ iskFormatter(v), 'Продажа − покупка' ]
+                              if (v == null || !Number.isFinite(v)) return [ '—', 'Динамика' ]
+                              return [ iskFormatter(v), 'Динамика' ]
                             } }
                           />
                           <Legend />
+                          <ReferenceLine
+                            y={ 0 }
+                            stroke={ CHART_COL.zeroLine }
+                            strokeWidth={ 1.25 }
+                          />
                           <Line
                             type="monotone"
                             dataKey="netIsk"
-                            name="Продажа − покупка"
-                            stroke={ CHART_COL.wallet }
+                            name="Динамика"
+                            stroke={ CHART_COL.dynamics }
                             strokeWidth={ 2.5 }
                             dot={ false }
                             activeDot={ { r: 3 } }
@@ -965,17 +1011,10 @@ export function CharacterDashboard(
 
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                   <h3 className="eve-section-title mb-2">Доходность торговли</h3>
-                  <p className="mb-1 text-[10px] text-eve-muted/90">
-                    Период: { period?.label ?? '—' }.
-                  </p>
-                  <p className="mb-2 text-[10px] text-eve-muted/90">
-                    Столбцы — продажи, покупки и комиссии/налоги за день; линия — чистый накопительный результат{ ' ' }
-                    (<code className="text-eve-bright/75">sell - buy + fees</code>).
-                  </p>
                   { tradeNetSeries.length > 0 ? (
                     <div className="h-[280px] w-full min-w-0 sm:h-[300px]">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart
+                        <LineChart
                           data={ tradeNetSeries }
                           margin={ { top: 8, right: 8, bottom: 0, left: 4 } }
                         >
@@ -1001,44 +1040,26 @@ export function CharacterDashboard(
                               borderRadius: 4,
                             } }
                             labelFormatter={ (l) => `Дата: ${ l }` }
-                            formatter={ (v: number, name) =>
-                            {
-                              // Recharts передаёт сюда `name` с Bar/Line, не `dataKey`
-                              if (name === 'Продажи за день' || name === 'sellIncome') return [ iskFormatter(v), 'Продажи за день' ]
-                              if (name === 'Покупки за день' || name === 'buyExpense') return [ iskFormatter(v), 'Покупки за день' ]
-                              if (name === 'Комиссии/налоги' || name === 'feeDelta') return [ iskFormatter(v), 'Комиссии/налоги' ]
-                              if (name === 'Накопительный чистый результат' || name === 'cumulativeNet') return [ iskFormatter(v), 'Накопительный чистый результат' ]
-                              return [ iskFormatter(v), name ]
-                            } }
+                            formatter={ (v: number) =>
+                              [ iskFormatter(v), 'Накопительная прибыль' ]
+                            }
                           />
                           <Legend />
-                          <Bar
-                            dataKey="sellIncome"
-                            name="Продажи за день"
-                            fill={ CHART_COL.sell }
-                            radius={ [ 2, 2, 0, 0 ] }
-                          />
-                          <Bar
-                            dataKey="buyExpense"
-                            name="Покупки за день"
-                            fill={ CHART_COL.buy }
-                            radius={ [ 2, 2, 0, 0 ] }
-                          />
-                          <Bar
-                            dataKey="feeDelta"
-                            name="Комиссии/налоги"
-                            fill="#f87171"
-                            radius={ [ 2, 2, 0, 0 ] }
+                          <ReferenceLine
+                            y={ 0 }
+                            stroke={ CHART_COL.zeroLine }
+                            strokeWidth={ 1.25 }
                           />
                           <Line
                             type="monotone"
                             dataKey="cumulativeNet"
-                            name="Накопительный чистый результат"
+                            name="Суммарная торговая прибыль (ISK)"
                             stroke={ CHART_COL.wallet }
                             dot={ false }
-                            strokeWidth={ 2 }
+                            strokeWidth={ 2.5 }
+                            activeDot={ { r: 3 } }
                           />
-                        </ComposedChart>
+                        </LineChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (
@@ -1047,11 +1068,10 @@ export function CharacterDashboard(
                 </div>
 
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                <h3 className="eve-section-title mb-1 flex items-center gap-2">
+                <h3 className="eve-section-title mb-2 flex items-center gap-2">
                   <Shield className="h-4 w-4 text-eve-muted" aria-hidden />
                   Транзакции
                 </h3>
-                <p className="mb-2 text-[10px] text-eve-muted/90">Период: { period?.label ?? '—' } (до 80 записей, новые сверху).</p>
                 { transactionsInRange.length === 0 ? (
                   <p className="text-sm text-eve-muted">В выбранном периоде нет сделок.</p>
                 ) : (

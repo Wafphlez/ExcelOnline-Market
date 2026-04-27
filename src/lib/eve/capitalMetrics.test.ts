@@ -12,7 +12,9 @@ import
     filterNetWorthSeriesFrom,
     filterTransactionsInRange,
     sumJournalInRange,
+    buildNetWorthOverlayPoints,
     valueAssets,
+    valuePlexInAssets,
     pricesToMap,
   } from './capitalMetrics'
 import type
@@ -22,6 +24,32 @@ import type
   } from '../../types/eveCharacter'
 
 describe('capitalMetrics', () => {
+  it('valuePlexInAssets counts PLEX type_ids only', () => {
+    const by = new Map<number, number>([
+      [44992, 500],
+      [10, 1],
+    ])
+    const prices = new Map<number, number>([
+      [44992, 4_000_000],
+      [10, 100],
+    ])
+    expect(valuePlexInAssets(by, prices)).toBe(500 * 4_000_000)
+  })
+
+  it('buildNetWorthOverlayPoints adds escrow to each point', () => {
+    const pts = buildNetWorthOverlayPoints(
+      [
+        { t: '2024-01-01T00:00:00Z', y: 100 },
+        { t: '2024-01-02T00:00:00Z', y: 200 },
+      ],
+      50,
+      25
+    )
+    expect(pts).toHaveLength(2)
+    expect(pts[0]!.netWorth).toBe(100 + 50 + 25)
+    expect(pts[1]!.netWorth).toBe(200 + 50 + 25)
+  })
+
   it('valueAssets sums qty * price', () => {
     const by = new Map<number, number>([
       [1, 2],

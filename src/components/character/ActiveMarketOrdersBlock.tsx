@@ -26,10 +26,9 @@ function formatIskHeader(n: number): string
 }
 
 function OrderTable(
-  { title, rows, mode }: {
+  { title, rows }: {
     title: string
     rows: ActiveMarketOrderRow[]
-    mode: 'sell' | 'buy'
   }
 ): JSX.Element
 {
@@ -291,7 +290,6 @@ export function ActiveMarketOrdersBlock(
           <p className="mb-1 text-[10px] text-eve-muted/90">{ sellH }</p>
           <OrderTable
             title="Продажа"
-            mode="sell"
             rows={ data.sells }
           />
         </div>
@@ -299,7 +297,6 @@ export function ActiveMarketOrdersBlock(
           <p className="mb-1 text-[10px] text-eve-muted/90">{ buyH }</p>
           <OrderTable
             title="Покупка"
-            mode="buy"
             rows={ data.buys }
           />
         </div>

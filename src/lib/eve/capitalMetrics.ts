@@ -35,6 +35,30 @@ export function valueAssets(
   return s
 }
 
+/** PLEX: текущий тип 44992; 40520 — старый ид (если встречается). */
+const PLEX_TYPE_IDS = [ 44992, 40520 ] as const
+
+/**
+ * Стоимость PLEX, который виден в `GET /characters/…/assets/` (type_id 44992 / 40520).
+ * PLEX только в PLEX Vault (привязан к аккаунту) CCP не отдаёт в ESI: в клиенте строка
+ * «Примерная цена PLEX» может быть большой, а здесь — 0. Уже входит в `valueAssets`.
+ */
+export function valuePlexInAssets(
+  byType: Map<number, number>,
+  prices: Map<number, number>
+): number
+{
+  let s = 0
+  for (const id of PLEX_TYPE_IDS)
+  {
+    const q = byType.get(id) ?? 0
+    if (q <= 0) continue
+    const p = prices.get(id) ?? 0
+    s += q * p
+  }
+  return s
+}
+
 export function pricesToMap(
   list: { type_id: number; average_price?: number; adjusted_price?: number }[]
 ): Map<number, number>
@@ -600,21 +624,24 @@ export function aggregateTradeProfitByType(
 }
 
 /**
- * Комбинированные точки: кошелёк (история) + net worth = wallet + оценка активов (текущий срез).
+ * Комбинированные точки: кошелёк (история) + net worth = wallet + оценка активов (текущий срез)
+ * + эскроу buy-ордеров (текущий срез, как с активами).
  */
 export function buildNetWorthOverlayPoints(
   walletSeries: TimePoint[],
-  assetsValueNow: number
+  assetsValueNow: number,
+  marketEscrowIsk: number = 0
 ): { time: string; wallet: number; netWorth: number }[]
 {
   if (walletSeries.length === 0)
   {
     return []
   }
+  const extra = marketEscrowIsk
   return walletSeries.map((p) => ({
     time: p.t,
     wallet: p.y,
-    netWorth: p.y + assetsValueNow,
+    netWorth: p.y + assetsValueNow + extra,
   }))
 }
 
