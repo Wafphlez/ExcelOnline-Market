@@ -2,6 +2,8 @@ import { formatRatio } from '../lib/formatNumber'
 
 type Props = {
   ratio: number | null
+  /** Сделок за период (шт.) — для разбиения по сторонам спреда */
+  tradeCount: number
 }
 
 const SCAN = {
@@ -12,23 +14,50 @@ const TRACK =
   'linear-gradient(90deg, rgb(var(--eve-red-rgb) / 0.82) 0%, rgba(12, 14, 20, 0.98) 50%, rgb(var(--eve-green-rgb) / 0.9) 100%)'
 
 /**
+ * Дробит число сделок по оси спреда: ближе к sell → больше «sell»-шт.
+ * Сумма всегда равна total (после округления total).
+ */
+export function splitTradesAlongSpread(
+  totalRaw: number,
+  ratioTowardsSell: number
+): { buy: number; sell: number } | null
+{
+  if (!Number.isFinite(totalRaw) || totalRaw <= 0) return null
+  const total = Math.max(0, Math.round(totalRaw))
+  if (total <= 0) return null
+  const r = Math.max(0, Math.min(1, ratioTowardsSell))
+  const sell = Math.round(total * r)
+  const buy = total - sell
+  return { buy, sell }
+}
+
+/**
  * Ось: 0 = buy, 0,5 = mid, 1 = sell. В стиле EVE: золотая кромка, зоны buy/sell,
  * линия mid, маркер «средняя в спреде».
  */
-export function SpreadPositionBar({ ratio }: Props) {
+export function SpreadPositionBar({ ratio, tradeCount }: Props) {
   if (ratio === null || !Number.isFinite(ratio)) {
     return <span className="text-eve-muted">—</span>
   }
   const t = Math.max(0, Math.min(1, ratio))
   const leftPct = t * 100
+  const split = splitTradesAlongSpread(tradeCount, t)
 
   return (
     <div className="w-full min-w-[140px] max-w-[220px]">
       <div
         className="relative rounded-sm border border-eve-gold/40 bg-eve-bg/95 p-px shadow-[0_0_0_1px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.06)]"
-        title={`Средняя в спреде: ${t.toFixed(4)} (0 = buy, 0,5 = mid, 1 = sell)`}
+        title={
+          split
+            ? `Средняя в спреде: ${formatRatio(t, 3)} (0 = buy…1 = sell). Условное разбиение ${split.buy} buy / ${split.sell} sell из ${split.buy + split.sell} сделок.`
+            : `Средняя в спреде: ${formatRatio(t, 3)} (0 = buy, 0,5 = mid, 1 = sell)`
+        }
         role="img"
-        aria-label={`Позиция средней в спреде: ${formatRatio(t, 3)}. Центр оси 0,5${t < 0.5 ? ', левее центра' : t > 0.5 ? ', правее центра' : ', в центре'}.`}
+        aria-label={
+          split
+            ? `Позиция средней в спреде: ${formatRatio(t, 3)}. Условно у buy ${split.buy} сделок, у sell ${split.sell}.`
+            : `Позиция средней в спреде: ${formatRatio(t, 3)}. Центр оси 0,5${t < 0.5 ? ', левее центра' : t > 0.5 ? ', правее центра' : ', в центре'}.`
+        }
       >
         <div className="relative h-7 w-full overflow-hidden rounded-sm border border-eve-border/70 bg-eve-elevated">
           <div
@@ -84,9 +113,17 @@ export function SpreadPositionBar({ ratio }: Props) {
         <span className="text-eve-gold/60">mid</span>
         <span className="eve-green">sell</span>
       </div>
-      <p className="mt-0.5 text-center font-eve text-[10px] font-bold tabular-nums tracking-wide text-eve-gold-bright/95 [text-shadow:0_0_8px_rgba(184,150,61,0.35)]">
-        {formatRatio(t, 3)}
-      </p>
+      {split ? (
+        <p className="mt-0.5 text-center font-eve text-[10px] font-bold tabular-nums leading-tight tracking-wide [text-shadow:0_0_6px_rgba(184,150,61,0.25)]">
+          <span className="eve-red">{split.buy}</span>
+          <span className="mx-1.5 text-eve-muted/60">·</span>
+          <span className="eve-green">{split.sell}</span>
+        </p>
+      ) : (
+        <p className="mt-0.5 text-center font-eve text-[10px] font-semibold tabular-nums text-eve-muted/80">
+          Нет сделок за период
+        </p>
+      )}
     </div>
   )
 }

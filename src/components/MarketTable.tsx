@@ -269,6 +269,7 @@ export function MarketTable({
               return (
                 <SpreadPositionBar
                   ratio={typeof v === 'number' ? v : null}
+                  tradeCount={ctx.row.original.dayVolume}
                 />
               )
             }
