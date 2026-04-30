@@ -10,6 +10,7 @@ import {
   type SortingFn,
   type SortingState,
 } from '@tanstack/react-table'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   HelpCircle,
   ArrowUpDown,
@@ -43,6 +44,11 @@ import {
 } from '../lib/formatNumber'
 
 const EVE_TYCOON_MARKET = 'https://evetycoon.com/market/'
+
+/** Длинные datalist из тысяч имён сильно тормозят DOM; подсказки достаточно ограничить. */
+const DATALIST_SUGGESTION_CAP = 120
+
+const MARKET_ROW_ESTIMATE_PX = 46
 
 function TypeIcon({ typeId }: { typeId: number | null }) {
   const [failed, setFailed] = useState(false)
@@ -194,28 +200,32 @@ export function MarketTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'entryScore', desc: true },
   ])
-  const nameFilterSuggestions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          data
-            .map((row) => row.name.trim())
-            .filter((value) => value.length > 0)
-        )
-      ).sort((a, b) => a.localeCompare(b, 'ru')),
-    [data]
-  )
-  const typeFilterSuggestions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          data
-            .map((row) => row.type.trim())
-            .filter((value) => value.length > 0)
-        )
-      ).sort((a, b) => a.localeCompare(b, 'en')),
-    [data]
-  )
+  const nameFilterSuggestions = useMemo(() =>
+  {
+    const arr = Array.from(
+      new Set(
+        data
+          .map((row) => row.name.trim())
+          .filter((value) => value.length > 0)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'ru'))
+    return arr.length <= DATALIST_SUGGESTION_CAP
+      ? arr
+      : arr.slice(0, DATALIST_SUGGESTION_CAP)
+  }, [data])
+  const typeFilterSuggestions = useMemo(() =>
+  {
+    const arr = Array.from(
+      new Set(
+        data
+          .map((row) => row.type.trim())
+          .filter((value) => value.length > 0)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'en'))
+    return arr.length <= DATALIST_SUGGESTION_CAP
+      ? arr
+      : arr.slice(0, DATALIST_SUGGESTION_CAP)
+  }, [data])
 
   const columns = useMemo<ColumnDef<MarketRow>[]>(
     () =>
@@ -386,6 +396,29 @@ export function MarketTable({
     getFilteredRowModel: getFilteredRowModel(),
   })
 
+  const scrollParentRef = useRef<HTMLDivElement>(null)
+  const rows = table.getRowModel().rows
+  const leafColumnCount = table.getVisibleLeafColumns().length
+
+  const rowVirtualizer = useVirtualizer<
+    HTMLDivElement,
+    HTMLTableRowElement
+  >({
+    count: rows.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => MARKET_ROW_ESTIMATE_PX,
+    overscan: 14,
+  })
+
+  const virtualRows = rowVirtualizer.getVirtualItems()
+  const padTop =
+    virtualRows.length > 0 ? virtualRows[0]?.start ?? 0 : 0
+  const padBot =
+    virtualRows.length > 0
+      ? rowVirtualizer.getTotalSize()
+        - (virtualRows[virtualRows.length - 1]?.end ?? 0)
+      : 0
+
   return (
     <>
       {copyToast ? (
@@ -406,8 +439,11 @@ export function MarketTable({
           <span>{copyToast.text}</span>
         </div>
       ) : null}
-      <div className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
-      <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-white">
+      <div
+        ref={scrollParentRef}
+        className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset"
+      >
+        <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-white">
         <thead className="sticky top-0 z-40 bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
@@ -575,44 +611,80 @@ export function MarketTable({
           </tr>
         </thead>
         <tbody>
-          {table.getRowModel().rows.length === 0 ? (
+          {rows.length === 0 ? (
             <tr>
-                <td
-                colSpan={columns.length}
+              <td
+                colSpan={leafColumnCount}
                 className="p-6 text-center text-eve-muted/90"
               >
                 {emptyMessage}
               </td>
             </tr>
           ) : (
-            table.getRowModel().rows.map((row) => {
-              return (
-              <tr key={row.id} className="group/market-row">
-                {row.getVisibleCells().map((cell) => (
+            <>
+              {padTop > 0 ? (
+                <tr aria-hidden className="pointer-events-none">
                   <td
-                    key={cell.id}
-                    className={
-                      cell.column.id === 'typeId'
-                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/50 px-0.5 py-1.5 text-center text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                        : cell.column.id === 'name'
-                          ? 'max-w-[18rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                          : cell.column.id === 'entryScore'
-                            ? 'min-w-[8rem] max-w-[10.5rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                            : 'border-b border-eve-border/50 px-2 py-1.5 font-tabular-nums text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                    }
+                    colSpan={leafColumnCount}
+                    style={{
+                      height: padTop,
+                      padding: 0,
+                      border: 'none',
+                      lineHeight: 0,
+                    }}
+                  />
+                </tr>
+              ) : null}
+              {virtualRows.map((vr) =>
+              {
+                const row = rows[vr.index]
+                if (!row) return null
+                return (
+                  <tr
+                    key={row.id}
+                    ref={rowVirtualizer.measureElement}
+                    data-index={vr.index}
+                    className="group/market-row"
                   >
-                    {flexRender(
-                      cell.column.columnDef.cell,
-                      cell.getContext()
-                    )}
-                  </td>
-                ))}
-              </tr>
-              )
-            })
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className={
+                          cell.column.id === 'typeId'
+                            ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/50 px-0.5 py-1.5 text-center text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
+                            : cell.column.id === 'name'
+                              ? 'max-w-[18rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
+                              : cell.column.id === 'entryScore'
+                                ? 'min-w-[8rem] max-w-[10.5rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
+                                : 'border-b border-eve-border/50 px-2 py-1.5 font-tabular-nums text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
+                        }
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                )
+              })}
+              {padBot > 0 ? (
+                <tr aria-hidden className="pointer-events-none">
+                  <td
+                    colSpan={leafColumnCount}
+                    style={{
+                      height: padBot,
+                      padding: 0,
+                      border: 'none',
+                      lineHeight: 0,
+                    }}
+                  />
+                </tr>
+              ) : null}
+            </>
           )}
         </tbody>
-      </table>
+        </table>
       </div>
     </>
   )
