@@ -17,8 +17,10 @@ import {
   ArrowDown,
   ExternalLink,
   Store,
+  Check,
+  AlertCircle,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MarketRow } from '../types/market'
 import { COLUMN_DEFS, type ColumnId, COLUMN_DEF_BY_ID } from '../lib/columnLabels'
 import {
@@ -163,6 +165,32 @@ export function MarketTable({
   priceSellHeader = null,
   priceBuyHeader = null,
 }: MarketTableProps) {
+  const [copyToast, setCopyToast] = useState<
+    null | { text: string; variant: 'success' | 'error' }
+  >(null)
+  const copyToastTimerRef = useRef<number | null>(null)
+
+  useEffect(() =>
+  {
+    return () =>
+    {
+      if (copyToastTimerRef.current != null)
+        window.clearTimeout(copyToastTimerRef.current)
+    }
+  }, [])
+
+  const flashCopyToast = useCallback((text: string, variant: 'success' | 'error') =>
+  {
+    if (copyToastTimerRef.current != null)
+      window.clearTimeout(copyToastTimerRef.current)
+    setCopyToast({ text, variant })
+    copyToastTimerRef.current = window.setTimeout(() =>
+    {
+      setCopyToast(null)
+      copyToastTimerRef.current = null
+    }, 2200)
+  }, [])
+
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'entryScore', desc: true },
   ])
@@ -296,14 +324,22 @@ export function MarketTable({
                         ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current'
                         : 'line-clamp-2 max-w-full text-left text-xs font-medium text-white underline decoration-transparent underline-offset-2 transition-colors hover:text-eve-accent hover:decoration-current'
                     }
-                    title="Клик — копировать название"
+                    title={
+                      copied
+                        ? 'Название скопировано (ещё раз — копировать снова)'
+                        : 'Клик — копировать название'
+                    }
                     onClick={async (e) => {
                       e.stopPropagation()
                       try {
                         await navigator.clipboard.writeText(n)
                         onNameCopied(cKey)
+                        flashCopyToast('Скопировано в буфер обмена', 'success')
                       } catch {
-                        /* ignore */
+                        flashCopyToast(
+                          'Не удалось скопировать (разрешите доступ к буферу)',
+                          'error'
+                        )
                       }
                     }}
                   >
@@ -336,7 +372,7 @@ export function MarketTable({
           meta: { description: def.description, kind: def.kind },
         } as ColumnDef<MarketRow>
       }),
-    [highPriceThresholdIsk, copiedNameKeys, onNameCopied, priceSellHeader, priceBuyHeader]
+    [highPriceThresholdIsk, copiedNameKeys, onNameCopied, priceSellHeader, priceBuyHeader, flashCopyToast]
   )
 
   const table = useReactTable({
@@ -351,7 +387,26 @@ export function MarketTable({
   })
 
   return (
-    <div className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
+    <>
+      {copyToast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={
+            copyToast.variant === 'success'
+              ? 'pointer-events-none fixed bottom-6 left-1/2 z-[100] flex max-w-[min(92vw,22rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-eve-accent/45 bg-eve-elevated/95 px-4 py-2.5 text-sm font-medium text-eve-gold-bright shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-sm'
+              : 'pointer-events-none fixed bottom-6 left-1/2 z-[100] flex max-w-[min(92vw,22rem)] -translate-x-1/2 items-center gap-2 rounded-md border border-eve-danger/55 bg-eve-elevated/95 px-4 py-2.5 text-sm font-medium text-eve-danger shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-sm'
+          }
+        >
+          {copyToast.variant === 'success' ? (
+            <Check className="h-4 w-4 shrink-0 text-eve-accent" aria-hidden />
+          ) : (
+            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+          )}
+          <span>{copyToast.text}</span>
+        </div>
+      ) : null}
+      <div className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset">
       <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-white">
         <thead className="sticky top-0 z-40 bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
           {table.getHeaderGroups().map((hg) => (
@@ -558,6 +613,7 @@ export function MarketTable({
           )}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   )
 }
