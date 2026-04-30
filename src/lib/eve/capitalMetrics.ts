@@ -656,7 +656,7 @@ export function isMarketRelatedRefType(ref: string): boolean
 
 export const MS_DAY = 86_400_000
 
-export type DashboardRangeId = 'd7' | 'd30' | 'd90' | 'all'
+export type DashboardRangeId = 'd1' | 'd7' | 'd30' | 'd90' | 'all'
 
 export const DASHBOARD_RANGE_PRESETS: readonly {
   id: DashboardRangeId
@@ -664,6 +664,7 @@ export const DASHBOARD_RANGE_PRESETS: readonly {
   /** 0 = не используется, только для `all` (см. период в CharacterDashboard) */
   durationMs: number
 }[] = [
+  { id: 'd1', label: '1 день', durationMs: MS_DAY },
   { id: 'd7', label: 'Неделя', durationMs: 7 * MS_DAY },
   { id: 'd30', label: 'Месяц', durationMs: 30 * MS_DAY },
   { id: 'd90', label: '3 мес', durationMs: 90 * MS_DAY },
