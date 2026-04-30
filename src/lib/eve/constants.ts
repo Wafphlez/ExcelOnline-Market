@@ -98,3 +98,8 @@ export function characterPortraitUrl(characterId: number, size: 64 | 128 | 256 |
 {
   return `${ EVE_IMAGE_BASE }/characters/${ characterId }/portrait?size=${ size }`
 }
+
+export function typeIconUrl(typeId: number, size: 32 | 64 | 128 | 256 | 512 | 1024 = 64): string
+{
+  return `${ EVE_IMAGE_BASE }/types/${ typeId }/icon?size=${ size }`
+}

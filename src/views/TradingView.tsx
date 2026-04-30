@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
 import { ArrowLeftRight, FolderOpen, RefreshCw } from 'lucide-react'
@@ -48,6 +48,7 @@ const LS_PRICE_MLN = 'excelMarket_highPriceMln'
 const LS_BROKER_PCT = 'excelMarket_brokerFeePct'
 const LS_SALES_TAX_PCT = 'excelMarket_salesTaxPct'
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
+const LS_TRADING_LEFT_PANEL_WIDTH_PX = 'excelMarket_tradingLeftPanelWidthPx'
 
 const DEFAULT_BROKER_FEE_PCT = 1.4
 const DEFAULT_SALES_TAX_PCT = 4.2
@@ -260,6 +261,20 @@ function readLastExportFileName(): string
   }
 }
 
+function readLeftPanelWidthPx(): number
+{
+  try
+  {
+    const v = localStorage.getItem(LS_TRADING_LEFT_PANEL_WIDTH_PX)
+    const n = Number(v)
+    if (Number.isFinite(n) && n >= 260 && n <= 900) return Math.floor(n)
+  } catch
+  {
+    /* ignore */
+  }
+  return 360
+}
+
 export function TradingView()
 {
   const [fileRows, setFileRows] = useState<MarketRow[] | null>(null)
@@ -296,6 +311,11 @@ export function TradingView()
   const [isCrossRegionMode, setIsCrossRegionMode] = useState(false)
   const [priceSellHeader, setPriceSellHeader] = useState<string | null>(null)
   const [priceBuyHeader, setPriceBuyHeader] = useState<string | null>(null)
+  const [leftPanelWidthPx, setLeftPanelWidthPx] = useState(readLeftPanelWidthPx)
+  const splitRootRef = useRef<HTMLDivElement | null>(null)
+  const isResizingLeftPanelRef = useRef(false)
+  const resizeStartXRef = useRef(0)
+  const resizeStartWidthRef = useRef(0)
 
   const highPriceThresholdIsk = priceThresholdMln * 1_000_000
 
@@ -826,6 +846,60 @@ export function TradingView()
     }
   }, [selectedLocalExportFile])
 
+  useEffect(() =>
+  {
+    try
+    {
+      localStorage.setItem(
+        LS_TRADING_LEFT_PANEL_WIDTH_PX,
+        String(Math.round(leftPanelWidthPx))
+      )
+    } catch
+    {
+      /* ignore */
+    }
+  }, [leftPanelWidthPx])
+
+  useEffect(() =>
+  {
+    const onMouseMove = (e: MouseEvent) =>
+    {
+      if (!isResizingLeftPanelRef.current) return
+      const rootWidth = splitRootRef.current?.clientWidth ?? window.innerWidth
+      const minWidth = 260
+      const maxWidth = Math.max(minWidth + 60, rootWidth - 420)
+      const next = resizeStartWidthRef.current + (e.clientX - resizeStartXRef.current)
+      const clamped = Math.max(minWidth, Math.min(maxWidth, Math.round(next)))
+      setLeftPanelWidthPx(clamped)
+    }
+    const onMouseUp = () =>
+    {
+      if (!isResizingLeftPanelRef.current) return
+      isResizingLeftPanelRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () =>
+    {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [])
+
+  const startLeftPanelResize = useCallback((e: React.MouseEvent<HTMLDivElement>) =>
+  {
+    if (window.innerWidth < 1024) return
+    isResizingLeftPanelRef.current = true
+    resizeStartXRef.current = e.clientX
+    resizeStartWidthRef.current = leftPanelWidthPx
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [leftPanelWidthPx])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col text-white lg:min-h-0 lg:overflow-hidden">
       <div className="w-full px-4 py-6 lg:flex lg:h-full lg:flex-col">
@@ -940,8 +1014,14 @@ export function TradingView()
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-1 lg:flex-row lg:items-start lg:overflow-hidden">
-          <aside className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:w-[25%] lg:min-w-[320px] lg:overflow-y-auto lg:pr-1">
+        <div
+          ref={splitRootRef}
+          className="flex min-h-0 flex-1 flex-col gap-1 lg:flex-row lg:overflow-hidden"
+        >
+          <aside
+            className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:shrink-0 lg:overflow-y-auto lg:pr-1"
+            style={{ width: `min(100%, ${leftPanelWidthPx}px)` }}
+          >
             <div className="eve-panel p-1.5">
               <ExportBar
                 onLoadBuffer={ loadFromBuffer }
@@ -1132,7 +1212,16 @@ export function TradingView()
             </div>
           </aside>
 
-          <main className="mt-4 w-full lg:mt-0 lg:flex lg:h-full lg:w-[75%] lg:flex-col lg:overflow-hidden lg:pl-1">
+          <div
+            className="hidden lg:block lg:h-full lg:w-2 lg:cursor-col-resize lg:rounded-sm lg:bg-eve-border/40 lg:transition-colors hover:lg:bg-eve-accent/55"
+            onMouseDown={startLeftPanelResize}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Изменить ширину левой панели"
+            title="Потяните, чтобы изменить ширину левой панели"
+          />
+
+          <main className="mt-4 w-full lg:mt-0 lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:pl-1">
             { error && (
               <div
                 className="eve-panel mb-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"

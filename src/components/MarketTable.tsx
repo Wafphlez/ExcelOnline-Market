@@ -32,6 +32,7 @@ import { NumberRangeFilterInputs } from './NumberRangeFilterInputs'
 import { EntryScoreFillBar } from './EntryScoreFillBar'
 import { SpreadPositionBar } from './SpreadPositionBar'
 import { marketRowCopyKey } from '../lib/rowCopyKey'
+import { typeIconUrl } from '../lib/eve/constants'
 import {
   formatIsk,
   formatInteger,
@@ -40,6 +41,39 @@ import {
 } from '../lib/formatNumber'
 
 const EVE_TYCOON_MARKET = 'https://evetycoon.com/market/'
+
+function TypeIcon({ typeId }: { typeId: number | null }) {
+  const [failed, setFailed] = useState(false)
+  const validTypeId =
+    typeof typeId === 'number' &&
+    Number.isFinite(typeId) &&
+    Number.isInteger(typeId) &&
+    typeId > 0
+      ? typeId
+      : null
+  if (validTypeId == null || failed) {
+    return (
+      <span
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-eve-border/60 bg-eve-bg/55 text-[10px] text-eve-muted/70"
+        title="Иконка недоступна"
+        aria-hidden
+      >
+        —
+      </span>
+    )
+  }
+  return (
+    <img
+      src={typeIconUrl(validTypeId, 64)}
+      alt=""
+      loading="lazy"
+      width={32}
+      height={32}
+      className="h-8 w-8 shrink-0 rounded border border-eve-border/55 bg-eve-bg/55 object-cover"
+      onError={() => setFailed(true)}
+    />
+  )
+}
 
 const nameSort: SortingFn<MarketRow> = (rowA, rowB, columnId) =>
   String(rowA.getValue(columnId) ?? '').localeCompare(
@@ -253,26 +287,29 @@ export function MarketTable({
               const cKey = marketRowCopyKey(o)
               const copied = copiedNameKeys.has(cKey)
               return (
-                <button
-                  type="button"
-                  className={
-                    copied
-                      ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current'
-                      : 'line-clamp-2 max-w-full text-left text-xs font-medium text-white underline decoration-transparent underline-offset-2 transition-colors hover:text-eve-accent hover:decoration-current'
-                  }
-                  title="Клик — копировать название"
-                  onClick={async (e) => {
-                    e.stopPropagation()
-                    try {
-                      await navigator.clipboard.writeText(n)
-                      onNameCopied(cKey)
-                    } catch {
-                      /* ignore */
+                <div className="flex min-w-0 items-start gap-2">
+                  <TypeIcon typeId={o.typeId} />
+                  <button
+                    type="button"
+                    className={
+                      copied
+                        ? 'line-clamp-2 max-w-full text-left text-xs font-semibold text-eve-gold-bright underline decoration-transparent underline-offset-2 transition-colors hover:decoration-current'
+                        : 'line-clamp-2 max-w-full text-left text-xs font-medium text-white underline decoration-transparent underline-offset-2 transition-colors hover:text-eve-accent hover:decoration-current'
                     }
-                  }}
-                >
-                  {n}
-                </button>
+                    title="Клик — копировать название"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      try {
+                        await navigator.clipboard.writeText(n)
+                        onNameCopied(cKey)
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                  >
+                    {n}
+                  </button>
+                </div>
               )
             }
             if (id === 'type') {
