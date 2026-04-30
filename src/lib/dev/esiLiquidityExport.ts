@@ -19,7 +19,7 @@ const USER_AGENT =
   'ExcelOnlineMarket/1.0 (dev; https://github.com/Wafphlez/ExcelOnline-Market)'
 
 const ESI_LOG_PREFIX = '[ESI export]'
-const ESI_REQUEST_GAP_MS = 20
+const ESI_REQUEST_GAP_MS = 10
 
 const MAX_DEV_LOG_LINES = 600
 const esiDevLogBuffer: string[] = []
