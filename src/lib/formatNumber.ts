@@ -50,6 +50,42 @@ export function formatInteger(n: number | null | undefined): string {
   return formatWithSpaces(Math.round(n), 0)
 }
 
+function trimTrailingZerosAfterComma(s: string): string {
+  const i = s.indexOf(',')
+  if (i < 0) return s
+  const head = s.slice(0, i)
+  let tail = s.slice(i + 1).replace(/0+$/, '')
+  return tail === '' ? head : `${head},${tail}`
+}
+
+/** Доля после деления для суффиксов K/M/B (запятая как десятичный разделитель). */
+function formatKmbQuotient(q: number): string {
+  const absQ = Math.abs(q)
+  const fd = absQ >= 100 ? 0 : 2
+  const raw = q.toFixed(fd).replace('.', ',')
+  return trimTrailingZerosAfterComma(raw)
+}
+
+/**
+ * Компактные целые для узких бейджей: ≥10³ → K, ≥10⁶ → M, ≥10⁹ → B (латиница).
+ * Используется в индикаторе спреда и при необходимости в других микроподписях.
+ */
+export function formatCompactKmb(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  const sign = n < 0 ? '−' : ''
+  const x = Math.abs(Math.round(n))
+  if (x >= 1_000_000_000) {
+    return `${sign}${formatKmbQuotient(x / 1_000_000_000)}B`
+  }
+  if (x >= 1_000_000) {
+    return `${sign}${formatKmbQuotient(x / 1_000_000)}M`
+  }
+  if (x >= 1000) {
+    return `${sign}${formatKmbQuotient(x / 1000)}K`
+  }
+  return `${sign}${x}`
+}
+
 /**
  * min/max в фильтре для маржи и «средняя в спреде» задаются в **процентах**
  * (маржа: 5 = 5 %, спред: 0…100 = позиция buy…sell). Остальные колонки — целые.

@@ -1,4 +1,4 @@
-import { formatRatio } from '../lib/formatNumber'
+import { formatCompactKmb, formatRatio } from '../lib/formatNumber'
 
 type Props = {
   ratio: number | null
@@ -59,7 +59,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
             : `Позиция средней в спреде: ${formatRatio(t, 3)}. Центр оси 0,5${t < 0.5 ? ', левее центра' : t > 0.5 ? ', правее центра' : ', в центре'}.`
         }
       >
-        <div className="relative h-7 w-full overflow-hidden rounded-sm border border-eve-border/70 bg-eve-elevated">
+        <div className="relative h-8 w-full overflow-hidden rounded-sm border border-eve-border/70 bg-eve-elevated">
           <div
             className="absolute inset-0"
             style={{ background: TRACK }}
@@ -102,10 +102,37 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
               style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))' }}
             />
             <div
-              className="absolute left-1/2 top-[3px] h-[calc(100%-3px)] w-[1.5px] -translate-x-1/2 bg-gradient-to-b from-eve-gold/95 via-eve-accent/90 to-eve-gold/40"
+              className="absolute left-1/2 top-[3px] h-[calc(100%-5px)] w-[1.5px] -translate-x-1/2 bg-gradient-to-b from-eve-gold/95 via-eve-accent/90 to-eve-gold/40"
             />
             <div className="absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rotate-45 border border-eve-gold/85 bg-eve-bg shadow-[0_0_5px_rgba(184,150,61,0.45)]" />
           </div>
+          {split ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-[32] flex items-center justify-between px-0 py-1"
+              aria-hidden
+            >
+              <span
+                className={
+                  'inline-flex min-w-[1rem] shrink-0 items-center justify-start rounded-r-sm bg-eve-bg/90 py-1 px-1 ' +
+                  'font-eve text-[10px] font-bold tabular-nums leading-none eve-red ' +
+                  'shadow-[0_1px_6px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] ' +
+                  '[text-shadow:0_0_10px_rgba(0,0,0,0.95)] backdrop-blur-[2px]'
+                }
+              >
+                {formatCompactKmb(split.buy)}
+              </span>
+              <span
+                className={
+                  'inline-flex min-w-[1rem] shrink-0 items-center justify-end rounded-l-sm bg-eve-bg/90 py-1 px-1 ' +
+                  'font-eve text-[10px] font-bold tabular-nums leading-none eve-green ' +
+                  'shadow-[0_1px_6px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.06)] ' +
+                  '[text-shadow:0_0_10px_rgba(0,0,0,0.95)] backdrop-blur-[2px]'
+                }
+              >
+                {formatCompactKmb(split.sell)}
+              </span>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="mt-0.5 flex items-baseline justify-between px-0.5 font-eve text-[7px] font-bold uppercase leading-none tracking-[0.2em] text-eve-muted/55">
@@ -113,17 +140,11 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
         <span className="text-eve-gold/60">mid</span>
         <span className="eve-green">sell</span>
       </div>
-      {split ? (
-        <p className="mt-0.5 text-center font-eve text-[10px] font-bold tabular-nums leading-tight tracking-wide [text-shadow:0_0_6px_rgba(184,150,61,0.25)]">
-          <span className="eve-red">{split.buy}</span>
-          <span className="mx-1.5 text-eve-muted/60">·</span>
-          <span className="eve-green">{split.sell}</span>
-        </p>
-      ) : (
+      {!split ? (
         <p className="mt-0.5 text-center font-eve text-[10px] font-semibold tabular-nums text-eve-muted/80">
           Нет сделок за период
         </p>
-      )}
+      ) : null}
     </div>
   )
 }

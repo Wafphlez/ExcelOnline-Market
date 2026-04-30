@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  formatCompactKmb,
   formatFilterNumberDisplay,
   formatIsk,
   formatIskMillionsShort,
@@ -58,6 +59,23 @@ describe('formatIsk', () => {
   it('hides fraction digits for values with 4+ integer digits', () => {
     expect(formatIsk(7_925)).toBe('7 925')
     expect(formatIsk(11_520_000)).toBe('11 520 000')
+  })
+})
+
+describe('formatCompactKmb', () => {
+  it('leaves values under 1000 as integers', () => {
+    expect(formatCompactKmb(71)).toBe('71')
+    expect(formatCompactKmb(999)).toBe('999')
+  })
+  it('uses K with comma decimals', () => {
+    expect(formatCompactKmb(1000)).toBe('1K')
+    expect(formatCompactKmb(1500)).toBe('1,5K')
+    expect(formatCompactKmb(12_340)).toBe('12,34K')
+  })
+  it('uses M and B', () => {
+    expect(formatCompactKmb(1_000_000)).toBe('1M')
+    expect(formatCompactKmb(2_500_000)).toBe('2,5M')
+    expect(formatCompactKmb(3_000_000_000)).toBe('3B')
   })
 })
 
