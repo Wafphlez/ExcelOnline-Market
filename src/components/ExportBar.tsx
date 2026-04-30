@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, FolderOpen, Globe, RefreshCw } from 'lucide-react'
+import { FolderOpen, Globe, RefreshCw } from 'lucide-react'
 import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
-import { EXPORT_REGIONS, type ExportRegion } from '../lib/exportRegions'
+import { EXPORT_REGIONS } from '../lib/exportRegions'
 import {
   buildEsiLiquidityToExports,
   fetchLatestMarketLogFile,
   fetchMarketLogFileBuffer,
   marketLogsStreamUrl,
   devExportFileUrl,
-  downloadToExports,
   fetchEsiDevLogs,
   isDevExportServer,
   listExportFiles,
@@ -88,7 +87,6 @@ type ExportBarProps = {
   onLoadBuffer: (buf: ArrayBuffer) => void | Promise<void>
   onOpenedExportFile?: (fileName: string) => void
   disabled?: boolean
-  hideReadyExportsSection?: boolean
   hideLocalFileOpenSection?: boolean
   hideEsiSection?: boolean
   hideMarketLogsSection?: boolean
@@ -235,7 +233,6 @@ export function ExportBar({
   onLoadBuffer,
   onOpenedExportFile,
   disabled,
-  hideReadyExportsSection = false,
   hideLocalFileOpenSection = false,
   hideEsiSection = false,
   hideMarketLogsSection = false,
@@ -565,39 +562,6 @@ export function ExportBar({
     highPriceThresholdIsk,
   ])
 
-  const onDownloadRegion = async (r: ExportRegion) => {
-    setMsg(null)
-    if (!isDevExportServer) {
-      window.open(r.downloadUrl, '_blank', 'noopener,noreferrer')
-      setMsg('В production откроется ссылка; в dev (npm run dev) файл пишется в папку exports/.')
-      return
-    }
-    setLoading(true)
-    try {
-      await downloadToExports(r.downloadUrl, r.fileName)
-      setMsg(`Сохранено: exports/${r.fileName}`)
-      await refreshList()
-      setSelectedExportFile(r.fileName)
-      onOpenedExportFile?.(r.fileName)
-      try {
-        localStorage.setItem(LS_LAST_EXPORT_FILE, r.fileName)
-      } catch {
-        /* ignore */
-      }
-      const u = devExportFileUrl(r.fileName)
-      const res = await fetch(u)
-      if (res.ok) {
-        const buf = await res.arrayBuffer()
-        await onLoadBuffer(buf)
-        setMsg(`Открыт: ${r.label} (exports/${r.fileName})`)
-      }
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Ошибка скачивания')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const onEsiBuildSelected = async () => {
     if (!selected) return
     setMsg(null)
@@ -726,37 +690,6 @@ export function ExportBar({
 
   return (
     <div className="space-y-5">
-      {!hideReadyExportsSection && (
-        <section>
-          <h3 className="eve-section-title mb-2">
-            Готовые выгрузки по региону
-          </h3>
-          <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
-            Сервис: ликвидность; в dev файлы пишутся в{' '}
-            <code className="rounded bg-eve-bg/80 px-1 text-white">exports/</code>
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {regions.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                disabled={disabled || loading}
-                onClick={() => void onDownloadRegion(r)}
-                className="inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
-                title={
-                  isDevExportServer
-                    ? `Скачать в exports/${r.fileName}`
-                    : 'Открыть в новой вкладке'
-                }
-              >
-                <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       {!hideLocalFileOpenSection && (
         <section className="border-t border-eve-border/50 pt-4">
           <h3 className="eve-section-title mb-2">Открыть локальный файл</h3>
@@ -1159,9 +1092,8 @@ export function ExportBar({
 
       {!isDevExportServer && (
         <p className="text-[11px] leading-relaxed text-eve-muted/80">
-          Запись в <code>exports/</code> и ESI — только в режиме{' '}
-          <code className="text-white">npm run dev</code>. Ссылки скачивания откроются в
-          браузере.
+          Работа с <code>exports/</code> и ESI — только в режиме{' '}
+          <code className="text-white">npm run dev</code>.
         </p>
       )}
     </div>

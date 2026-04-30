@@ -1,1 +1,1 @@
-{"version":2,"columnFilters":[{"id":"dayVolume","value":{"min":20,"max":null}},{"id":"margin","value":{"min":5,"max":null}},{"id":"buyToSellRatio","value":{"min":5,"max":95}},{"id":"dayTurnover","value":{"min":10000000,"max":null}}],"activePreset":null}
+{"version":2,"columnFilters":[{"id":"dayVolume","value":{"min":20,"max":null}},{"id":"margin","value":{"min":5,"max":null}},{"id":"buyToSellRatio","value":{"min":5,"max":95}},{"id":"dayTurnover","value":{"min":10000000,"max":null}},{"id":"spreadIsk","value":{"min":10000000,"max":null}}],"activePreset":null}

@@ -1,7 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse, Server } from 'node:http'
-import https from 'node:https'
 import { watch as fsWatch } from 'node:fs'
 import fs from 'node:fs/promises'
 import { URL } from 'node:url'
@@ -24,16 +23,6 @@ const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '.')
 const exportsDir = path.join(projectRoot, 'exports')
 const filtersFilePath = path.join(exportsDir, 'filters.json')
-
-const ALLOWED_DOWNLOAD_URLS = new Set<string>([
-  'https://eve.atpstealer.com/logistics/liquidity/exel?region=The%20Forge',
-  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Domain',
-  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Heimatar',
-  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Sinq%20Laison',
-  'https://eve.atpstealer.com/logistics/liquidity/exel?region=Metropolis',
-])
-
-const URL_PREFIX = 'https://eve.atpstealer.com/logistics/liquidity/'
 
 function isSafeFileName(name: string): boolean {
   return /^[a-zA-Z0-9._-]+\.(xlsx|xls)$/.test(name) && !name.includes('..')
@@ -85,61 +74,6 @@ function readBody(req: IncomingMessage): Promise<Buffer> {
     req.on('data', (c) => chunks.push(c as Buffer))
     req.on('end', () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
-  })
-}
-
-/** Node &lt; 18 не имеет глобального fetch — скачивание только через https. */
-function httpsGetToBuffer(
-  fullUrl: string,
-  ac: AbortController,
-  timeoutMs: number
-): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const u = new URL(fullUrl)
-    if (u.protocol !== 'https:') {
-      reject(new Error('только https'))
-      return
-    }
-    const req = https.get(
-      {
-        hostname: u.hostname,
-        path: u.pathname + u.search,
-        port: u.port || 443,
-        headers: { 'user-agent': 'ExcelOnlineMarket-dev-export' },
-      },
-      (incoming) => {
-        const chunks: Buffer[] = []
-        incoming.on('data', (c) => chunks.push(c as Buffer))
-        incoming.on('end', () => {
-          clearTimeout(timer)
-          const code = incoming.statusCode ?? 0
-          if (code < 200 || code >= 300) {
-            reject(
-              new Error(`источник HTTP ${code} ${incoming.statusMessage ?? ''}`)
-            )
-            return
-          }
-          resolve(Buffer.concat(chunks))
-        })
-      }
-    )
-    const timer = setTimeout(() => {
-      ac.abort()
-      req.destroy()
-      reject(new Error('таймаут скачивания'))
-    }, timeoutMs)
-    const onAbort = () => {
-      clearTimeout(timer)
-      req.destroy()
-      reject(new Error('aborted'))
-    }
-    if (ac.signal.aborted) onAbort()
-    else ac.signal.addEventListener('abort', onAbort, { once: true })
-    req.on('error', (e) => {
-      clearTimeout(timer)
-      ac.signal.removeEventListener('abort', onAbort)
-      reject(e)
-    })
   })
 }
 
@@ -666,63 +600,6 @@ function devExportPlugin(): Plugin {
                 return res.end(
                   JSON.stringify({
                     error: msg,
-                  })
-                )
-              }
-            }
-
-            if (req.method === 'POST' && pathname === '/__dev/export/download') {
-              let body: { url?: string; fileName?: string }
-              try {
-                const raw = (await readBody(req)).toString('utf8')
-                body = JSON.parse(raw) as { url?: string; fileName?: string }
-              } catch {
-                res.statusCode = 400
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(JSON.stringify({ error: 'invalid json' }))
-              }
-              const url = body.url
-              const fileName = body.fileName
-              if (typeof url !== 'string' || typeof fileName !== 'string') {
-                res.statusCode = 400
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({ error: 'url and fileName required' })
-                )
-              }
-              if (!url.startsWith(URL_PREFIX) || !ALLOWED_DOWNLOAD_URLS.has(url)) {
-                res.statusCode = 400
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({ error: 'url not in allowed export list' })
-                )
-              }
-              if (!isSafeFileName(fileName)) {
-                res.statusCode = 400
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({ error: 'invalid fileName' })
-                )
-              }
-              const filePath = path.join(exportsDir, fileName)
-              if (!isUnderExportsDir(filePath)) {
-                res.statusCode = 400
-                return res.end('bad path')
-              }
-              try {
-                const ac = new AbortController()
-                const buf = await httpsGetToBuffer(url, ac, 120_000)
-                await fs.writeFile(filePath, buf)
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({ ok: true, fileName, bytes: buf.length })
-                )
-              } catch (e) {
-                res.statusCode = 502
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({
-                    error: e instanceof Error ? e.message : 'fetch failed',
                   })
                 )
               }

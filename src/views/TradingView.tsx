@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
-import { ArrowLeftRight, Download, FolderOpen, RefreshCw } from 'lucide-react'
+import { ArrowLeftRight, FolderOpen, RefreshCw } from 'lucide-react'
 import { ExportBar } from '../components/ExportBar'
 import { FileDropzone } from '../components/FileDropzone'
 import { MarketTable } from '../components/MarketTable'
@@ -37,12 +37,11 @@ import
 import
   {
     devExportFileUrl,
-    downloadToExports,
     isDevExportServer,
     listExportFiles,
     type ExportListItem,
   } from '../lib/devExportApi'
-import { EXPORT_REGIONS, type ExportRegion } from '../lib/exportRegions'
+import { EXPORT_REGIONS } from '../lib/exportRegions'
 import type { MarketRow } from '../types/market'
 
 const LS_PRICE_MLN = 'excelMarket_highPriceMln'
@@ -52,14 +51,6 @@ const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 
 const DEFAULT_BROKER_FEE_PCT = 1.4
 const DEFAULT_SALES_TAX_PCT = 4.2
-const REGION_TRADE_SYSTEM_BY_ID: Record<string, string> = {
-  'the-forge': 'Jita',
-  domain: 'Amarr',
-  heimatar: 'Rens',
-  'sinq-laison': 'Dodixie',
-  metropolis: 'Hek',
-}
-
 function detectRegionLabelFromExportFileName(fileName: string): string {
   const byReady = EXPORT_REGIONS.find((r) => r.fileName === fileName)
   if (byReady) return byReady.label
@@ -726,46 +717,6 @@ export function TradingView()
     }
   }, [selectedLocalExportFile, loadFromBuffer])
 
-  const onDownloadReadyExport = useCallback(
-    async (region: ExportRegion) =>
-    {
-      setExportMsg(null)
-      if (!isDevExportServer)
-      {
-        window.open(region.downloadUrl, '_blank', 'noopener,noreferrer')
-        setExportMsg(
-          'В production откроется ссылка; в dev (npm run dev) файл пишется в папку exports/.'
-        )
-        return
-      }
-      setLoading(true)
-      try
-      {
-        await downloadToExports(region.downloadUrl, region.fileName)
-        setSelectedLocalExportFile(region.fileName)
-        await refreshLocalExportFiles()
-        const u = devExportFileUrl(region.fileName)
-        const res = await fetch(u)
-        if (res.ok)
-        {
-          const buf = await res.arrayBuffer()
-          await loadFromBuffer(buf)
-          setExportMsg(`Открыт: ${ region.label } (exports/${ region.fileName })`)
-        } else
-        {
-          setExportMsg(`Сохранено: exports/${ region.fileName }`)
-        }
-      } catch (e)
-      {
-        setExportMsg(e instanceof Error ? e.message : 'Ошибка скачивания')
-      } finally
-      {
-        setLoading(false)
-      }
-    },
-    [loadFromBuffer, refreshLocalExportFiles]
-  )
-
   const onFile = useCallback(
     async (file: File) =>
     {
@@ -996,7 +947,6 @@ export function TradingView()
                 onLoadBuffer={ loadFromBuffer }
                 onOpenedExportFile={ onExportBarOpenedFile }
                 disabled={ loading }
-                hideReadyExportsSection
                 hideLocalFileOpenSection
                 hideEsiSection
                 brokerFeePct={ brokerFeePct }
@@ -1157,47 +1107,11 @@ export function TradingView()
                   ) }
 
                   <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                    <h3 className="eve-section-title mb-2">Готовые выгрузки</h3>
-                    <div className="flex flex-wrap gap-2">
-                      { EXPORT_REGIONS.map((region) => (
-                        <button
-                          key={ region.id }
-                          type="button"
-                          disabled={ loading }
-                          onClick={ () => void onDownloadReadyExport(region) }
-                          className="group inline-flex items-center gap-1.5 rounded border border-eve-border/90 bg-eve-bg/60 px-2.5 py-1.5 text-xs font-semibold text-eve-bright/90 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
-                          title={
-                            isDevExportServer
-                              ? `Скачать в exports/${ region.fileName }`
-                              : 'Открыть в новой вкладке'
-                          }
-                        >
-                          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          <span className="relative inline-grid place-items-center">
-                            <span aria-hidden className="invisible">
-                              { (REGION_TRADE_SYSTEM_BY_ID[region.id]?.length ?? 0) > region.label.length
-                                ? REGION_TRADE_SYSTEM_BY_ID[region.id]
-                                : region.label }
-                            </span>
-                            <span className="absolute inset-0 grid place-items-center transition-opacity duration-200 group-hover:opacity-0">
-                              { region.label }
-                            </span>
-                            <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                              { REGION_TRADE_SYSTEM_BY_ID[region.id] ?? region.label }
-                            </span>
-                          </span>
-                        </button>
-                      )) }
-                    </div>
-                  </section>
-
-                  <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                     <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
                     <ExportBar
                       onLoadBuffer={ loadFromBuffer }
                       onOpenedExportFile={ onExportBarOpenedFile }
                       disabled={ loading }
-                      hideReadyExportsSection
                       hideLocalFileOpenSection
                       hideMarketLogsSection
                       brokerFeePct={ brokerFeePct }
