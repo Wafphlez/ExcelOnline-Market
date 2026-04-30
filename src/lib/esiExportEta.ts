@@ -21,7 +21,7 @@ export function esiTypesProgress01(p: EsiExportProgressState): number {
   return Math.min(1, p.typesDone / p.typeTotal)
 }
 
-/** 0..1: общий прогресс по всем ESI-запросам, нужным для выгрузки */
+/** 0..1: общий прогресс по ключевым ESI-запросам выгрузки (orders + history). */
 export function esiAllRequestsProgress01(p: EsiExportProgressState): number {
   const m = p.maxOrderPages
   const sellM = m > 0 ? (p.orderSellPageBarMax > 0 ? p.orderSellPageBarMax : m) : 0
@@ -32,21 +32,10 @@ export function esiAllRequestsProgress01(p: EsiExportProgressState): number {
 
   const historyTotal = Math.max(0, p.historyTotal)
   const historyDone = Math.min(Math.max(0, p.historyDone), historyTotal)
-
-  const typesTotal = Math.max(0, p.universeTypesTotal)
-  const typesDone = Math.min(Math.max(0, p.universeTypesDone), typesTotal)
-
-  const groupsTotal = Math.max(0, p.universeGroupsTotal)
-  const groupsDone = Math.min(Math.max(0, p.universeGroupsDone), groupsTotal)
-
-  const categoriesTotal = Math.max(0, p.universeCategoriesTotal)
-  const categoriesDone = Math.min(Math.max(0, p.universeCategoriesDone), categoriesTotal)
-
-  const total =
-    ordersTotal + historyTotal + typesTotal + groupsTotal + categoriesTotal
+  const total = ordersTotal + historyTotal
   if (total <= 0) return 0
 
-  const done = ordersDone + historyDone + typesDone + groupsDone + categoriesDone
+  const done = ordersDone + historyDone
   return Math.min(1, done / total)
 }
 

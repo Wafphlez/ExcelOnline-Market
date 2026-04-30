@@ -12,12 +12,6 @@ export type EsiExportProgressState = {
   /** В фазе `types` обычно = `typeTotal` (все типы — параллельные async). */
   typeConcurrency: number
   /**
-   * Режим «все страницы ордеров» (`orderPagesUntilExhausted: true` в опциях экспорта) — влияет
-   * **только** на пагинацию /markets/…/orders/. Тогда `maxOrderPages` в прогрессе = потолок ESI
-   * (1000) для шкалы, не 0; авто-стоп по 404, пустому ответу, неполной странице, как в bounded.
-   */
-  unboundedOrderPages: boolean
-  /**
    * Знаменатель шкалы Sell: 0 = брать `maxOrderPages` (ещё качаем или весь лимит).
    * >0 = фактическое число страниц по sell (конец пагинации, 404 «нет страницы», …).
    */
@@ -27,15 +21,6 @@ export type EsiExportProgressState = {
   /** Запросы /markets/{region}/history/?type_id=... */
   historyDone: number
   historyTotal: number
-  /** Разрешения type_id через каталог universe (локально, без runtime HTTP). */
-  universeTypesDone: number
-  universeTypesTotal: number
-  /** Разрешения group_id через каталог universe (локально, без runtime HTTP). */
-  universeGroupsDone: number
-  universeGroupsTotal: number
-  /** Разрешения category_id через каталог universe (локально, без runtime HTTP). */
-  universeCategoriesDone: number
-  universeCategoriesTotal: number
   /** Snapshot ордеров для выгрузки (top-of-book + sheet orders_snapshot). */
   snapshotDone: number
   snapshotTotal: number
@@ -49,17 +34,10 @@ export const ESI_EXPORT_PROGRESS_IDLE: EsiExportProgressState = {
   typeTotal: 0,
   typesDone: 0,
   typeConcurrency: 0,
-  unboundedOrderPages: false,
   orderSellPageBarMax: 0,
   orderBuyPageBarMax: 0,
   historyDone: 0,
   historyTotal: 0,
-  universeTypesDone: 0,
-  universeTypesTotal: 0,
-  universeGroupsDone: 0,
-  universeGroupsTotal: 0,
-  universeCategoriesDone: 0,
-  universeCategoriesTotal: 0,
   snapshotDone: 0,
   snapshotTotal: 0,
 }

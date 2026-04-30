@@ -192,10 +192,8 @@ export async function fetchEsiDevLogs(): Promise<{
 export async function buildEsiLiquidityToExports(opts: {
   regionId: number
   fileName?: string
-  maxTypes?: number
-  maxOrderPages?: number
-  /** true — запрашивать все страницы ордеров, пока ESI не вернёт «нет страницы» */
-  orderPagesUntilExhausted?: boolean
+  /** Окно истории рынка в днях (допустимо: 2, 7, 30). */
+  historyDays?: 2 | 7 | 30
   /** true — добавить top-of-book snapshot колонки + orders_snapshot лист */
   includeOrderSnapshot?: boolean
   /** true — оставить только ордера торгового хаба (по location_id). */
@@ -214,9 +212,7 @@ export async function buildEsiLiquidityToExports(opts: {
     body: JSON.stringify({
       regionId: opts.regionId,
       fileName: opts.fileName,
-      maxTypes: opts.maxTypes,
-      maxOrderPages: opts.maxOrderPages,
-      orderPagesUntilExhausted: opts.orderPagesUntilExhausted === true,
+      historyDays: opts.historyDays,
       includeOrderSnapshot: opts.includeOrderSnapshot === true,
       tradeHubOnly: opts.tradeHubOnly === true,
       tradeHubLocationId:

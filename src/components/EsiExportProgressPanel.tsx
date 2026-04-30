@@ -177,24 +177,6 @@ export function EsiExportProgressPanel({
             max={p.historyTotal}
             accentClass="bg-eve-cyan/70"
           />
-          <ProgressRow
-            label="Universe types запросы"
-            current={p.universeTypesDone}
-            max={p.universeTypesTotal}
-            accentClass="bg-eve-gold/80"
-          />
-          <ProgressRow
-            label="Universe groups запросы"
-            current={p.universeGroupsDone}
-            max={p.universeGroupsTotal}
-            accentClass="bg-eve-gold/65"
-          />
-          <ProgressRow
-            label="Universe categories запросы"
-            current={p.universeCategoriesDone}
-            max={p.universeCategoriesTotal}
-            accentClass="bg-eve-gold/55"
-          />
           {includeSnapshotProgress && (
             <ProgressRow
               label="Snapshot ордеров"

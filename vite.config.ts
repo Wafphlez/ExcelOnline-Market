@@ -18,10 +18,6 @@ import {
   requestEsiExportForceStop,
   requestEsiExportStop,
 } from './src/lib/dev/esiLiquidityExport'
-import {
-  ESI_MAX_ORDER_PAGES_USER_CAP,
-  ESI_MAX_TYPES_USER_CAP,
-} from './src/lib/esiOrderPageLimits'
 import { EXPORT_REGIONS } from './src/lib/exportRegions'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -540,9 +536,7 @@ function devExportPlugin(): Plugin {
               const esiPostStart = Date.now()
               type EsiBody = {
                 regionId?: number
-                maxTypes?: number
-                maxOrderPages?: number
-                orderPagesUntilExhausted?: boolean
+                historyDays?: number
                 includeOrderSnapshot?: boolean
                 tradeHubOnly?: boolean
                 tradeHubLocationId?: number
@@ -597,19 +591,12 @@ function devExportPlugin(): Plugin {
                 `[ESI export] dev сервер: POST /esi-liquidity regionId=${rid} — старт`
               )
               try {
-                const orderPagesUntilExhausted = j.orderPagesUntilExhausted === true
+                const historyDays =
+                  j.historyDays === 2 || j.historyDays === 7 || j.historyDays === 30
+                    ? j.historyDays
+                    : 30
                 const { buffer, rowCount, partial } = await buildEsiLiquidityXlsx(rid, {
-                  maxTypes:
-                    typeof j.maxTypes === 'number' && j.maxTypes > 0
-                      ? Math.min(ESI_MAX_TYPES_USER_CAP, j.maxTypes)
-                      : undefined,
-                  orderPagesUntilExhausted,
-                  maxOrderPages:
-                    !orderPagesUntilExhausted &&
-                    typeof j.maxOrderPages === 'number' &&
-                    j.maxOrderPages > 0
-                      ? Math.min(ESI_MAX_ORDER_PAGES_USER_CAP, j.maxOrderPages)
-                      : undefined,
+                  historyDays,
                   includeOrderSnapshot: j.includeOrderSnapshot === true,
                   tradeHubOnly: j.tradeHubOnly === true,
                   tradeHubLocationId:

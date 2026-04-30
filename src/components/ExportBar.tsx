@@ -28,41 +28,12 @@ import {
   LAST_EXPORT_REGION_EVENT,
   readLastExportRegionId,
 } from '../lib/lastExportRegionStorage'
-import {
-  ESI_DEFAULT_MAX_TYPES,
-  ESI_MAX_ORDER_PAGES_USER_CAP,
-  ESI_MAX_TYPES_USER_CAP,
-} from '../lib/esiOrderPageLimits'
 
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
-const LS_ESI_MAX_PAGES = 'excelMarket_esiMaxOrderPages'
-const LS_ESI_MAX_TYPES = 'excelMarket_esiMaxTypes'
 const LS_ESI_INCLUDE_ORDER_SNAPSHOT = 'excelMarket_esiIncludeOrderSnapshot'
 const LS_ESI_TRADE_HUB_ONLY = 'excelMarket_esiTradeHubOnly'
+const LS_ESI_HISTORY_DAYS = 'excelMarket_esiHistoryDays'
 const LS_ENABLE_MARKET_EXPORT_LOGS = 'excelMarket_enableMarketExportLogs'
-
-function readEsiMaxOrderPagesStr(): string {
-  try {
-    const v = localStorage.getItem(LS_ESI_MAX_PAGES)
-    if (v && /^\d{1,4}$/.test(v)) return v
-  } catch {
-    /* ignore */
-  }
-  return '90'
-}
-
-function readEsiMaxTypesStr(): string {
-  try {
-    const v = localStorage.getItem(LS_ESI_MAX_TYPES)
-    if (v && /^\d{1,5}$/.test(v)) {
-      const n = parseInt(v, 10)
-      if (n >= 1 && n <= ESI_MAX_TYPES_USER_CAP) return String(n)
-    }
-  } catch {
-    /* ignore */
-  }
-  return String(ESI_DEFAULT_MAX_TYPES)
-}
 
 function readLastExportFileName(): string {
   try {
@@ -100,6 +71,17 @@ function readEsiTradeHubOnly(): boolean {
   } catch {
     return false
   }
+}
+
+function readEsiHistoryDays(): 2 | 7 | 30 {
+  try {
+    const v = localStorage.getItem(LS_ESI_HISTORY_DAYS)
+    if (v === '2') return 2
+    if (v === '7') return 7
+  } catch {
+    /* ignore */
+  }
+  return 30
 }
 
 type ExportBarProps = {
@@ -274,16 +256,11 @@ export function ExportBar({
   const [files, setFiles] = useState<ExportListItem[]>([])
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-  const [esiMaxPagesStr, setEsiMaxPagesStr] = useState(() =>
-    readEsiMaxOrderPagesStr()
-  )
-  const [esiMaxTypesStr, setEsiMaxTypesStr] = useState(() =>
-    readEsiMaxTypesStr()
-  )
   const [esiIncludeOrderSnapshot, setEsiIncludeOrderSnapshot] = useState(
     readEsiIncludeOrderSnapshot
   )
   const [esiTradeHubOnly, setEsiTradeHubOnly] = useState(readEsiTradeHubOnly)
+  const [esiHistoryDays, setEsiHistoryDays] = useState<2 | 7 | 30>(readEsiHistoryDays)
   const [selectedExportFile, setSelectedExportFile] = useState(
     readLastExportFileName
   )
@@ -430,38 +407,6 @@ export function ExportBar({
   }, [selectedExportFile])
 
   useEffect(() => {
-    const n = parseInt(esiMaxPagesStr, 10)
-    if (
-      !Number.isFinite(n) ||
-      n < 1 ||
-      n > ESI_MAX_ORDER_PAGES_USER_CAP
-    ) {
-      return
-    }
-    try {
-      localStorage.setItem(LS_ESI_MAX_PAGES, String(n))
-    } catch {
-      /* ignore */
-    }
-  }, [esiMaxPagesStr])
-
-  useEffect(() => {
-    const n = parseInt(esiMaxTypesStr, 10)
-    if (
-      !Number.isFinite(n) ||
-      n < 1 ||
-      n > ESI_MAX_TYPES_USER_CAP
-    ) {
-      return
-    }
-    try {
-      localStorage.setItem(LS_ESI_MAX_TYPES, String(n))
-    } catch {
-      /* ignore */
-    }
-  }, [esiMaxTypesStr])
-
-  useEffect(() => {
     try {
       localStorage.setItem(
         LS_ESI_INCLUDE_ORDER_SNAPSHOT,
@@ -482,6 +427,14 @@ export function ExportBar({
       /* ignore */
     }
   }, [esiTradeHubOnly])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_ESI_HISTORY_DAYS, String(esiHistoryDays))
+    } catch {
+      /* ignore */
+    }
+  }, [esiHistoryDays])
 
   useEffect(() => {
     try {
@@ -674,22 +627,10 @@ export function ExportBar({
     }
     const logPoll = window.setInterval(() => void flushEsiLogsToConsole(), 500)
     const logKick = window.setTimeout(() => void flushEsiLogsToConsole(), 100)
-    const mp = parseInt(esiMaxPagesStr.trim(), 10)
-    const maxOrderPages =
-      Number.isFinite(mp) && mp >= 1
-        ? Math.min(ESI_MAX_ORDER_PAGES_USER_CAP, Math.floor(mp))
-        : 90
-    const mt = parseInt(esiMaxTypesStr.trim(), 10)
-    const maxTypes =
-      Number.isFinite(mt) && mt >= 1
-        ? Math.min(ESI_MAX_TYPES_USER_CAP, Math.floor(mt))
-        : ESI_DEFAULT_MAX_TYPES
     try {
       const result = await buildEsiLiquidityToExports({
         regionId: selected.esiRegionId,
-        orderPagesUntilExhausted: false,
-        maxTypes,
-        maxOrderPages,
+        historyDays: esiHistoryDays,
         includeOrderSnapshot: esiIncludeOrderSnapshot,
         tradeHubOnly: esiTradeHubOnly,
         tradeHubLocationId: selected.tradeHubLocationId,
@@ -900,32 +841,27 @@ export function ExportBar({
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs text-eve-muted">
-              <span>Типов</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={ESI_MAX_TYPES_USER_CAP}
-                value={esiMaxTypesStr}
-                onChange={(e) => setEsiMaxTypesStr(e.target.value)}
+              <span>History (дней)</span>
+              <select
+                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                value={String(esiHistoryDays)}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === '2') setEsiHistoryDays(2)
+                  else if (v === '7') setEsiHistoryDays(7)
+                  else setEsiHistoryDays(30)
+                }}
                 disabled={disabled || loading}
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-white shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
-                title={`Сколько типов попадёт в таблицу (1–${ESI_MAX_TYPES_USER_CAP}).`}
-              />
+              >
+                <option value="30">30</option>
+                <option value="7">7</option>
+                <option value="2">2</option>
+              </select>
             </label>
-            <label className="flex flex-col gap-1 text-xs text-eve-muted">
-              <span>Страниц</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={ESI_MAX_ORDER_PAGES_USER_CAP}
-                value={esiMaxPagesStr}
-                onChange={(e) => setEsiMaxPagesStr(e.target.value)}
-                disabled={disabled || loading}
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 px-2 py-1.5 text-xs tabular-nums text-white shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
-              />
-            </label>
+            <p className="@[450px]:col-span-3 text-[10px] text-eve-muted/90">
+              Выгрузка идёт в полном режиме: все страницы ордеров до исчерпания и все
+              доступные типы без ручных лимитов.
+            </p>
             <label className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
               <div className="min-w-0">
                 <p className="font-semibold text-eve-bright/95">
