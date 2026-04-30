@@ -25,6 +25,39 @@ npm run dev
 
 Откройте в браузере адрес, который выведет Vite (обычно `http://localhost:5173`).
 
+## Запуск в Docker
+
+1. Скопируйте переменные окружения:
+
+```bash
+cp .env.example .env
+```
+
+Для PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+2. Запуск в dev-режиме (с dev API для `exports/`):
+
+```bash
+docker compose up --build app-dev
+```
+
+Приложение будет доступно на `http://localhost`.
+
+- Каталог `./exports` на хосте пробрасывается в контейнер (`/app/exports`), поэтому Excel-файлы и `filters.json` сохраняются между перезапусками.
+- Для остановки: `docker compose down`.
+
+3. (Опционально) запуск preview production-сборки:
+
+```bash
+docker compose --profile preview up --build app-preview
+```
+
+Preview будет доступен на `http://localhost`.
+
 ## Скрипты
 
 | Команда         | Назначение                    |
