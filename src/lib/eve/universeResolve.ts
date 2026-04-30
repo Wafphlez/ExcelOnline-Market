@@ -1,5 +1,6 @@
 import { EsiHttpError, esiFetchJson } from './esiClient'
 import { ESI_REQUEST_GAP_MS } from './constants'
+import { loadTradeHubsStaticCatalog } from './tradeHubsStaticCatalog'
 
 function sleep(ms: number): Promise<void>
 {
@@ -40,6 +41,33 @@ export async function resolveLocationToRegionAndLabel(
   const r0 = locationToRegion.get(locationId)
   const n0 = locationLabel.get(locationId)
   if (r0 != null && n0) return { regionId: r0, label: n0 }
+
+  const staticCatalog = await loadTradeHubsStaticCatalog()
+  const staticStation = staticCatalog.stations.get(locationId)
+  if (staticStation)
+  {
+    const label = staticStation.name ?? `#${ locationId }`
+    const rid = staticStation.region_id
+    if (Number.isFinite(rid))
+    {
+      locationLabel.set(locationId, label)
+      locationToRegion.set(locationId, rid)
+      return { regionId: rid, label }
+    }
+  }
+  const staticStructure = staticCatalog.structures.get(locationId)
+  if (staticStructure)
+  {
+    const label = staticStructure.name ?? `#${ locationId }`
+    const rid = staticStructure.region_id
+    if (Number.isFinite(rid))
+    {
+      locationLabel.set(locationId, label)
+      locationToRegion.set(locationId, rid)
+      return { regionId: rid, label }
+    }
+  }
+
   await sleep(ESI_REQUEST_GAP_MS)
   try
   {
@@ -75,6 +103,13 @@ export async function resolveRegionName(
 ): Promise<string>
 {
   if (regionName.has(regionId)) return regionName.get(regionId)!
+  const staticCatalog = await loadTradeHubsStaticCatalog()
+  const staticRegion = staticCatalog.regions.get(regionId)
+  if (staticRegion?.name)
+  {
+    regionName.set(regionId, staticRegion.name)
+    return staticRegion.name
+  }
   await sleep(ESI_REQUEST_GAP_MS)
   const r = await esiFetchJson<{ name: string }>(`/universe/regions/${ regionId }/`, { signal })
   const n = r.name ?? `Region ${ regionId }`

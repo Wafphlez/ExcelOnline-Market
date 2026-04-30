@@ -9,6 +9,7 @@ import type
     MarketPrice,
   } from '../../types/eveCharacter'
 import { DEFAULT_EVE_USER_AGENT, ESI_BASE } from './constants'
+import { loadUniverseStaticCatalog } from './universeStaticCatalog'
 
 /** ESI обычно отдаёт до 250 записей; пагинация — пока `from_id` не вернёт пусто. */
 
@@ -42,11 +43,14 @@ export async function fetchCorporation(
   return esiFetchJson<EveCorporation>(`/corporations/${ corporationId }/`, {})
 }
 
-export type UniverseTypeName = { name: string }
-
 export async function fetchUniverseTypeName(typeId: number): Promise<string>
 {
-  const t = await esiFetchJson<UniverseTypeName>(`/universe/types/${ typeId }/`, {})
+  const c = await loadUniverseStaticCatalog()
+  const t = c.types.get(typeId)
+  if (!t?.name)
+  {
+    throw new Error(`Type ${ typeId } не найден в локальном esi-universe-static.json`)
+  }
   return t.name
 }
 
@@ -59,26 +63,12 @@ export async function fetchTypeNameMap(
 ): Promise<Map<number, string>>
 {
   const unique = [...new Set(typeIds)].filter((id) => id > 0)
+  const c = await loadUniverseStaticCatalog()
   const m = new Map<number, string>()
-  const q = 4
-  for (let i = 0; i < unique.length; i += q)
+  for (const id of unique)
   {
-    const batch = unique.slice(i, i + q)
-    const names = await Promise.all(
-      batch.map(async (id) =>
-      {
-        try
-        {
-          const n = await fetchUniverseTypeName(id)
-          if (signal?.aborted) return [id, ''] as const
-          return [id, n] as const
-        } catch
-        {
-          return [id, `#${ id }`] as const
-        }
-      })
-    )
-    for (const [id, n] of names) m.set(id, n)
+    if (signal?.aborted) break
+    m.set(id, c.types.get(id)?.name ?? `#${ id }`)
   }
   return m
 }

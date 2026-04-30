@@ -27,13 +27,13 @@ export type EsiExportProgressState = {
   /** Запросы /markets/{region}/history/?type_id=... */
   historyDone: number
   historyTotal: number
-  /** Запросы /universe/types/{id}/ (только реальные HTTP, не cache-hit). */
+  /** Разрешения type_id через каталог universe (локально, без runtime HTTP). */
   universeTypesDone: number
   universeTypesTotal: number
-  /** Запросы /universe/groups/{id}/ (реальные HTTP). */
+  /** Разрешения group_id через каталог universe (локально, без runtime HTTP). */
   universeGroupsDone: number
   universeGroupsTotal: number
-  /** Запросы /universe/categories/{id}/ (реальные HTTP). */
+  /** Разрешения category_id через каталог universe (локально, без runtime HTTP). */
   universeCategoriesDone: number
   universeCategoriesTotal: number
   /** Snapshot ордеров для выгрузки (top-of-book + sheet orders_snapshot). */

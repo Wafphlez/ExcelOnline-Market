@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-04-30T19:10:00.000Z",
+  "source": "project-export-regions",
+  "regions": {
+    "10000002": { "name": "The Forge" },
+    "10000030": { "name": "Heimatar" },
+    "10000032": { "name": "Sinq Laison" },
+    "10000042": { "name": "Metropolis" },
+    "10000043": { "name": "Domain" }
+  },
+  "stations": {
+    "60003760": {
+      "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
+      "region_id": 10000002
+    },
+    "60004588": {
+      "name": "Rens VI - Moon 8 - Brutor Tribe Treasury",
+      "region_id": 10000030
+    },
+    "60005686": {
+      "name": "Hek VIII - Moon 12 - Boundless Creation Factory",
+      "region_id": 10000042
+    },
+    "60008494": {
+      "name": "Amarr VIII (Oris) - Emperor Family Academy",
+      "region_id": 10000043
+    },
+    "60011866": {
+      "name": "Dodixie IX - Moon 20 - Federation Navy Assembly Plant",
+      "region_id": 10000032
+    }
+  },
+  "structures": {}
+}

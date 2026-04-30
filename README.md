@@ -66,6 +66,7 @@ Preview будет доступен на `http://localhost`.
 | `npm run build` | Сборка в `dist/`              |
 | `npm run preview` | Просмотр production-сборки  |
 | `npm test`      | Тесты (Vitest)                |
+| `npm run prefetch:esi-universe` | Предзагрузка `public/esi-universe-static.json` (types/groups/categories) |
 
 ## Папка `exports/` и dev API (только `npm run dev`)
 
@@ -77,7 +78,17 @@ Preview будет доступен на `http://localhost`.
 
 ## Выгрузка через ESI (dev)
 
-Кнопка **«Сформировать (ESI)»** для выбранного региона вызывает `POST /__dev/export/esi-liquidity`: Vite тянет данные с `https://esi.evetech.net/latest` (ордера, история по типам, названия), собирает таблицу в формате, совместимом с парсером ([`src/lib/dev/esiLiquidityExport.ts`](src/lib/dev/esiLiquidityExport.ts)), пишет `exports/liquidity-esi-{regionId}.xlsx` и открывает файл в приложении. Ожидайте **1–3+ минуты**; при 420/503 — паузы (лимиты CCP). Кнопка **«Стоп → xlsx»** прерывает длинный прогон и формирует файл по накопленным данным.
+Кнопка **«Сформировать (ESI)»** для выбранного региона вызывает `POST /__dev/export/esi-liquidity`: Vite тянет данные с `https://esi.evetech.net/latest` (ордера, история по типам), а названия и иерархию universe (`types/groups/categories`) берёт из локального `public/esi-universe-static.json`. Таблица собирается в формате, совместимом с парсером ([`src/lib/dev/esiLiquidityExport.ts`](src/lib/dev/esiLiquidityExport.ts)), пишет `exports/liquidity-esi-{regionId}.xlsx` и открывает файл в приложении. Ожидайте **1–3+ минуты**; при 420/503 — паузы (лимиты CCP). Кнопка **«Стоп → xlsx»** прерывает длинный прогон и формирует файл по накопленным данным.
+
+Перед первым запуском рекомендуется обновить статический каталог:
+
+```bash
+npm run prefetch:esi-universe
+```
+
+Для `Active Market Orders` дополнительно используется локальный справочник
+`public/esi-trade-hubs-static.json` (5 регионов и 5 хаб-станций), чтобы не делать
+runtime-запросы к `/universe/stations/{id}/` и `/universe/regions/{id}/` для этих ID.
 
 В production этот блок **не** показан; для публичного хоста нужен отдельный бэкенд с тем же пайплайном.
 

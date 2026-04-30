@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prefetch:esi-universe": "node ./scripts/prefetch-esi-universe-static.mjs"
   },
   "dependencies": {
     "@fontsource/rajdhani": "^5.2.7",
