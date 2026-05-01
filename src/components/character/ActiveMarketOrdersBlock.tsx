@@ -34,7 +34,7 @@ function OrderTable(
 ): JSX.Element
 {
   const [sortKey, setSortKey] = useState<SortKey>('type')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   const sortedRows = useMemo(() =>
   {
