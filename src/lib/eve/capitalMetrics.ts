@@ -261,7 +261,8 @@ function tradeProfitFifoForType(
       let cost = 0
       while (need > 0 && lots.length > 0)
       {
-        const lot = lots[0]!
+        const lot = lots[0]
+        if (lot == null) break
         const take = Math.min(need, lot.qty)
         cost += take * lot.unitPrice
         lot.qty -= take
@@ -466,7 +467,9 @@ function distributeAmountByWeights(
   let acc = 0
   for (let i = 0; i < pos.length; i++)
   {
-    const [id, w] = pos[i]!
+    const pair = pos[i]
+    if (pair == null) continue
+    const [id, w] = pair
     if (i === pos.length - 1) out.set(id, totalAmount - acc)
     else
     {
@@ -618,9 +621,9 @@ export function aggregateTradeProfitByType(
         || (r.buyIsk > 0 && r.sellIsk > 0)
     )
   }
-  return rows
-    .sort((a, b) => b.profit - a.profit)
-    .slice(0, limit)
+  const sorted = [ ...rows ]
+  sorted.sort((a, b) => b.profit - a.profit)
+  return sorted.slice(0, limit)
 }
 
 export const MS_DAY = 86_400_000

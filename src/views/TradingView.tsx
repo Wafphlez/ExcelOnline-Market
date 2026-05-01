@@ -804,7 +804,8 @@ export function TradingView()
       {
         return prev
       }
-      return localExportFilesSorted[0]!.name
+      const head = localExportFilesSorted[0]
+      return head != null ? head.name : ''
     })
   }, [localExportFilesSorted])
 
@@ -820,12 +821,16 @@ export function TradingView()
     setCompareLeftFile((prev) =>
     {
       if (prev && localExportFilesSorted.some((f) => f.name === prev)) return prev
-      return localExportFilesSorted[0]!.name
+      const head = localExportFilesSorted[0]
+      return head != null ? head.name : ''
     })
     setCompareRightFile((prev) =>
     {
       if (prev && localExportFilesSorted.some((f) => f.name === prev)) return prev
-      return localExportFilesSorted[1]?.name ?? localExportFilesSorted[0]!.name
+      const second = localExportFilesSorted[1]
+      const head = localExportFilesSorted[0]
+      if (second != null) return second.name
+      return head != null ? head.name : ''
     })
   }, [localExportFilesSorted])
 
@@ -890,7 +895,7 @@ export function TradingView()
     }
   }, [])
 
-  const startLeftPanelResize = useCallback((e: React.MouseEvent<HTMLDivElement>) =>
+  const startLeftPanelResize = useCallback((e: React.MouseEvent<HTMLElement>) =>
   {
     if (globalThis.innerWidth < 1024) return
     isResizingLeftPanelRef.current = true
@@ -919,8 +924,8 @@ export function TradingView()
                   className="flex w-full min-w-0 items-baseline justify-between text-sm font-bold uppercase text-eve-bright/95 [text-shadow:0_0_12px_rgba(236,238,242,0.08)] sm:text-base"
                   aria-hidden="true"
                 >
-                  { 'Market'.split('').map((ch, i) => (
-                    <span key={ i } className="inline-block leading-none">
+                  { 'Market'.split('').map((ch) => (
+                    <span key={ ch } className="inline-block leading-none">
                       { ch }
                     </span>
                   )) }
@@ -1212,11 +1217,10 @@ export function TradingView()
             </div>
           </aside>
 
-          <div
-            className="hidden lg:block lg:h-full lg:w-2 lg:cursor-col-resize lg:rounded-sm lg:bg-eve-border/40 lg:transition-colors hover:lg:bg-eve-accent/55"
+          <button
+            type="button"
+            className="hidden lg:block lg:h-full lg:w-2 lg:cursor-col-resize lg:rounded-sm lg:border-0 lg:bg-eve-border/40 lg:p-0 lg:transition-colors hover:lg:bg-eve-accent/55"
             onMouseDown={startLeftPanelResize}
-            role="separator"
-            aria-orientation="vertical"
             aria-label="Изменить ширину левой панели"
             title="Потяните, чтобы изменить ширину левой панели"
           />

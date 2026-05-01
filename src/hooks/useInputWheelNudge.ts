@@ -46,14 +46,14 @@ export function useInputWheelNudge(
       if (!canNudge) return
       e.preventDefault()
       e.stopPropagation()
-      const dir = (e.deltaY < 0 ? 1 : -1) as 1 | -1
+      const dir: 1 | -1 = e.deltaY < 0 ? 1 : -1
       nudge(dir)
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       e.preventDefault()
-      const dir = (e.key === 'ArrowUp' ? 1 : -1) as 1 | -1
+      const dir: 1 | -1 = e.key === 'ArrowUp' ? 1 : -1
       nudge(dir)
     }
     element.addEventListener('mouseenter', onEnter)

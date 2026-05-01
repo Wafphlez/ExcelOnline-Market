@@ -626,9 +626,10 @@ export function MarketTable({
           ) : (
             <>
               {padTop > 0 ? (
-                <tr aria-hidden className="pointer-events-none">
+                <tr className="pointer-events-none">
                   <td
                     colSpan={leafColumnCount}
+                    aria-hidden
                     style={{
                       height: padTop,
                       padding: 0,
@@ -672,9 +673,10 @@ export function MarketTable({
                 )
               })}
               {padBot > 0 ? (
-                <tr aria-hidden className="pointer-events-none">
+                <tr className="pointer-events-none">
                   <td
                     colSpan={leafColumnCount}
+                    aria-hidden
                     style={{
                       height: padBot,
                       padding: 0,

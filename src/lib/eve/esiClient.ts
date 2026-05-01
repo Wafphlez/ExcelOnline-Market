@@ -35,7 +35,8 @@ export class EsiHttpError extends Error
     public readonly body: string
   )
   {
-    super(`ESI ${ path } → HTTP ${ status }${ body ? `: ${ body.slice(0, 120) }` : '' }`)
+    const detail = body ? `: ${ body.slice(0, 120) }` : ''
+    super(`ESI ${ path } → HTTP ${ status }${ detail }`)
     this.name = 'EsiHttpError'
   }
 }

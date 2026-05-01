@@ -116,10 +116,8 @@ export function mapRawRow(
   for (const key of REQUIRED) {
     if (key === 'name') {
       if (out.name === undefined) missing.push('name (или bame)')
-    } else {
-      if (out[key] === null || out[key] === undefined) {
-        missing.push(String(key))
-      }
+    } else if (out[key] === null || out[key] === undefined) {
+      missing.push(String(key))
     }
   }
   if (missing.length) {
@@ -154,7 +152,7 @@ export function mapRawRow(
   }
 }
 
-function isRowEmptyish(row: Record<string, unknown>): boolean {
+function isRowEmptyish(row: object): boolean {
   const vals = Object.values(row)
   if (vals.length === 0) return true
   return vals.every(
@@ -174,7 +172,7 @@ export function mapRawRows(
       i++
       continue
     }
-    if (isRowEmptyish(r as Record<string, unknown>)) {
+    if (isRowEmptyish(r)) {
       i++
       continue
     }

@@ -24,8 +24,12 @@ export function esiTypesProgress01(p: EsiExportProgressState): number {
 /** 0..1: общий прогресс по ключевым ESI-запросам выгрузки (orders + history). */
 export function esiAllRequestsProgress01(p: EsiExportProgressState): number {
   const m = p.maxOrderPages
-  const sellM = m > 0 ? (p.orderSellPageBarMax > 0 ? p.orderSellPageBarMax : m) : 0
-  const buyM = m > 0 ? (p.orderBuyPageBarMax > 0 ? p.orderBuyPageBarMax : m) : 0
+  let sellM = 0
+  let buyM = 0
+  if (m > 0) {
+    sellM = p.orderSellPageBarMax > 0 ? p.orderSellPageBarMax : m
+    buyM = p.orderBuyPageBarMax > 0 ? p.orderBuyPageBarMax : m
+  }
   const ordersTotal = sellM + buyM
   const ordersDone =
     Math.min(Math.max(0, p.sellPage), sellM) + Math.min(Math.max(0, p.buyPage), buyM)

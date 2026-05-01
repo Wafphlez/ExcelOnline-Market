@@ -113,43 +113,43 @@ function OrderTable(
               <tr>
                 <th className="px-1.5 py-1.5 pr-0.5 font-semibold" aria-sort={ sortAria('type') }>
                   <button type="button" className={ sortableHeaderClass } onClick={ () => toggleSort('type') }>
-                    Тип
+                    Тип{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('type') }</span>
                   </button>
                 </th>
                 <th className="w-[1%] px-1.5 py-1.5 text-right font-semibold whitespace-nowrap" aria-sort={ sortAria('price') }>
                   <button type="button" className={ `justify-end ${ sortableHeaderClass }` } onClick={ () => toggleSort('price') }>
-                    Цена
+                    Цена{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('price') }</span>
                   </button>
                 </th>
                 <th className="w-[1%] px-1.5 py-1.5 font-semibold whitespace-nowrap" aria-sort={ sortAria('status') }>
                   <button type="button" className={ sortableHeaderClass } onClick={ () => toggleSort('status') }>
-                    Статус
+                    Статус{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('status') }</span>
                   </button>
                 </th>
                 <th className="w-[1%] px-1.5 py-1.5 text-right font-semibold whitespace-nowrap" aria-sort={ sortAria('diff') }>
                   <button type="button" className={ `justify-end ${ sortableHeaderClass }` } onClick={ () => toggleSort('diff') }>
-                    Разница
+                    Разница{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('diff') }</span>
                   </button>
                 </th>
                 <th className="w-[1%] px-1.5 py-1.5 text-right font-semibold whitespace-nowrap" aria-sort={ sortAria('volume') }>
                   <button type="button" className={ `justify-end ${ sortableHeaderClass }` } onClick={ () => toggleSort('volume') }>
-                    Объём
+                    Объём{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('volume') }</span>
                   </button>
                 </th>
                 <th className="w-[1%] px-1.5 py-1.5 text-right font-semibold whitespace-nowrap" aria-sort={ sortAria('total') }>
                   <button type="button" className={ `justify-end ${ sortableHeaderClass }` } onClick={ () => toggleSort('total') }>
-                    Итого
+                    Итого{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('total') }</span>
                   </button>
                 </th>
                 <th className="w-[1%] px-1.5 py-1.5 font-semibold whitespace-nowrap" aria-sort={ sortAria('region') }>
                   <button type="button" className={ sortableHeaderClass } onClick={ () => toggleSort('region') }>
-                    Регион
+                    Регион{ ' ' }
                     <span className="text-[9px] text-eve-muted">{ sortIndicator('region') }</span>
                   </button>
                 </th>

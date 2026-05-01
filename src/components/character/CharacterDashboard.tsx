@@ -93,6 +93,27 @@ function floorUtcDayMsFromMs(ms: number): number
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
 }
 
+function tradeProfitShareCellClass(profit: number): string
+{
+  if (profit > 0) return 'eve-green'
+  if (profit < 0) return 'eve-red'
+  return 'text-eve-muted/70'
+}
+
+function tradeProfitRgbVar(profit: number): string | null
+{
+  if (profit > 0) return 'var(--eve-green-rgb)'
+  if (profit < 0) return 'var(--eve-red-rgb)'
+  return null
+}
+
+function tradeProfitTableSumToneClass(sum: number): string
+{
+  if (sum > 0) return 'eve-green'
+  if (sum < 0) return 'eve-red'
+  return 'text-eve-muted'
+}
+
 function TradeProfitLineTooltipContent(
   { active, payload, label }: Readonly<{
     active?: boolean
@@ -110,9 +131,17 @@ function TradeProfitLineTooltipContent(
     }
     | undefined
   if (row == null) return null
-  const ms = typeof label === 'number' && Number.isFinite(label)
-    ? label
-    : (typeof row.tMs === 'number' ? row.tMs : Number.NaN)
+  let ms: number
+  if (typeof label === 'number' && Number.isFinite(label))
+  {
+    ms = label
+  } else if (typeof row.tMs === 'number')
+  {
+    ms = row.tMs
+  } else
+  {
+    ms = Number.NaN
+  }
   if (!Number.isFinite(ms)) return null
   const cum = row.cumulativeProfit
   const dayP = row.profitUtcDay
@@ -334,8 +363,10 @@ export function CharacterDashboard(
     const prevEndCumByDayMs = new Map<number, number>()
     for (let i = 0; i < dailySorted.length; i++)
     {
-      const cur = dailySorted[i]!
-      const prevCum = i > 0 ? dailySorted[i - 1]!.cum : 0
+      const cur = dailySorted[i]
+      const prevRow = i > 0 ? dailySorted[i - 1] : undefined
+      if (cur == null) continue
+      const prevCum = prevRow != null ? prevRow.cum : 0
       profitByDayMs.set(cur.dayMs, cur.cum - prevCum)
       prevEndCumByDayMs.set(cur.dayMs, prevCum)
     }
@@ -375,8 +406,11 @@ export function CharacterDashboard(
   {
     const s = tradeProfitChartData
     if (s.length === 0) return undefined
-    const lo = s[0]!.tMs
-    const hi = s[s.length - 1]!.tMs
+    const first = s[0]
+    const last = s[s.length - 1]
+    if (first == null || last == null) return undefined
+    const lo = first.tMs
+    const hi = last.tMs
     if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return undefined
     const floorDay = (ms: number) =>
     {
@@ -392,6 +426,14 @@ export function CharacterDashboard(
     }
     return ticks.length > 0 ? ticks : undefined
   }, [tradeProfitChartData])
+
+  const tradeProfitXAxisExtras = useMemo(
+    () =>
+      tradeProfitChartUtcMidnightTicks != null && tradeProfitChartUtcMidnightTicks.length > 0
+        ? { ticks: tradeProfitChartUtcMidnightTicks }
+        : {},
+    [tradeProfitChartUtcMidnightTicks]
+  )
 
   /** Точки net worth в выбранном периоде (журнал кошелька + оценка активов на «сейчас»). */
   const netWorthInPeriodSeries = useMemo(() =>
@@ -559,10 +601,11 @@ export function CharacterDashboard(
 
           { !isEveSsoConfigured() && (
             <p className="mb-3 rounded border border-eve-danger/50 bg-eve-elevated/60 px-3 py-2 text-sm text-eve-danger/95">
-              Укажите <code className="text-eve-bright/90">VITE_EVE_SSO_CLIENT_ID</code>
-              { ' ' }в .env (приложение CCP) и, при необходимости,{' '}
+              Укажите{ ' ' }
+              <code className="text-eve-bright/90">VITE_EVE_SSO_CLIENT_ID</code>
+              { ' ' }в .env (приложение CCP) и, при необходимости,{ ' ' }
               <code className="text-eve-bright/90">VITE_EVE_SSO_REDIRECT_URI</code>
-              . Redirect URI в CCP должен совпадать с адресом приложения (тот же origin + path).
+              { ' ' }. Redirect URI в CCP должен совпадать с адресом приложения (тот же origin + path).
             </p>
           ) }
 
@@ -774,7 +817,7 @@ export function CharacterDashboard(
                 </div>
                 <div className="@container min-w-0 flex-1 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                   <h3 className="eve-section-title mb-2 leading-snug">
-                    Торговая прибыль по типам
+                    Торговая прибыль по типам{ ' ' }
                     <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
                       (линейный)
                     </span>
@@ -825,10 +868,7 @@ export function CharacterDashboard(
                             scale="time"
                             domain={ [ 'dataMin', 'dataMax' ] }
                             interval={ 0 }
-                            { ...(tradeProfitChartUtcMidnightTicks != null &&
-                            tradeProfitChartUtcMidnightTicks.length > 0
-                              ? { ticks: tradeProfitChartUtcMidnightTicks }
-                              : {}) }
+                            { ...tradeProfitXAxisExtras }
                             tick={ { fontSize: 8, fill: CHART_COL.tick } }
                             tickFormatter={ (ms: number) =>
                             {
@@ -904,7 +944,7 @@ export function CharacterDashboard(
                     className={ `@container flex w-full min-w-0 flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset ${ dashboardTwinPanelHeightClass } min-h-0` }
                   >
                   <h3 className="eve-section-title mb-2 shrink-0 leading-snug">
-                    Торговая прибыль по типам
+                    Торговая прибыль по типам{ ' ' }
                     <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
                       (таблица)
                     </span>
@@ -975,12 +1015,7 @@ export function CharacterDashboard(
                               ) } ISK`
                               : '—'
                             const w = Math.min(100, shareBarW)
-                            const rgbVar
-                              = r.profit > 0
-                                ? 'var(--eve-green-rgb)'
-                                : r.profit < 0
-                                    ? 'var(--eve-red-rgb)'
-                                    : null
+                            const rgbVar = tradeProfitRgbVar(r.profit)
                             const barPart
                               = rgbVar != null && w > 0.001
                                 ? `linear-gradient(to right, rgb(${ rgbVar } / var(--trade-profit-bar-alpha)) 0%, rgb(${ rgbVar } / var(--trade-profit-bar-alpha)) ${ w }%, transparent ${ w }%)`
@@ -1014,13 +1049,7 @@ export function CharacterDashboard(
                                 title={ shareTitle }
                               >
                                 <span
-                                  className={ `tabular-nums text-[9px] ${
-                                    r.profit > 0
-                                      ? 'eve-green'
-                                      : r.profit < 0
-                                          ? 'eve-red'
-                                          : 'text-eve-muted/70'
-                                  }` }
+                                  className={ `tabular-nums text-[9px] ${ tradeProfitShareCellClass(r.profit) }` }
                                 >
                                   { shareText }
                                 </span>
@@ -1055,13 +1084,7 @@ export function CharacterDashboard(
                             <td className="bg-eve-elevated/95 px-1 py-1.5 pr-2">
                               { tradeProfitNetSharePct != null ? (
                                 <span
-                                  className={ `tabular-nums text-[9px] font-semibold ${
-                                    tradeProfitTableProfitSum > 0
-                                      ? 'eve-green'
-                                      : tradeProfitTableProfitSum < 0
-                                          ? 'eve-red'
-                                          : 'text-eve-muted'
-                                  }` }
+                                  className={ `tabular-nums text-[9px] font-semibold ${ tradeProfitTableSumToneClass(tradeProfitTableProfitSum) }` }
                                   title="100×итог.приб./Σ|прибыль| по витрине (сальдо в доле)"
                                 >
                                   { tradeProfitNetSharePct < 0 ? '−' : '' }
@@ -1080,9 +1103,7 @@ export function CharacterDashboard(
                             </td>
                             <td
                               className={ `bg-eve-elevated/95 px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
-                                tradeProfitTableProfitSum >= 0
-                                  ? 'eve-green'
-                                  : 'eve-red'
+                                tradeProfitTableProfitSum >= 0 ? 'eve-green' : 'eve-red'
                               }` }
                             >
                               { formatIskMillionsShort(tradeProfitTableProfitSum) }

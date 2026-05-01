@@ -5,8 +5,7 @@ import type { NumberRange } from './filterFns'
  * Старые сохранения хранили margin и buyToSellRatio как доли 0..1; новый формат — проценты (0..100).
  */
 function migrateNumberRangeRationToPercent(
-  r: NumberRange,
-  _col: 'margin' | 'buyToSellRatio'
+  r: NumberRange
 ): NumberRange {
   const c = (x: number | null): number | null => {
     if (x === null) return null
@@ -26,10 +25,7 @@ export function migrateColumnFiltersRatioToPercent(
     const o = f.value as NumberRange
     return {
       ...f,
-      value: migrateNumberRangeRationToPercent(
-        o,
-        f.id as 'margin' | 'buyToSellRatio'
-      ),
+      value: migrateNumberRangeRationToPercent(o),
     }
   })
 }

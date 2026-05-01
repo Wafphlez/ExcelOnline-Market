@@ -88,7 +88,7 @@ export async function fetchAllWalletJournal(
       `/characters/${ characterId }/wallet/journal/`,
       {
         accessToken,
-        query: fromId != null ? { from_id: fromId } : {},
+        query: fromId === undefined ? {} : { from_id: fromId },
         signal,
       }
     )
@@ -123,7 +123,7 @@ export async function fetchAllWalletTransactions(
       `/characters/${ characterId }/wallet/transactions/`,
       {
         accessToken,
-        query: fromId != null ? { from_id: fromId } : {},
+        query: fromId === undefined ? {} : { from_id: fromId },
         signal,
       }
     )

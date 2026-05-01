@@ -10,7 +10,8 @@ function randomString(len: number): string
   let s = ''
   for (let i = 0; i < len; i++)
   {
-    s += alphabet[bytes[i]! % alphabet.length]!
+    const b = bytes[i] ?? 0
+    s += alphabet.charAt(b % alphabet.length)
   }
   return s
 }

@@ -59,7 +59,7 @@ function parseOrderBookPage(
     if (data.length === 0) return { rows: [], end: true }
     return { rows: data as EsiRegionalOrderRow[], end: data.length < 1000 }
   }
-  if (data && typeof data === 'object' && 'error' in (data as object))
+  if (data && typeof data === 'object' && 'error' in data)
   {
     const err = (data as { error?: unknown }).error
     const errStr = typeof err === 'string' ? err : String(err)
@@ -103,9 +103,9 @@ async function bestPriceInRegion(
       if (orderType === 'sell')
       {
         if (best == null || r.price < best) best = r.price
-      } else
+      } else if (best == null || r.price > best)
       {
-        if (best == null || r.price > best) best = r.price
+        best = r.price
       }
     }
     if (rows.length === 0) break
@@ -276,14 +276,14 @@ export async function loadActiveMarketOrdersData(
           isUndercut = true
           priceDiff = best - o.price
         }
+      } else if (o.price - EPS <= best)
+      {
+        isBest = true
+        priceDiff = 0
       } else
       {
-        if (o.price - EPS <= best) { isBest = true; priceDiff = 0 }
-        else
-        {
-          isUndercut = true
-          priceDiff = o.price - best
-        }
+        isUndercut = true
+        priceDiff = o.price - best
       }
     }
     const escrow = o.is_buy_order ? o.price * o.volume_remain : null

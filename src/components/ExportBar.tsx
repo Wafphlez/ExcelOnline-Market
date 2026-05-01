@@ -179,8 +179,16 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
       typeId: null,
     }
   }
-  const headerLine = lines[0]!
-    .replace(/^\uFEFF/, '')
+  const headerLineRaw = lines[0]
+  if (headerLineRaw == null) {
+    return {
+      itemName: parseItemNameFromMarketLogFile(fileName),
+      bestSell: null,
+      bestBuy: null,
+      typeId: null,
+    }
+  }
+  const headerLine = headerLineRaw.replace(/^\uFEFF/, '')
   const delimiter =
     headerLine.includes(';') && !headerLine.includes(',') ? ';' : ','
   const header = headerLine
@@ -206,7 +214,9 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
   let bestBuy: number | null = null
   let typeId: number | null = null
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i]!.split(delimiter)
+    const lineRow = lines[i]
+    if (lineRow == null) continue
+    const cols = lineRow.split(delimiter)
     if (cols.length <= Math.max(priceIdx, bidIdx)) continue
     if (typeIdIdx >= 0 && typeId === null && cols.length > typeIdIdx) {
       const maybeTypeId = Number(cols[typeIdIdx]?.trim())
@@ -222,8 +232,8 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
     const isBid = bidRaw === 'true' || bidRaw === '1' || bidRaw === 'yes'
     if (isBid) {
       if (bestBuy === null || price > bestBuy) bestBuy = price
-    } else {
-      if (bestSell === null || price < bestSell) bestSell = price
+    } else if (bestSell === null || price < bestSell) {
+      bestSell = price
     }
   }
   return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell, bestBuy, typeId }
@@ -385,7 +395,8 @@ export function ExportBar({
       if (prev && exportFilesSorted.some((f) => f.name === prev)) {
         return prev
       }
-      return exportFilesSorted[0]!.name
+      const head = exportFilesSorted[0]
+      return head != null ? head.name : ''
     })
   }, [exportFilesSorted, isDevExportServer])
 

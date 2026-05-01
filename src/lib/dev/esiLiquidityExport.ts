@@ -203,7 +203,7 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
           }
         }
       }
-      if (j && j.groups && typeof j.groups === 'object') {
+      if (j?.groups && typeof j.groups === 'object') {
         for (const [k, v] of Object.entries(j.groups)) {
           const id = Number(k)
           const entry = v as { name?: unknown; category_id?: unknown }
@@ -221,7 +221,7 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
           }
         }
       }
-      if (j && j.categories && typeof j.categories === 'object') {
+      if (j?.categories && typeof j.categories === 'object') {
         for (const [k, v] of Object.entries(j.categories)) {
           const id = Number(k)
           const entry = v as { name?: unknown }
@@ -655,7 +655,7 @@ function parseEsiOrderPage(
     }
     return { rows: data as EsiMarketOrder[], endOfSide: data.length < 1000 }
   }
-  if (data && typeof data === 'object' && 'error' in (data as object)) {
+  if (data && typeof data === 'object' && 'error' in data) {
     const err = (data as { error?: unknown }).error
     const errStr = typeof err === 'string' ? err : String(err)
     if (/requested page does not exist|page does not exist/i.test(errStr)) {
@@ -848,10 +848,12 @@ function mergeOrdersInto(
 }
 
 function bestAsk(a: Agg): number | null {
-  return a.asks.length ? a.asks[0]! : null
+  const [head] = a.asks
+  return head ?? null
 }
 function bestBid(a: Agg): number | null {
-  return a.bids.length ? a.bids[0]! : null
+  const [head] = a.bids
+  return head ?? null
 }
 
 /** Имя + `/markets/.../history/` — независимые async GET (без bid/ask из ордеров). */
@@ -991,14 +993,13 @@ export async function buildLiquidityRows(
       typePrefetch.set(
         typeId,
         fetchTypeNameAndHistory(typeId, regionId).catch((e) => {
-          if (isEsiForceStopError(e) || isEsiStopRequested()) {
-            return null
+          if (!isEsiForceStopError(e) && !isEsiStopRequested()) {
+            esiDevLog(
+              `prefetch type ${typeId}: пропуск (${
+                e instanceof Error ? e.message : String(e)
+              })`
+            )
           }
-          esiDevLog(
-            `prefetch type ${typeId}: пропуск (${
-              e instanceof Error ? e.message : String(e)
-            })`
-          )
           return null
         })
       )

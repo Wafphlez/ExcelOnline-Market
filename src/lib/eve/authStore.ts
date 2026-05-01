@@ -114,8 +114,8 @@ export function setStoredCharacterId(id: number | null): void
 {
   try
   {
-    if (id != null) localStorage.setItem(LS_EVE_CHARACTER_ID, String(id))
-    else localStorage.removeItem(LS_EVE_CHARACTER_ID)
+    if (id == null) localStorage.removeItem(LS_EVE_CHARACTER_ID)
+    else localStorage.setItem(LS_EVE_CHARACTER_ID, String(id))
   } catch
   {
     /* ignore */

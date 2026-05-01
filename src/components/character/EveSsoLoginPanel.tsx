@@ -42,6 +42,7 @@ export function EveSsoLoginPanel(
           Используется официальная графика CCP для EVE SSO. Аккаунт и пароль вводятся только на
           { ' ' }
           <span className="whitespace-nowrap">login.eveonline.com</span>
+          { ' ' }
           — приложению известен только токен с выбранными вами scope.
         </p>
       </div>

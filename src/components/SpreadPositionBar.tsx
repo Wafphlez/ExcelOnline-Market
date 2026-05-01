@@ -42,6 +42,10 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
   const t = Math.max(0, Math.min(1, ratio))
   const leftPct = t * 100
   const split = splitTradesAlongSpread(tradeCount, t)
+  let axisPositionHint: string
+  if (t < 0.5) axisPositionHint = 'левее центра'
+  else if (t > 0.5) axisPositionHint = 'правее центра'
+  else axisPositionHint = 'в центре'
 
   return (
     <div className="w-full min-w-[140px] max-w-[220px]">
@@ -56,7 +60,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
         aria-label={
           split
             ? `Позиция средней в спреде: ${formatRatio(t, 3)}. Условно у buy ${split.buy} сделок, у sell ${split.sell}.`
-            : `Позиция средней в спреде: ${formatRatio(t, 3)}. Центр оси 0,5${t < 0.5 ? ', левее центра' : t > 0.5 ? ', правее центра' : ', в центре'}.`
+            : `Позиция средней в спреде: ${formatRatio(t, 3)}. Центр оси 0,5, ${axisPositionHint}.`
         }
       >
         <div className="relative h-8 w-full overflow-hidden rounded-sm border border-eve-border/70 bg-eve-elevated">
@@ -140,7 +144,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
         <span className="text-eve-gold/60">mid</span>
         <span className="eve-green">sell</span>
       </div>
-      {!split ? (
+      {split == null ? (
         <p className="mt-0.5 text-center font-eve text-[10px] font-semibold tabular-nums text-eve-muted/80">
           Нет сделок за период
         </p>

@@ -26,8 +26,8 @@ function mergeNumberRange(
   next: NumberRange
 ): NumberRange {
   return {
-    min: next.min != null ? next.min : prev?.min ?? null,
-    max: next.max != null ? next.max : prev?.max ?? null,
+    min: next.min ?? prev?.min ?? null,
+    max: next.max ?? prev?.max ?? null,
   }
 }
 
