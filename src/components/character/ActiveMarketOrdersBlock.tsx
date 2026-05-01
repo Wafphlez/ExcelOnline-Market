@@ -32,7 +32,7 @@ function OrderTable(
   }
 ): JSX.Element
 {
-  const [sortKey, setSortKey] = useState<SortKey>('total')
+  const [sortKey, setSortKey] = useState<SortKey>('type')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
 
   const sortedRows = useMemo(() =>
@@ -99,14 +99,14 @@ function OrderTable(
   const sortableHeaderClass = 'inline-flex w-full items-center gap-1 whitespace-nowrap hover:text-eve-bright'
 
   return (
-    <div>
-      <h4 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-eve-bright/90">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <h4 className="mb-1.5 shrink-0 text-[11px] font-bold uppercase tracking-wider text-eve-bright/90">
         { title }
       </h4>
       { rows.length === 0 ? (
-        <p className="text-xs text-eve-muted">Нет активных ордеров.</p>
+        <p className="shrink-0 text-xs text-eve-muted">Нет активных ордеров.</p>
       ) : (
-        <div className="max-h-[min(60vh,420px)] overflow-auto rounded border border-eve-border/40">
+        <div className="min-h-0 flex-1 overflow-auto rounded border border-eve-border/40">
           <table className="w-full min-w-[28rem] text-left text-[10px] text-eve-bright/90">
             <thead className="sticky top-0 z-[1] bg-eve-elevated/95 text-eve-muted">
               <tr>
@@ -274,27 +274,27 @@ export function ActiveMarketOrdersBlock(
   const sellH = `Ордеров: ${ data.sells.length } · В рынке: ${ formatIskHeader(data.sellTotalExposureIsk) }`
   const buyH = `Ордеров: ${ data.buys.length } · Всего: ${ formatIskHeader(data.buyTotalEscrowIsk) } · Эскроу: ${ formatIskHeader(data.buyTotalEscrowIsk) } · Осталось внести: ${ formatInteger(data.buyRemainingToCover) }`
   return (
-    <div className="flex max-h-[min(92vh,720px)] flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+    <div className="flex h-[min(92vh,720px)] min-h-0 flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
         <h3 className="eve-section-title">Активные Market Orders</h3>
         { refreshButton }
       </div>
       { data.errorMessage && !data.scopeMissing && (
-        <p className="mb-1.5 text-[10px] text-amber-200/80">{ data.errorMessage }</p>
+        <p className="mb-1.5 shrink-0 text-[10px] text-amber-200/80">{ data.errorMessage }</p>
       ) }
       { errorMessage && (
-        <p className="mb-1.5 text-[10px] text-amber-200/80">{ errorMessage }</p>
+        <p className="mb-1.5 shrink-0 text-[10px] text-amber-200/80">{ errorMessage }</p>
       ) }
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-0.5">
-        <div>
-          <p className="mb-1 text-[10px] text-eve-muted/90">{ sellH }</p>
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1">
+          <p className="shrink-0 text-[10px] text-eve-muted/90">{ sellH }</p>
           <OrderTable
             title="Продажа"
             rows={ data.sells }
           />
         </div>
-        <div>
-          <p className="mb-1 text-[10px] text-eve-muted/90">{ buyH }</p>
+        <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1">
+          <p className="shrink-0 text-[10px] text-eve-muted/90">{ buyH }</p>
           <OrderTable
             title="Покупка"
             rows={ data.buys }
