@@ -3,6 +3,20 @@ import { COLUMN_DEF_BY_ID } from './columnLabels'
 
 const SPACE = /[\s\u00A0]/g
 
+/** Группы по 3 цифры слева направо (без полиномиальных регексов). */
+function formatIntDigitsWithSpaces(digits: string): string
+{
+  const n = digits.length
+  if (n <= 3) return digits
+  const firstLen = n % 3 || 3
+  const parts: string[] = [ digits.slice(0, firstLen) ]
+  for (let i = firstLen; i < n; i += 3)
+  {
+    parts.push(digits.slice(i, i + 3))
+  }
+  return parts.join(' ')
+}
+
 /**
  * Formats a number with space as thousands separator; optional fraction digits.
  */
@@ -13,7 +27,7 @@ export function formatWithSpaces(
   if (n === null || n === undefined || Number.isNaN(n)) return '—'
   const abs = Math.abs(n)
   const intPart = Math.floor(abs)
-  const intStr = String(intPart).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  const intStr = formatIntDigitsWithSpaces(String(intPart))
   if (fractionDigits === 0) {
     return (n < 0 ? '−' : '') + intStr
   }
@@ -54,8 +68,9 @@ function trimTrailingZerosAfterComma(s: string): string {
   const i = s.indexOf(',')
   if (i < 0) return s
   const head = s.slice(0, i)
-  let tail = s.slice(i + 1).replace(/0+$/, '')
-  return tail === '' ? head : `${head},${tail}`
+  let tail = s.slice(i + 1)
+  while (tail.endsWith('0')) tail = tail.slice(0, -1)
+  return tail === '' ? head : `${ head },${ tail }`
 }
 
 /** Доля после деления для суффиксов K/M/B (запятая как десятичный разделитель). */

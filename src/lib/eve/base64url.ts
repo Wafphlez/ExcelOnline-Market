@@ -1,9 +1,14 @@
 export function toBase64Url(bytes: Uint8Array): string
 {
   let bin = ''
-  for (let i = 0; i < bytes.length; i++)
+  for (const b of bytes)
   {
-    bin += String.fromCharCode(bytes[i]!)
+    bin += String.fromCodePoint(b)
   }
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  let s = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_')
+  while (s.endsWith('='))
+  {
+    s = s.slice(0, -1)
+  }
+  return s
 }

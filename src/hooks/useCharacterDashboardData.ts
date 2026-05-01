@@ -24,8 +24,13 @@ import
   } from '../lib/eve/capitalMetrics'
 import { getStoredCharacterId } from '../lib/eve/authStore'
 import { ensureValidAccessToken } from '../lib/eve/eveSso'
-import type { EveCharacterInfo, EveCorporation } from '../types/eveCharacter'
-import type { EveWalletJournalEntry, EveWalletTransaction } from '../types/eveCharacter'
+import type
+  {
+    EveCharacterInfo,
+    EveCorporation,
+    EveWalletJournalEntry,
+    EveWalletTransaction,
+  } from '../types/eveCharacter'
 
 export type CharacterDashboardState =
   | { status: 'idle' }
@@ -285,4 +290,4 @@ function prevCharacterId(state: CharacterDashboardState): number | null
   return getStoredCharacterId()
 }
 
-export type { TradeDayAgg }
+export type { TradeDayAgg } from '../lib/eve/capitalMetrics'

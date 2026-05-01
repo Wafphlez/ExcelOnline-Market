@@ -174,23 +174,25 @@ export function MarketTable({
   const [copyToast, setCopyToast] = useState<
     null | { text: string; variant: 'success' | 'error' }
   >(null)
-  const copyToastTimerRef = useRef<number | null>(null)
+  const copyToastTimerRef = useRef<ReturnType<typeof globalThis.setTimeout> | null>(
+    null,
+  )
 
   useEffect(() =>
   {
     return () =>
     {
       if (copyToastTimerRef.current != null)
-        window.clearTimeout(copyToastTimerRef.current)
+        globalThis.clearTimeout(copyToastTimerRef.current)
     }
   }, [])
 
   const flashCopyToast = useCallback((text: string, variant: 'success' | 'error') =>
   {
     if (copyToastTimerRef.current != null)
-      window.clearTimeout(copyToastTimerRef.current)
+      globalThis.clearTimeout(copyToastTimerRef.current)
     setCopyToast({ text, variant })
-    copyToastTimerRef.current = window.setTimeout(() =>
+    copyToastTimerRef.current = globalThis.setTimeout(() =>
     {
       setCopyToast(null)
       copyToastTimerRef.current = null

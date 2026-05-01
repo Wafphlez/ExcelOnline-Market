@@ -88,8 +88,8 @@ export function getSsoRedirectUri(): string
 {
   const v = import.meta.env.VITE_EVE_SSO_REDIRECT_URI
   if (typeof v === 'string' && v.trim().length > 0) return v.trim()
-  if (typeof window === 'undefined') return ''
-  const { origin, pathname } = window.location
+  if (typeof globalThis.window === 'undefined') return ''
+  const { origin, pathname } = globalThis.window.location
   if (pathname === '/' || pathname === '') return origin
   return `${ origin }${ pathname }`
 }

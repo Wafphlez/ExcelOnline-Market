@@ -1,10 +1,7 @@
-import { EXPORT_REGIONS, type ExportRegion } from './exportRegions'
-import {
-  ESI_EXPORT_PROGRESS_IDLE,
-  type EsiExportProgressState,
-} from './esiExportProgressTypes'
+import { ESI_EXPORT_PROGRESS_IDLE } from './esiExportProgressTypes'
+import type { EsiExportProgressState } from './esiExportProgressTypes'
 
-export type { EsiExportProgressState }
+export type { EsiExportProgressState } from './esiExportProgressTypes'
 
 const BASE = '/__dev/export'
 
@@ -151,12 +148,12 @@ export async function fetchEsiDevLogs(): Promise<{
     lines?: string[]
     progress?: EsiExportProgressState
   }
+  const progress = j.progress != null
+    ? { ...ESI_EXPORT_PROGRESS_IDLE, ...j.progress }
+    : { ...ESI_EXPORT_PROGRESS_IDLE }
   return {
     lines: j.lines ?? [],
-    progress: {
-      ...ESI_EXPORT_PROGRESS_IDLE,
-      ...(j.progress ?? {}),
-    },
+    progress,
   }
 }
 
@@ -208,9 +205,9 @@ export async function buildEsiLiquidityToExports(opts: {
     throw new Error(err)
   }
   const j = JSON.parse(t) as EsiLiquidityResult
-  if (j.partial == null) j.partial = false
+  j.partial ??= false
   return j
 }
 
 /** Селектор: все известные регионы + (опц.) кастом в будущем */
-export { EXPORT_REGIONS, type ExportRegion }
+export { EXPORT_REGIONS, type ExportRegion } from './exportRegions'

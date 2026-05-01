@@ -365,7 +365,7 @@ export function TradingView()
   useEffect(() =>
   {
     if (!filtersPersistReady) return
-    const t = window.setTimeout(() =>
+    const t = globalThis.setTimeout(() =>
     {
       writeFiltersToLocalStorage(columnFilters, activePreset)
       void saveFiltersToDevFile({
@@ -428,12 +428,12 @@ export function TradingView()
         setTickerRegionId(readLastExportRegionId())
       }
     }
-    window.addEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
-    window.addEventListener('storage', onStorage)
+    globalThis.addEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
+    globalThis.addEventListener('storage', onStorage)
     return () =>
     {
-      window.removeEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
-      window.removeEventListener('storage', onStorage)
+      globalThis.removeEventListener(LAST_EXPORT_REGION_EVENT, onCustom)
+      globalThis.removeEventListener('storage', onStorage)
     }
   }, [])
 
@@ -865,7 +865,7 @@ export function TradingView()
     const onMouseMove = (e: MouseEvent) =>
     {
       if (!isResizingLeftPanelRef.current) return
-      const rootWidth = splitRootRef.current?.clientWidth ?? window.innerWidth
+      const rootWidth = splitRootRef.current?.clientWidth ?? globalThis.innerWidth
       const minWidth = 260
       const maxWidth = Math.max(minWidth + 60, rootWidth - 420)
       const next = resizeStartWidthRef.current + (e.clientX - resizeStartXRef.current)
@@ -879,12 +879,12 @@ export function TradingView()
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
+    globalThis.addEventListener('mousemove', onMouseMove)
+    globalThis.addEventListener('mouseup', onMouseUp)
     return () =>
     {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      globalThis.removeEventListener('mousemove', onMouseMove)
+      globalThis.removeEventListener('mouseup', onMouseUp)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -892,7 +892,7 @@ export function TradingView()
 
   const startLeftPanelResize = useCallback((e: React.MouseEvent<HTMLDivElement>) =>
   {
-    if (window.innerWidth < 1024) return
+    if (globalThis.innerWidth < 1024) return
     isResizingLeftPanelRef.current = true
     resizeStartXRef.current = e.clientX
     resizeStartWidthRef.current = leftPanelWidthPx

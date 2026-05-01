@@ -47,7 +47,7 @@ export async function startEveSsoLogin(): Promise<void>
   u.searchParams.set('code_challenge', challenge)
   u.searchParams.set('code_challenge_method', 'S256')
   u.searchParams.set('state', state)
-  window.location.assign(u.toString())
+  globalThis.window.location.assign(u.toString())
 }
 
 function parseCallbackSearch(search: string): { code: string; state: string } | null
@@ -141,18 +141,18 @@ export async function tryFinishOAuthOnLoad(
   onMessage?: (msg: string) => void
 ): Promise<boolean>
 {
-  const raw = window.location.search
-  if (!raw || !raw.includes('code=')) return false
+  const raw = globalThis.window.location.search
+  if (!raw?.includes('code=')) return false
   const parsed = parseCallbackSearch(raw)
   if (!parsed) return false
   const pending = readPendingPkce()
   if (!pending)
   {
     onMessage?.('SSO: нет сохранённого PKCE (state). Войдите снова.')
-    window.history.replaceState(
+    globalThis.window.history.replaceState(
       {},
       '',
-      window.location.pathname + window.location.hash
+      globalThis.window.location.pathname + globalThis.window.location.hash
     )
     return true
   }
@@ -160,10 +160,10 @@ export async function tryFinishOAuthOnLoad(
   {
     onMessage?.('SSO: state не совпал. Войдите снова.')
     clearPendingPkce()
-    window.history.replaceState(
+    globalThis.window.history.replaceState(
       {},
       '',
-      window.location.pathname + window.location.hash
+      globalThis.window.location.pathname + globalThis.window.location.hash
     )
     return true
   }
@@ -182,10 +182,10 @@ export async function tryFinishOAuthOnLoad(
     clearPendingPkce()
   } finally
   {
-    window.history.replaceState(
+    globalThis.window.history.replaceState(
       {},
       '',
-      window.location.pathname + window.location.hash
+      globalThis.window.location.pathname + globalThis.window.location.hash
     )
   }
   return true

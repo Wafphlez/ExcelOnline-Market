@@ -321,7 +321,7 @@ export function ExportBar({
 
   useEffect(() => {
     if (!esiExporting) return
-    const id = window.setInterval(() => {
+    const id = globalThis.setInterval(() => {
       setEsiTimerTick((n) => n + 1)
     }, 1000)
     return () => clearInterval(id)
@@ -334,13 +334,11 @@ export function ExportBar({
   }, [esiProgress.phase, esiTypesPhaseAt])
 
   const esiElapsedSec = useMemo(() => {
-    void esiTimerTick
     if (esiSessionStartedAt == null) return 0
     return (Date.now() - esiSessionStartedAt) / 1000
   }, [esiTimerTick, esiSessionStartedAt])
 
   const esiTypesPhaseElapsedSec = useMemo(() => {
-    void esiTimerTick
     if (esiTypesPhaseAt == null) return null
     return (Date.now() - esiTypesPhaseAt) / 1000
   }, [esiTimerTick, esiTypesPhaseAt])
@@ -366,7 +364,7 @@ export function ExportBar({
     try {
       if (selectedId) {
         localStorage.setItem(LS_LAST_EXPORT_REGION_ID, selectedId)
-        window.dispatchEvent(
+        globalThis.dispatchEvent(
           new CustomEvent(LAST_EXPORT_REGION_EVENT, {
             detail: { id: selectedId },
           })
@@ -548,7 +546,7 @@ export function ExportBar({
       source = null
     }
     // Редкий fallback на случай потери SSE или сетевых сбоев.
-    const id = window.setInterval(() => void poll(), 5000)
+    const id = globalThis.setInterval(() => void poll(), 5000)
     return () => {
       cancelled = true
       if (source) source.close()
@@ -589,8 +587,8 @@ export function ExportBar({
         /* ignore */
       }
     }
-    const logPoll = window.setInterval(() => void flushEsiLogsToConsole(), 500)
-    const logKick = window.setTimeout(() => void flushEsiLogsToConsole(), 100)
+    const logPoll = globalThis.setInterval(() => void flushEsiLogsToConsole(), 500)
+    const logKick = globalThis.setTimeout(() => void flushEsiLogsToConsole(), 100)
     try {
       const result = await buildEsiLiquidityToExports({
         regionId: selected.esiRegionId,
@@ -625,8 +623,8 @@ export function ExportBar({
         setMsg(e instanceof Error ? e.message : 'Ошибка ESI')
       }
     } finally {
-      window.clearInterval(logPoll)
-      window.clearTimeout(logKick)
+      globalThis.clearInterval(logPoll)
+      globalThis.clearTimeout(logKick)
       void flushEsiLogsToConsole()
       setEsiProgress({ ...ESI_EXPORT_PROGRESS_IDLE })
       setEsiExporting(false)
@@ -795,7 +793,7 @@ export function ExportBar({
               Выгрузка идёт в полном режиме: все страницы ордеров до исчерпания и все
               доступные типы без ручных лимитов.
             </p>
-            <label className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
+            <div className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
               <div className="min-w-0">
                 <p className="font-semibold text-eve-bright/95">
                   Выгрузить актуальные ордера
@@ -829,8 +827,8 @@ export function ExportBar({
                   }`}
                 />
               </button>
-            </label>
-            <label className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
+            </div>
+            <div className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
               <div className="min-w-0">
                 <p className="font-semibold text-eve-bright/95">
                   Выгрузить только торговый хаб
@@ -864,7 +862,7 @@ export function ExportBar({
                   }`}
                 />
               </button>
-            </label>
+            </div>
             <div className="flex flex-wrap items-center gap-2 pt-1 @[450px]:col-span-3 @[450px]:justify-end">
               <button
                 type="button"
@@ -920,7 +918,7 @@ export function ExportBar({
         <section className="@container rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h3 className="eve-section-title">Market export logs</h3>
-          <label className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
+          <div className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
             <button
               type="button"
               role="switch"
@@ -945,7 +943,7 @@ export function ExportBar({
                 }`}
               />
             </button>
-          </label>
+          </div>
         </div>
         <div
           className={`space-y-2 transition-opacity ${
