@@ -49,6 +49,7 @@ import
     findDashboardRange,
     MS_DAY,
     oldestJournalTimeMs,
+    tradeProfitCumulativeDailySeries,
     tradeProfitCumulativeHourlySeries,
     type DashboardRangeId,
     type TradeProfitByTypeMode,
@@ -80,9 +81,75 @@ const CHART_COL = {
   zeroLine: 'rgba(115, 125, 142, 0.75)',
   wallet: '#5fd4e8',
   net: '#b8963d',
+  /** Ступень «итог на конец предыдущих UTC-суток» поверх почасовой кумуляции */
+  dailyStep: 'rgba(118, 132, 158, 0.52)',
   buy: 'rgba(95, 212, 232, 0.85)',
   sell: 'rgba(184, 150, 61, 0.85)',
 } as const
+
+function floorUtcDayMsFromMs(ms: number): number
+{
+  const d = new Date(ms)
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+
+function TradeProfitLineTooltipContent(
+  { active, payload, label }: {
+    active?: boolean
+    payload?: readonly { payload?: Record<string, unknown> }[]
+    label?: unknown
+  }
+): JSX.Element | null
+{
+  if (!active || payload == null || payload.length === 0) return null
+  const row = payload[0]?.payload as
+    | {
+      tMs?: number
+      cumulativeProfit?: number
+      profitUtcDay?: number
+    }
+    | undefined
+  if (row == null) return null
+  const ms = typeof label === 'number' && Number.isFinite(label)
+    ? label
+    : (typeof row.tMs === 'number' ? row.tMs : NaN)
+  if (!Number.isFinite(ms)) return null
+  const cum = row.cumulativeProfit
+  const dayP = row.profitUtcDay
+  return (
+    <div
+      className="rounded border px-2.5 py-2 text-[11px] text-eve-bright"
+      style={ {
+        background: 'rgba(16, 20, 28, 0.96)',
+        borderColor: 'rgba(123, 142, 176, 0.45)',
+      } }
+    >
+      <div className="mb-1.5 text-eve-muted">
+        { new Date(ms).toLocaleString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'UTC',
+        }) }{ ' ' }
+        UTC
+      </div>
+      { typeof cum === 'number' && (
+        <div className="tabular-nums">
+          <span className="text-eve-muted">Накопленная:{ ' ' }</span>
+          <span className="font-medium text-eve-bright">{ formatIsk(cum) } ISK</span>
+        </div>
+      ) }
+      { typeof dayP === 'number' && (
+        <div className="mt-1 tabular-nums">
+          <span className="text-eve-muted">За сутки (UTC):{ ' ' }</span>
+          <span className="font-medium text-eve-bright">{ formatIsk(dayP) } ISK</span>
+        </div>
+      ) }
+    </div>
+  )
+}
 
 function TabButton(
   { active, children, onClick }: {
@@ -211,7 +278,7 @@ export function CharacterDashboard(
     )
   }, [state, period, tradeProfitMode, tradeProfitHow, tradeFeeDeltas])
 
-  /** Кумулятив по дням: та же FIFO/брутто и режимы, что таблица «по типам» (без лимита топ-N). */
+  /** Кумулятив по часам UTC: та же FIFO/брутто и режимы, что таблица «по типам». */
   const tradeProfitByTypeCumulativeSeries = useMemo(() =>
   {
     if (state.status !== 'ready' || !period) return []
@@ -227,11 +294,70 @@ export function CharacterDashboard(
     )
   }, [state, period, tradeProfitMode, tradeProfitHow])
 
+  /** Кумулятив по календарным суткам UTC (для ступени и «прибыль за сутки» в тултипе). */
+  const tradeProfitDailySeries = useMemo(() =>
+  {
+    if (state.status !== 'ready' || !period) return []
+    return tradeProfitCumulativeDailySeries(
+      state.data.transactions,
+      state.data.journal,
+      period.fromMs,
+      period.toMs,
+      tradeProfitMode,
+      tradeProfitHow,
+      buildWalletTransactionIdToTypeMap(state.data.transactions),
+      buildWalletJournalRefIdToTypeMap(state.data.transactions),
+    )
+  }, [state, period, tradeProfitMode, tradeProfitHow])
+
+  /** Почасовые точки + unix-ms; плюс дневная прибыль UTC и ступень «до конца предыдущих суток». */
+  const tradeProfitChartData = useMemo(() =>
+  {
+    const hourly = tradeProfitByTypeCumulativeSeries
+    if (hourly.length === 0) return []
+
+    const dailySorted = tradeProfitDailySeries
+      .map((p) =>
+      {
+        const parts = p.day.split('-')
+        if (parts.length !== 3) return null
+        const y = Number(parts[0])
+        const mo = Number(parts[1])
+        const d = Number(parts[2])
+        if (![ y, mo, d ].every((n) => Number.isFinite(n))) return null
+        return { dayMs: Date.UTC(y, mo - 1, d), cum: p.cumulativeProfit }
+      })
+      .filter((x): x is { dayMs: number; cum: number } => x != null)
+      .sort((a, b) => a.dayMs - b.dayMs)
+
+    const profitByDayMs = new Map<number, number>()
+    const prevEndCumByDayMs = new Map<number, number>()
+    for (let i = 0; i < dailySorted.length; i++)
+    {
+      const cur = dailySorted[i]!
+      const prevCum = i > 0 ? dailySorted[i - 1]!.cum : 0
+      profitByDayMs.set(cur.dayMs, cur.cum - prevCum)
+      prevEndCumByDayMs.set(cur.dayMs, prevCum)
+    }
+
+    return hourly.map((p) =>
+    {
+      const tMs = new Date(p.t).getTime()
+      const dayMs = Number.isFinite(tMs) ? floorUtcDayMsFromMs(tMs) : 0
+      return {
+        ...p,
+        tMs: Number.isFinite(tMs) ? tMs : 0,
+        profitUtcDay: profitByDayMs.get(dayMs) ?? 0,
+        dailyOverlayStep: prevEndCumByDayMs.get(dayMs) ?? 0,
+      }
+    })
+  }, [tradeProfitByTypeCumulativeSeries, tradeProfitDailySeries])
+
   const tradeProfitByTypeChartYDomain = useMemo((): [ number, number ] =>
   {
-    const s = tradeProfitByTypeCumulativeSeries
+    const s = tradeProfitChartData
     if (s.length === 0) return [ -1, 1 ]
-    const vals = s.map((d) => d.cumulativeProfit)
+    const vals = s.flatMap((d) => [ d.cumulativeProfit, d.dailyOverlayStep ])
     let dMin = Math.min(0, ...vals)
     let dMax = Math.max(0, ...vals)
     if (dMin === dMax)
@@ -243,17 +369,7 @@ export function CharacterDashboard(
     const spread = dMax - dMin
     const pad = Math.max(spread * 0.04, spread * 0.0001)
     return [ dMin - pad, dMax + pad ]
-  }, [tradeProfitByTypeCumulativeSeries])
-
-  /** Почасовые точки + unix-ms для оси времени; сетка по UTC-полуночам между первой и последней точкой. */
-  const tradeProfitChartData = useMemo(
-    () => tradeProfitByTypeCumulativeSeries.map((p) =>
-    {
-      const tMs = new Date(p.t).getTime()
-      return { ...p, tMs: Number.isFinite(tMs) ? tMs : 0 }
-    }),
-    [tradeProfitByTypeCumulativeSeries],
-  )
+  }, [tradeProfitChartData])
 
   const tradeProfitChartUtcMidnightTicks = useMemo((): number[] | undefined =>
   {
@@ -731,32 +847,7 @@ export function CharacterDashboard(
                             tickFormatter={ (n) => formatInteger(n as number) }
                             width={ 56 }
                           />
-                          <Tooltip
-                            contentStyle={ {
-                              background: 'rgba(16, 20, 28, 0.96)',
-                              border: '1px solid rgba(123, 142, 176, 0.45)',
-                              fontSize: 11,
-                              borderRadius: 4,
-                            } }
-                            labelFormatter={ (label) =>
-                            {
-                              const ms = typeof label === 'number'
-                                ? label
-                                : new Date(String(label)).getTime()
-                              if (!Number.isFinite(ms)) return String(label)
-                              return `${ new Date(ms).toLocaleString('ru-RU', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                timeZone: 'UTC',
-                              }) } UTC`
-                            } }
-                            formatter={ (v: number) =>
-                              [ iskFormatter(v), 'Накопленная прибыль' ]
-                            }
-                          />
+                          <Tooltip content={ TradeProfitLineTooltipContent } />
                           <Legend />
                           <ReferenceLine
                             y={ 0 }
@@ -766,11 +857,21 @@ export function CharacterDashboard(
                           <Line
                             type="monotone"
                             dataKey="cumulativeProfit"
-                            name="По типам (накопл.), ISK"
+                            name="По часам (накопл.), ISK"
                             stroke={ CHART_COL.net }
                             strokeWidth={ 2.25 }
                             dot={ false }
                             activeDot={ { r: 3 } }
+                          />
+                          <Line
+                            type="stepAfter"
+                            dataKey="dailyOverlayStep"
+                            name="Сутки UTC (ступень до тек. дня)"
+                            stroke={ CHART_COL.dailyStep }
+                            strokeWidth={ 1.65 }
+                            dot={ false }
+                            activeDot={ { r: 2.5 } }
+                            isAnimationActive={ false }
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -781,7 +882,9 @@ export function CharacterDashboard(
                     </p>
                   ) }
                   <p className="text-[9px] text-eve-muted/75">
-                    Накопление по часам (UTC) в той же методике, что таблица; на графике учтены все типы, в таблице — до{ ' ' }
+                    Накопление по часам (UTC) в той же методике, что таблица; вторая линия — ступень «итог на конец предыдущих
+                    UTC-суток». В подсказке — накопленная прибыль и прибыль за календарные сутки UTC. На графике учтены все
+                    типы, в таблице — до{ ' ' }
                     { TRADE_PROFIT_TOP_N } строк по прибыли.
                   </p>
                 </div>
