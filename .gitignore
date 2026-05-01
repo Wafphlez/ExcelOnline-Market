@@ -12,3 +12,7 @@ exports/*
 !exports/.gitkeep
 !exports/filters.json
 
+# Sonar (генерируется scripts/sonar-fetch-issues.mjs)
+reports/sonar/issues.json
+reports/sonar/issues.md
+
