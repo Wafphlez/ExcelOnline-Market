@@ -27,10 +27,10 @@ function formatIskHeader(n: number): string
 }
 
 function OrderTable(
-  { title, rows }: {
+  { title, rows }: Readonly<{
     title: string
     rows: ActiveMarketOrderRow[]
-  }
+  }>
 ): JSX.Element
 {
   const [sortKey, setSortKey] = useState<SortKey>('type')
@@ -218,12 +218,12 @@ function OrderTable(
   )
 }
 
-type ActiveMarketOrdersBlockProps = {
+type ActiveMarketOrdersBlockProps = Readonly<{
   data: ActiveMarketOrdersData | null
   errorMessage: string | null
   onRefresh?: () => void
   refreshing?: boolean
-}
+}>
 
 export function ActiveMarketOrdersBlock(
   { data, errorMessage, onRefresh, refreshing = false }: ActiveMarketOrdersBlockProps

@@ -66,11 +66,11 @@ import { dashboardTwinPanelHeightClass } from '../../lib/ui/dashboardTwinPanel'
 import { ActiveMarketOrdersBlock } from './ActiveMarketOrdersBlock'
 import { EveSsoLoginPanel } from './EveSsoLoginPanel'
 
-type CharacterDashboardProps = {
+type CharacterDashboardProps = Readonly<{
   /** Сообщение одноразово после callback SSO */
   bootMessage?: string | null
   onClearBootMessage?: () => void
-}
+}>
 
 const CHART_COL = {
   grid: 'rgba(74, 88, 120, 0.35)',
@@ -94,11 +94,11 @@ function floorUtcDayMsFromMs(ms: number): number
 }
 
 function TradeProfitLineTooltipContent(
-  { active, payload, label }: {
+  { active, payload, label }: Readonly<{
     active?: boolean
     payload?: readonly { payload?: Record<string, unknown> }[]
     label?: unknown
-  }
+  }>
 ): JSX.Element | null
 {
   if (!active || payload == null || payload.length === 0) return null
@@ -112,7 +112,7 @@ function TradeProfitLineTooltipContent(
   if (row == null) return null
   const ms = typeof label === 'number' && Number.isFinite(label)
     ? label
-    : (typeof row.tMs === 'number' ? row.tMs : NaN)
+    : (typeof row.tMs === 'number' ? row.tMs : Number.NaN)
   if (!Number.isFinite(ms)) return null
   const cum = row.cumulativeProfit
   const dayP = row.profitUtcDay
@@ -152,11 +152,11 @@ function TradeProfitLineTooltipContent(
 }
 
 function TabButton(
-  { active, children, onClick }: {
+  { active, children, onClick }: Readonly<{
     active: boolean
     children: ReactNode
     onClick: () => void
-  }
+  }>
 ): JSX.Element
 {
   return (

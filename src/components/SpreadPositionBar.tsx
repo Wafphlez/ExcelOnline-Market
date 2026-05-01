@@ -1,10 +1,10 @@
 import { formatCompactKmb, formatRatio } from '../lib/formatNumber'
 
-type Props = {
+type Props = Readonly<{
   ratio: number | null
   /** Сделок за период (шт.) — для разбиения по сторонам спреда */
   tradeCount: number
-}
+}>
 
 const SCAN = {
   h: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.22) 1px, rgba(0,0,0,0.22) 2px)',

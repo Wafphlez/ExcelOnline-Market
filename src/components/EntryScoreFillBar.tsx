@@ -1,7 +1,7 @@
-type EntryScoreFillBarProps = {
+type EntryScoreFillBarProps = Readonly<{
   /** 0–100, null — нет данных */
   score: number | null
-}
+}>
 
 /**
  * Индикатор выгодности: золотая рамка на всю длину; внутри слева золотая

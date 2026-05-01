@@ -83,7 +83,7 @@ function readEsiHistoryDays(): 2 | 7 | 30 {
   return 30
 }
 
-type ExportBarProps = {
+type ExportBarProps = Readonly<{
   onLoadBuffer: (buf: ArrayBuffer) => void | Promise<void>
   onOpenedExportFile?: (fileName: string) => void
   disabled?: boolean
@@ -98,7 +98,7 @@ type ExportBarProps = {
   brokerInputRef?: (el: HTMLInputElement | null) => void
   taxInputRef?: (el: HTMLInputElement | null) => void
   onMessageChange?: (message: string | null) => void
-}
+}>
 
 type MarketLogSummaryRow = {
   name: string

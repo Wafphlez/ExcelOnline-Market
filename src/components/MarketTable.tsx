@@ -50,7 +50,7 @@ const DATALIST_SUGGESTION_CAP = 120
 
 const MARKET_ROW_ESTIMATE_PX = 46
 
-function TypeIcon({ typeId }: { typeId: number | null }) {
+function TypeIcon({ typeId }: Readonly<{ typeId: number | null }>) {
   const [failed, setFailed] = useState(false)
   const validTypeId =
     typeof typeId === 'number' &&
@@ -127,7 +127,7 @@ function formatByKindString(
   }
 }
 
-type MarketTableProps = {
+type MarketTableProps = Readonly<{
   data: MarketRow[]
   columnFilters: ColumnFiltersState
   onColumnFiltersChange: OnChangeFn<ColumnFiltersState>
@@ -141,7 +141,7 @@ type MarketTableProps = {
   priceSellHeader?: string | null
   /** Переопределение заголовка колонки priceBuy (например для межрегионального сравнения) */
   priceBuyHeader?: string | null
-}
+}>
 
 const emptyText = ''
 const emptyRange: NumberRange = { min: null, max: null }

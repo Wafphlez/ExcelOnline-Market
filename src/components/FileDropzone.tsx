@@ -1,7 +1,7 @@
 import { Upload } from 'lucide-react'
 import { useCallback, useRef, useState } from 'react'
 
-type FileDropzoneProps = {
+type FileDropzoneProps = Readonly<{
   onFile: (file: File) => void
   disabled?: boolean
   /**
@@ -9,7 +9,7 @@ type FileDropzoneProps = {
    * @default false
    */
   embedded?: boolean
-}
+}>
 
 export function FileDropzone({ onFile, disabled, embedded = false }: FileDropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null)

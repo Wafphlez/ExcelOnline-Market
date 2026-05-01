@@ -18,12 +18,12 @@ function ProgressRow({
   current,
   max,
   accentClass,
-}: {
+}: Readonly<{
   label: string
   current: number
   max: number
   accentClass?: string
-}) {
+}>) {
   const w = barWidth(current, max)
   return (
     <div className="min-w-0">
@@ -43,7 +43,7 @@ function ProgressRow({
   )
 }
 
-type EsiExportProgressPanelProps = {
+type EsiExportProgressPanelProps = Readonly<{
   progress: EsiExportProgressState
   /** Секунд с начала ESI-выгрузки (таймер) */
   elapsedSec: number
@@ -51,7 +51,7 @@ type EsiExportProgressPanelProps = {
   typesPhaseElapsedSec: number | null
   /** Показывать snapshot-прогресс (когда включена опция выгрузки snapshot) */
   includeSnapshotProgress?: boolean
-}
+}>
 
 /**
  * Прогресс ESI, секундомер (прошло) и оценка ETA по текущей фазе.

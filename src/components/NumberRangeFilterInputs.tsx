@@ -12,7 +12,7 @@ import {
 } from '../lib/formatNumber'
 import type { NumberRange } from '../lib/filterFns'
 
-type NumberRangeFilterInputsProps = {
+type NumberRangeFilterInputsProps = Readonly<{
   columnId: ColumnId
   range: NumberRange
   onRangeChange: (next: NumberRange | undefined) => void
@@ -20,7 +20,7 @@ type NumberRangeFilterInputsProps = {
   isSpreadAxis: boolean
   ariaLabelFrom: string
   ariaLabelTo: string
-}
+}>
 
 /**
  * Позволяет вводить 0,05 / 0.05 без сброса на промежуточных «0.» (controlled через локальный draft до blur).

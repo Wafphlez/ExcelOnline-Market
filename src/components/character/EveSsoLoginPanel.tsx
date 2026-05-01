@@ -4,10 +4,10 @@ import
     EVE_SSO_SCOPES_INFO,
   } from '../../lib/eve/constants'
 
-type EveSsoLoginPanelProps = {
+type EveSsoLoginPanelProps = Readonly<{
   onLogin: () => void
   disabled: boolean
-}
+}>
 
 /**
  * Кнопка и блок scopes по гайдлайнам CCP: официальное изображение + явное перечисление разрешений.

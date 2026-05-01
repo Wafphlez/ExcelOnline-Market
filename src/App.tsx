@@ -6,11 +6,11 @@ import TradingView from './views/TradingView'
 type AppTab = 'trading' | 'character'
 
 function TabButton(
-  { active, children, onClick }: {
+  { active, children, onClick }: Readonly<{
     active: boolean
     children: string
     onClick: () => void
-  }
+  }>
 ): JSX.Element
 {
   return (
