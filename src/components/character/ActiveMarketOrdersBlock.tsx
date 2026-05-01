@@ -2,6 +2,7 @@ import { RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { ActiveMarketOrderRow, ActiveMarketOrdersData } from '../../lib/eve/activeMarketOrders'
 import { formatIsk, formatInteger } from '../../lib/formatNumber'
+import { dashboardTwinPanelHeightClass } from '../../lib/ui/dashboardTwinPanel'
 
 const EPS_UI = 0.01
 const BADGE_BEST = 'bg-[#4ade80] text-black'
@@ -274,7 +275,9 @@ export function ActiveMarketOrdersBlock(
   const sellH = `Ордеров: ${ data.sells.length } · В рынке: ${ formatIskHeader(data.sellTotalExposureIsk) }`
   const buyH = `Ордеров: ${ data.buys.length } · Всего: ${ formatIskHeader(data.buyTotalEscrowIsk) } · Эскроу: ${ formatIskHeader(data.buyTotalEscrowIsk) } · Осталось внести: ${ formatInteger(data.buyRemainingToCover) }`
   return (
-    <div className="flex h-[min(92vh,720px)] min-h-0 flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+    <div
+      className={ `flex min-h-0 min-w-0 w-full flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset ${ dashboardTwinPanelHeightClass }` }
+    >
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
         <h3 className="eve-section-title">Активные Market Orders</h3>
         { refreshButton }

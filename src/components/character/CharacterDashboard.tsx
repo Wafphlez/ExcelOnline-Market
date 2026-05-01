@@ -61,6 +61,7 @@ import
     formatInteger,
     formatIskMillionsShort,
   } from '../../lib/formatNumber'
+import { dashboardTwinPanelHeightClass } from '../../lib/ui/dashboardTwinPanel'
 import { ActiveMarketOrdersBlock } from './ActiveMarketOrdersBlock'
 import { EveSsoLoginPanel } from './EveSsoLoginPanel'
 
@@ -787,8 +788,8 @@ export function CharacterDashboard(
               </div>
 
               <div className="flex w-full min-w-0 max-w-full flex-col gap-4">
-                <div className="grid w-full min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
-                  <div className="w-full min-w-0">
+                <div className="grid w-full min-w-0 grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+                  <div className="flex w-full min-w-0">
                     <ActiveMarketOrdersBlock
                       data={ state.data.activeMarketOrders }
                       errorMessage={ state.data.activeMarketOrdersError }
@@ -796,21 +797,23 @@ export function CharacterDashboard(
                       refreshing={ activeMarketOrdersRefreshing }
                     />
                   </div>
-                  <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-2 leading-snug">
+                  <div
+                    className={ `@container flex w-full min-w-0 flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset ${ dashboardTwinPanelHeightClass } min-h-0` }
+                  >
+                  <h3 className="eve-section-title mb-2 shrink-0 leading-snug">
                     Торговая прибыль по типам
                     <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
                       (таблица)
                     </span>
                   </h3>
-                  <p className="mb-2 text-[9px] leading-snug text-eve-muted/80">
+                  <p className="mb-2 shrink-0 text-[9px] leading-snug text-eve-muted/80">
                     Параметры{ ' ' }
                     <span className="whitespace-nowrap">Купля–продажа</span>
                     { ' ' }/ Все типы и FIFO / Брутто — те же, что у{ ' ' }
                     <span className="whitespace-nowrap">линейного графика</span>
                     { ' ' }выше.
                   </p>
-                  <p className="mb-2 text-[9px] leading-snug text-eve-muted/80">
+                  <p className="mb-2 shrink-0 text-[9px] leading-snug text-eve-muted/80">
                     Сверка с чужой таблицей: часто совпадает по{ ' ' }
                     <span className="whitespace-nowrap">периоду</span> и
                     { ' ' }
@@ -819,7 +822,7 @@ export function CharacterDashboard(
                     исходы и налоги везде разные).
                   </p>
                   { tradeProfitWithNames.length > 0 ? (
-                    <div className="max-h-[min(65vh,520px)] overflow-auto rounded border border-eve-border/40">
+                    <div className="min-h-0 flex-1 overflow-auto rounded border border-eve-border/40">
                       <table className="w-full min-w-0 text-left text-[11px] text-eve-bright/90">
                         <thead className="sticky top-0 z-10 bg-eve-elevated/95 text-eve-muted shadow-[0_1px_0_0_rgba(74,88,120,0.35)]">
                           <tr>
@@ -935,18 +938,18 @@ export function CharacterDashboard(
                             )
                           }) }
                         </tbody>
-                        <tfoot className="border-t-2 border-eve-border/40 bg-eve-elevated/50 text-eve-bright/95">
+                        <tfoot className="sticky bottom-0 z-10 border-t-2 border-eve-border/40 bg-eve-elevated/95 text-eve-bright/95 shadow-[0_-1px_0_0_rgba(74,88,120,0.35)]">
                           <tr>
                             <th
                               scope="row"
-                              className="px-2 py-1.5 pr-1 text-left font-semibold"
+                              className="bg-eve-elevated/95 px-2 py-1.5 pr-1 text-left font-semibold"
                             >
                               Итого ({ tradeProfitWithNames.length }{ ' ' }
                               { tradeProfitWithNames.length === 1
                                 ? 'тип'
                                 : 'типов' } в витрине)
                             </th>
-                            <td className="px-1 py-1.5 pr-2">
+                            <td className="bg-eve-elevated/95 px-1 py-1.5 pr-2">
                               { tradeProfitNetSharePct != null ? (
                                 <span
                                   className={ `tabular-nums text-[9px] font-semibold ${
@@ -969,11 +972,11 @@ export function CharacterDashboard(
                                 </span>
                               ) }
                             </td>
-                            <td className="px-1 py-1.5 text-right text-eve-muted" title="Суммировать шт. по разным типам бессмысленно">
+                            <td className="bg-eve-elevated/95 px-1 py-1.5 text-right text-eve-muted" title="Суммировать шт. по разным типам бессмысленно">
                               —
                             </td>
                             <td
-                              className={ `px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
+                              className={ `bg-eve-elevated/95 px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
                                 tradeProfitTableProfitSum >= 0
                                   ? 'eve-green'
                                   : 'eve-red'
@@ -986,7 +989,11 @@ export function CharacterDashboard(
                       </table>
                     </div>
                   ) : (
-                    <p className="text-sm text-eve-muted">Нет сделок за период (или в режиме «Купля–продажа» нет пар buy+sell по типу).</p>
+                    <div className="flex min-h-0 flex-1 items-start">
+                      <p className="text-sm text-eve-muted">
+                        Нет сделок за период (или в режиме «Купля–продажа» нет пар buy+sell по типу).
+                      </p>
+                    </div>
                   ) }
                   </div>
                 </div>
