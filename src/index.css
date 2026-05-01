@@ -7,6 +7,19 @@
   --eve-red-rgb: 150 55 50;
 }
 
+/* Плавный ховер строк «торговая прибыль»: альфа градиента и подложка (см. CharacterDashboard). */
+@property --trade-profit-bar-alpha {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0.26;
+}
+
+@property --trade-profit-veil-a {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 html,
 body,
 #root {
@@ -66,6 +79,19 @@ body {
     background:
       radial-gradient(ellipse 90% 55% at 50% 0%, rgba(184, 150, 61, 0.09), transparent 60%),
       linear-gradient(180deg, #0a0b10 0%, #040506 100%);
+  }
+
+  .eve-ui-root tr.trade-profit-data-row {
+    --trade-profit-bar-alpha: var(--trade-profit-base-alpha, 0.26);
+    --trade-profit-veil-a: 0;
+    transition:
+      --trade-profit-bar-alpha 0.22s ease-out,
+      --trade-profit-veil-a 0.22s ease-out;
+  }
+
+  .eve-ui-root tr.trade-profit-data-row:hover {
+    --trade-profit-bar-alpha: var(--trade-profit-hover-alpha, 0.48);
+    --trade-profit-veil-a: 1;
   }
 
   /**

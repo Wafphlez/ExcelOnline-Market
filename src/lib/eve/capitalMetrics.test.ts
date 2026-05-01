@@ -12,6 +12,8 @@ import
     filterNetWorthSeriesFrom,
     filterTransactionsInRange,
     sumJournalInRange,
+    tradeProfitCumulativeDailySeries,
+    tradeProfitCumulativeHourlySeries,
     buildNetWorthOverlayPoints,
     valueAssets,
     valuePlexInAssets,
@@ -298,6 +300,194 @@ describe('capitalMetrics', () => {
     expect(all.map((r) => r.type_id).sort((a, b) => a - b)).toEqual([1, 2])
     expect(rt).toHaveLength(1)
     expect(rt[0]!.type_id).toBe(2)
+  })
+
+  it('tradeProfitCumulativeDailySeries last point matches aggregate (FIFO, all)', () => {
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-01T00:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 100,
+        quantity: 2,
+        client_id: 0,
+        is_buy: true,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 2,
+        date: '2024-01-03T00:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 200,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const from = new Date('2023-12-01T00:00:00Z').getTime()
+    const to = new Date('2024-06-01T00:00:00Z').getTime()
+    const tid = buildWalletTransactionIdToTypeMap(tr)
+    const jid = buildWalletJournalRefIdToTypeMap(tr)
+    const series = tradeProfitCumulativeDailySeries(
+      tr,
+      [],
+      from,
+      to,
+      'all',
+      'fifo',
+      tid,
+      jid,
+    )
+    expect(series.map((p) => p.day)).toEqual([
+      '2024-01-01',
+      '2024-01-02',
+      '2024-01-03',
+    ])
+    expect(series[0]!.cumulativeProfit).toBe(0)
+    expect(series[1]!.cumulativeProfit).toBe(0)
+    expect(series[2]!.cumulativeProfit).toBe(100)
+    const rows = aggregateTradeProfitByType(
+      tr,
+      Number.POSITIVE_INFINITY,
+      'all',
+      'fifo',
+      null,
+    )
+    expect(series[series.length - 1]!.cumulativeProfit).toBe(
+      rows.reduce((s, r) => s + r.profit, 0),
+    )
+  })
+
+  it('tradeProfitCumulativeDailySeries roundtrip matches full-period roundtrip total', () => {
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-01T00:00:00Z',
+        type_id: 1,
+        location_id: 1,
+        unit_price: 50,
+        quantity: 10,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 2,
+        date: '2024-01-02T00:00:00Z',
+        type_id: 2,
+        location_id: 1,
+        unit_price: 10,
+        quantity: 1,
+        client_id: 0,
+        is_buy: true,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 3,
+        date: '2024-01-03T00:00:00Z',
+        type_id: 2,
+        location_id: 1,
+        unit_price: 20,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const from = new Date('2023-12-01T00:00:00Z').getTime()
+    const to = new Date('2024-06-01T00:00:00Z').getTime()
+    const tid = buildWalletTransactionIdToTypeMap(tr)
+    const jid = buildWalletJournalRefIdToTypeMap(tr)
+    const series = tradeProfitCumulativeDailySeries(
+      tr,
+      [],
+      from,
+      to,
+      'roundtrip',
+      'fifo',
+      tid,
+      jid,
+    )
+    expect(series[0]!.cumulativeProfit).toBe(0)
+    expect(series[1]!.cumulativeProfit).toBe(0)
+    const rt = aggregateTradeProfitByType(
+      tr,
+      Number.POSITIVE_INFINITY,
+      'roundtrip',
+      'fifo',
+      null,
+    )
+    expect(series[series.length - 1]!.cumulativeProfit).toBe(
+      rt.reduce((s, r) => s + r.profit, 0),
+    )
+    expect(series[series.length - 1]!.cumulativeProfit).toBe(10)
+  })
+
+  it('tradeProfitCumulativeHourlySeries steps UTC hours and matches end total', () => {
+    const tr: EveWalletTransaction[] = [
+      {
+        transaction_id: 1,
+        date: '2024-01-03T10:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 100,
+        quantity: 2,
+        client_id: 0,
+        is_buy: true,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+      {
+        transaction_id: 2,
+        date: '2024-01-03T15:00:00Z',
+        type_id: 10,
+        location_id: 1,
+        unit_price: 200,
+        quantity: 1,
+        client_id: 0,
+        is_buy: false,
+        is_personal: true,
+        journal_ref_id: 0,
+      },
+    ]
+    const from = new Date('2023-12-01T00:00:00Z').getTime()
+    const to = new Date('2024-06-01T00:00:00Z').getTime()
+    const tid = buildWalletTransactionIdToTypeMap(tr)
+    const jid = buildWalletJournalRefIdToTypeMap(tr)
+    const series = tradeProfitCumulativeHourlySeries(
+      tr,
+      [],
+      from,
+      to,
+      'all',
+      'fifo',
+      tid,
+      jid,
+    )
+    expect(series).toHaveLength(6)
+    expect(series[0]!.t).toBe('2024-01-03T10:00:00.000Z')
+    expect(series[series.length - 1]!.t).toBe('2024-01-03T15:00:00.000Z')
+    expect(series[0]!.cumulativeProfit).toBe(0)
+    expect(series[series.length - 2]!.cumulativeProfit).toBe(0)
+    expect(series[series.length - 1]!.cumulativeProfit).toBe(100)
+    const rows = aggregateTradeProfitByType(
+      tr,
+      Number.POSITIVE_INFINITY,
+      'all',
+      'fifo',
+      null,
+    )
+    expect(series[series.length - 1]!.cumulativeProfit).toBe(
+      rows.reduce((s, r) => s + r.profit, 0),
+    )
   })
 
   it('filterJournalInRange by date', () => {

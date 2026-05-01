@@ -623,6 +623,230 @@ export function aggregateTradeProfitByType(
     .slice(0, limit)
 }
 
+export const MS_DAY = 86_400_000
+
+export const MS_HOUR = 3_600_000
+
+export type TradeProfitCumulativeDayPoint = {
+  /** Ключ даты UTC `YYYY-MM-DD` */
+  day: string
+  /** Сумма `profit` по строкам с той же логикой фильтра, что и `aggregateTradeProfitByType`. */
+  cumulativeProfit: number
+}
+
+/** Точка накопления: `t` — ISO UTC начала дня (`…T00:00:00.000Z`) или часа (`…T14:00:00.000Z`). */
+export type TradeProfitCumulativeIsoPoint = {
+  t: string
+  cumulativeProfit: number
+}
+
+function floorUtcDayMs(ms: number): number
+{
+  const d = new Date(ms)
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+
+function floorUtcHourMs(ms: number): number
+{
+  const d = new Date(ms)
+  return Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth(),
+    d.getUTCDate(),
+    d.getUTCHours(),
+    0,
+    0,
+    0,
+  )
+}
+
+function enumerateUtcBucketStarts(
+  step: 'day' | 'hour',
+  eventTimesMs: number[]
+): number[]
+{
+  if (eventTimesMs.length === 0) return []
+  const floor = step === 'day' ? floorUtcDayMs : floorUtcHourMs
+  const stepMs = step === 'day' ? MS_DAY : MS_HOUR
+  let minB = Number.POSITIVE_INFINITY
+  let maxB = Number.NEGATIVE_INFINITY
+  for (const ms of eventTimesMs)
+  {
+    if (!Number.isFinite(ms)) continue
+    const b = floor(ms)
+    if (b < minB) minB = b
+    if (b > maxB) maxB = b
+  }
+  if (!Number.isFinite(minB) || !Number.isFinite(maxB)) return []
+  const out: number[] = []
+  for (let x = minB; x <= maxB; x += stepMs) out.push(x)
+  return out
+}
+
+function buildTradeProfitCumulativeIsoPoints(
+  transactions: EveWalletTransaction[],
+  journal: EveWalletJournalEntry[],
+  fromMs: number,
+  toMs: number,
+  mode: TradeProfitByTypeMode,
+  how: TradeProfitHow,
+  transactionIdToType: ReadonlyMap<number, number>,
+  journalRefIdToType: ReadonlyMap<number, number>,
+  step: 'day' | 'hour',
+): TradeProfitCumulativeIsoPoint[]
+{
+  const txAll = filterTransactionsInRange(transactions, fromMs, toMs)
+  const journalR = filterJournalInRange(journal, fromMs, toMs)
+
+  const byTypeFull = new Map<number, EveWalletTransaction[]>()
+  for (const t of txAll)
+  {
+    const a = byTypeFull.get(t.type_id) ?? []
+    a.push(t)
+    byTypeFull.set(t.type_id, a)
+  }
+  const roundtripTypeHasBuySell = new Set<number>()
+  for (const [type_id, txs] of byTypeFull)
+  {
+    let hasBuy = false
+    let hasSell = false
+    for (const x of txs)
+    {
+      if (x.is_buy) hasBuy = true
+      else hasSell = true
+      if (hasBuy && hasSell) break
+    }
+    if (hasBuy && hasSell) roundtripTypeHasBuySell.add(type_id)
+  }
+
+  const eventTimesMs: number[] = []
+  for (const t of txAll)
+  {
+    const ms = new Date(t.date).getTime()
+    if (Number.isFinite(ms)) eventTimesMs.push(ms)
+  }
+  for (const j of journalR)
+  {
+    if (!isMarketFeeRefType(j.ref_type)) continue
+    const ms = new Date(j.date).getTime()
+    if (Number.isFinite(ms)) eventTimesMs.push(ms)
+  }
+
+  const bucketStarts = enumerateUtcBucketStarts(step, eventTimesMs)
+  if (bucketStarts.length === 0) return []
+
+  const stepMs = step === 'day' ? MS_DAY : MS_HOUR
+
+  const sumFilteredProfit = (rows: TradeProfitByType[]): number =>
+  {
+    if (mode === 'roundtrip')
+    {
+      let s = 0
+      for (const r of rows)
+      {
+        if (
+          r.type_id === UNMATCHED_FEE_TYPE_ID
+          || roundtripTypeHasBuySell.has(r.type_id)
+        )
+        {
+          s += r.profit
+        }
+      }
+      return s
+    }
+    return rows.reduce((a, r) => a + r.profit, 0)
+  }
+
+  const out: TradeProfitCumulativeIsoPoint[] = []
+  for (const bucketStart of bucketStarts)
+  {
+    const cutoffExclusive = bucketStart + stepMs
+    const txsD = txAll.filter((t) => new Date(t.date).getTime() < cutoffExclusive)
+    const jouD = journalR.filter((j) => new Date(j.date).getTime() < cutoffExclusive)
+    const feeMap = aggregateMarketFeeDeltasFromJournalEstimated(
+      jouD,
+      transactionIdToType,
+      journalRefIdToType,
+      txsD,
+    )
+    const rows = aggregateTradeProfitByType(
+      txsD,
+      Number.POSITIVE_INFINITY,
+      'all',
+      how,
+      feeMap,
+    )
+    out.push({
+      t: new Date(bucketStart).toISOString(),
+      cumulativeProfit: sumFilteredProfit(rows),
+    })
+  }
+  return out
+}
+
+/**
+ * Накопленная торговая прибыль (та же FIFO/брутто и комиссии, что `aggregateTradeProfitByType`)
+ * по календарным дням UTC: на каждый день — префикс сделок и проводок журнала до конца дня.
+ *
+ * `roundtrip`: в итоге участвуют только типы с покупками **и** продажами за **весь** выбранный интервал,
+ * плюс строки `UNMATCHED_FEE_TYPE_ID` (как в таблице).
+ */
+export function tradeProfitCumulativeDailySeries(
+  transactions: EveWalletTransaction[],
+  journal: EveWalletJournalEntry[],
+  fromMs: number,
+  toMs: number,
+  mode: TradeProfitByTypeMode,
+  how: TradeProfitHow,
+  transactionIdToType: ReadonlyMap<number, number>,
+  journalRefIdToType: ReadonlyMap<number, number>,
+): TradeProfitCumulativeDayPoint[]
+{
+  const pts = buildTradeProfitCumulativeIsoPoints(
+    transactions,
+    journal,
+    fromMs,
+    toMs,
+    mode,
+    how,
+    transactionIdToType,
+    journalRefIdToType,
+    'day',
+  )
+  return pts.map((p) => ({
+    day: p.t.slice(0, 10),
+    cumulativeProfit: p.cumulativeProfit,
+  }))
+}
+
+/**
+ * То же, что `tradeProfitCumulativeDailySeries`, но дискретность **по часам UTC**:
+ * на каждый час — префикс событий до конца этого часа (`…:59:59.999Z`).
+ */
+export function tradeProfitCumulativeHourlySeries(
+  transactions: EveWalletTransaction[],
+  journal: EveWalletJournalEntry[],
+  fromMs: number,
+  toMs: number,
+  mode: TradeProfitByTypeMode,
+  how: TradeProfitHow,
+  transactionIdToType: ReadonlyMap<number, number>,
+  journalRefIdToType: ReadonlyMap<number, number>,
+): TradeProfitCumulativeIsoPoint[]
+{
+  return buildTradeProfitCumulativeIsoPoints(
+    transactions,
+    journal,
+    fromMs,
+    toMs,
+    mode,
+    how,
+    transactionIdToType,
+    journalRefIdToType,
+    'hour',
+  )
+}
+
 /**
  * Комбинированные точки: кошелёк (история) + net worth = wallet + оценка активов (текущий срез)
  * + эскроу buy-ордеров (текущий срез, как с активами).
@@ -653,8 +877,6 @@ export function isMarketRelatedRefType(ref: string): boolean
   if (t.includes('contract')) return true
   return false
 }
-
-export const MS_DAY = 86_400_000
 
 export type DashboardRangeId = 'd1' | 'd7' | 'd30' | 'd90' | 'all'
 

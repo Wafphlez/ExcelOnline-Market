@@ -16,8 +16,6 @@ import
   } from 'lucide-react'
 import
   {
-    Bar,
-    BarChart,
     CartesianGrid,
     Legend,
     Line,
@@ -41,9 +39,7 @@ import { fetchTypeNameMap } from '../../lib/eve/characterEsi'
 import
   {
     aggregateMarketFeeDeltasFromJournalEstimated,
-    aggregateMarketFeesByDay,
     aggregateTradeProfitByType,
-    aggregateTradesByDay,
     buildWalletJournalRefIdToTypeMap,
     buildWalletTransactionIdToTypeMap,
     DASHBOARD_RANGE_PRESETS,
@@ -53,7 +49,7 @@ import
     findDashboardRange,
     MS_DAY,
     oldestJournalTimeMs,
-    sumJournalInRange,
+    tradeProfitCumulativeHourlySeries,
     type DashboardRangeId,
     type TradeProfitByTypeMode,
     type TradeProfitHow,
@@ -154,121 +150,6 @@ export function CharacterDashboard(
     }
   }, [state, rangeId])
 
-  const walletDeltaJournal = useMemo(() =>
-  {
-    if (state.status !== 'ready' || !period) return null
-    return sumJournalInRange(
-      state.data.journal,
-      period.fromMs,
-      period.toMs
-    )
-  }, [state, period])
-
-  const tradeByDayInRange = useMemo(() =>
-  {
-    if (state.status !== 'ready' || !period) return []
-    const tx = filterTransactionsInRange(
-      state.data.transactions,
-      period.fromMs,
-      period.toMs
-    )
-    return aggregateTradesByDay(tx)
-  }, [state, period])
-
-  /**
-   * Рыночные транзакции за скользящие 30 дней: ровно 30 точек (дата UTC)
-   * — для линейного графика с нулевыми днями без сделок.
-   */
-  const transactionsLast30DaysSeries = useMemo(() =>
-  {
-    if (state.status !== 'ready') return []
-    const toMs = Date.now()
-    const fromMs = toMs - 30 * MS_DAY
-    const tx = filterTransactionsInRange(
-      state.data.transactions,
-      fromMs,
-      toMs
-    )
-    const agg = aggregateTradesByDay(tx)
-    const byDay = new Map(agg.map((d) => [d.day, d]))
-    const rows: { day: string; netIsk: number }[] = []
-    for (let i = 29; i >= 0; i--)
-    {
-      const d = new Date(toMs - i * MS_DAY)
-      const key = d.toISOString().slice(0, 10)
-      const r = byDay.get(key)
-      const sell = r?.sellIsk ?? 0
-      const buy = r?.buyIsk ?? 0
-      rows.push({
-        day: key,
-        netIsk: sell - buy,
-      })
-    }
-    return rows
-  }, [state])
-
-  /** Включает 0, чтобы ноль и линия сетки на 0 не «выпадали» из диапазона. */
-  const transactionsLast30DaysYDomain = useMemo((): [ number, number ] =>
-  {
-    const s = transactionsLast30DaysSeries
-    if (s.length === 0) return [ -1, 1 ]
-    const vals = s.map((d) => d.netIsk)
-    let dMin = Math.min(0, ...vals)
-    let dMax = Math.max(0, ...vals)
-    if (dMin === dMax)
-    {
-      if (dMin === 0) return [ -1, 1 ]
-      const pad = Math.max(Math.abs(dMin) * 0.05, 1e-6)
-      return [ dMin - pad, dMax + pad ]
-    }
-    const spread = dMax - dMin
-    const pad = Math.max(spread * 0.04, spread * 0.0001)
-    return [ dMin - pad, dMax + pad ]
-  }, [ transactionsLast30DaysSeries ])
-
-  const tradeNetSeries = useMemo(() =>
-  {
-    if (state.status !== 'ready' || !period) return []
-    const feesByDay = aggregateMarketFeesByDay(
-      filterJournalInRange(state.data.journal, period.fromMs, period.toMs)
-    )
-    const dayRows = new Map<string, { sellIncome: number; buyExpense: number; feeDelta: number }>()
-    for (const d of tradeByDayInRange)
-    {
-      dayRows.set(d.day, {
-        sellIncome: d.sellIsk,
-        buyExpense: d.buyIsk,
-        feeDelta: feesByDay.get(d.day) ?? 0,
-      })
-    }
-    for (const [day, feeDelta] of feesByDay)
-    {
-      if (dayRows.has(day)) continue
-      dayRows.set(day, {
-        sellIncome: 0,
-        buyExpense: 0,
-        feeDelta,
-      })
-    }
-
-    let cumulativeNet = 0
-    return [...dayRows.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([day, d]) =>
-    {
-      const netProfit = d.sellIncome - d.buyExpense + d.feeDelta
-      cumulativeNet += netProfit
-      return {
-        day,
-        sellIncome: d.sellIncome,
-        buyExpense: d.buyExpense,
-        feeDelta: d.feeDelta,
-        netProfit,
-        cumulativeNet,
-      }
-    })
-  }, [state, period, tradeByDayInRange])
-
   /** Сколько типов в таблице «торговая прибыль» (после сортировки по прибыли; хвост с убытками). */
   const TRADE_PROFIT_TOP_N = 200
 
@@ -293,6 +174,25 @@ export function CharacterDashboard(
     )
   }, [state, period])
 
+  /** Сумма торговой прибыли по всем типам за период (как график; без лимита топ-N в таблице). */
+  const tradeProfitTotalAllTypesInRange = useMemo(() =>
+  {
+    if (state.status !== 'ready' || !period) return null
+    const tx = filterTransactionsInRange(
+      state.data.transactions,
+      period.fromMs,
+      period.toMs
+    )
+    const rows = aggregateTradeProfitByType(
+      tx,
+      Number.POSITIVE_INFINITY,
+      tradeProfitMode,
+      tradeProfitHow,
+      tradeFeeDeltas
+    )
+    return rows.reduce((s, r) => s + r.profit, 0)
+  }, [state, period, tradeProfitMode, tradeProfitHow, tradeFeeDeltas])
+
   const tradeProfitInRange = useMemo(() =>
   {
     if (state.status !== 'ready' || !period) return []
@@ -309,6 +209,72 @@ export function CharacterDashboard(
       tradeFeeDeltas
     )
   }, [state, period, tradeProfitMode, tradeProfitHow, tradeFeeDeltas])
+
+  /** Кумулятив по дням: та же FIFO/брутто и режимы, что таблица «по типам» (без лимита топ-N). */
+  const tradeProfitByTypeCumulativeSeries = useMemo(() =>
+  {
+    if (state.status !== 'ready' || !period) return []
+    return tradeProfitCumulativeHourlySeries(
+      state.data.transactions,
+      state.data.journal,
+      period.fromMs,
+      period.toMs,
+      tradeProfitMode,
+      tradeProfitHow,
+      buildWalletTransactionIdToTypeMap(state.data.transactions),
+      buildWalletJournalRefIdToTypeMap(state.data.transactions),
+    )
+  }, [state, period, tradeProfitMode, tradeProfitHow])
+
+  const tradeProfitByTypeChartYDomain = useMemo((): [ number, number ] =>
+  {
+    const s = tradeProfitByTypeCumulativeSeries
+    if (s.length === 0) return [ -1, 1 ]
+    const vals = s.map((d) => d.cumulativeProfit)
+    let dMin = Math.min(0, ...vals)
+    let dMax = Math.max(0, ...vals)
+    if (dMin === dMax)
+    {
+      if (dMin === 0) return [ -1, 1 ]
+      const pad = Math.max(Math.abs(dMin) * 0.05, 1e-6)
+      return [ dMin - pad, dMax + pad ]
+    }
+    const spread = dMax - dMin
+    const pad = Math.max(spread * 0.04, spread * 0.0001)
+    return [ dMin - pad, dMax + pad ]
+  }, [tradeProfitByTypeCumulativeSeries])
+
+  /** Почасовые точки + unix-ms для оси времени; сетка по UTC-полуночам между первой и последней точкой. */
+  const tradeProfitChartData = useMemo(
+    () => tradeProfitByTypeCumulativeSeries.map((p) =>
+    {
+      const tMs = new Date(p.t).getTime()
+      return { ...p, tMs: Number.isFinite(tMs) ? tMs : 0 }
+    }),
+    [tradeProfitByTypeCumulativeSeries],
+  )
+
+  const tradeProfitChartUtcMidnightTicks = useMemo((): number[] | undefined =>
+  {
+    const s = tradeProfitChartData
+    if (s.length === 0) return undefined
+    const lo = s[0]!.tMs
+    const hi = s[s.length - 1]!.tMs
+    if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return undefined
+    const floorDay = (ms: number) =>
+    {
+      const d = new Date(ms)
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    }
+    const startDay = floorDay(lo)
+    const endDay = floorDay(hi)
+    const ticks: number[] = []
+    for (let m = startDay; m <= endDay; m += MS_DAY)
+    {
+      if (m >= lo && m <= hi) ticks.push(m)
+    }
+    return ticks.length > 0 ? ticks : undefined
+  }, [tradeProfitChartData])
 
   /** Точки net worth в выбранном периоде (журнал кошелька + оценка активов на «сейчас»). */
   const netWorthInPeriodSeries = useMemo(() =>
@@ -346,7 +312,7 @@ export function CharacterDashboard(
     {
       return `В выгрузке журнала самая ранняя дата: ${ new Date(
         oldest
-      ).toLocaleString('ru-RU') }. Для длинных периодов дельта и графики учитывают только доступные записи ESI.`
+      ).toLocaleString('ru-RU') }.`
     }
     return null
   }, [state, period])
@@ -597,16 +563,17 @@ export function CharacterDashboard(
                 </div>
                 <div className="text-xs text-eve-bright/90">
                   <span className="text-eve-muted">
-                    Сумма проводок журнала за период «{ period?.label ?? '—' }» (все
-                    { ' ' }
-                    <code className="text-eve-bright/80">amount</code>
-                    { ' ' }за интервал):
+                    Торговая прибыль по типам за период «{ period?.label ?? '—' }» (
+                    { tradeProfitMode === 'roundtrip' ? 'Купля–продажа' : 'Все типы' }
+                    { ', ' }
+                    { tradeProfitHow === 'fifo' ? 'FIFO' : 'Брутто' }
+                    ; сумма по всем типам):
                   </span>
                   { ' ' }
                   <span className="tabular-nums font-semibold text-eve-cyan/95">
-                    { walletDeltaJournal == null
+                    { tradeProfitTotalAllTypesInRange == null
                       ? '—'
-                      : iskFormatter(walletDeltaJournal) }
+                      : iskFormatter(tradeProfitTotalAllTypesInRange) }
                   </span>
                 </div>
                 { journalCoverageHint && (
@@ -616,7 +583,8 @@ export function CharacterDashboard(
                 ) }
               </div>
 
-              <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+              <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-stretch">
+                <div className="@container min-w-0 flex-1 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                 <h3 className="eve-section-title mb-2">Динамика капитализации</h3>
                 { netWorthInPeriodSeries.length > 0 ? (
                   <div className="h-[240px] w-full min-w-0 sm:h-[280px]">
@@ -686,11 +654,14 @@ export function CharacterDashboard(
                     Нет точек: в выгрузке журнала кошелька нет дат в выбранном периоде.
                   </p>
                 ) }
-              </div>
-
-              <div className="flex w-full min-w-0 max-w-full flex-col gap-4">
-                <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-2">Торговая прибыль по типам</h3>
+                </div>
+                <div className="@container min-w-0 flex-1 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <h3 className="eve-section-title mb-2 leading-snug">
+                    Торговая прибыль по типам
+                    <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
+                      (линейный)
+                    </span>
+                  </h3>
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
                     <TabButton
                       active={ tradeProfitMode === 'roundtrip' }
@@ -720,6 +691,125 @@ export function CharacterDashboard(
                       Брутто
                     </TabButton>
                   </div>
+                  { tradeProfitByTypeCumulativeSeries.length > 0 ? (
+                    <div className="mb-2 h-[240px] w-full min-w-0 sm:h-[280px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart
+                          data={ tradeProfitChartData }
+                          margin={ { top: 8, right: 8, left: 4, bottom: 0 } }
+                        >
+                          <CartesianGrid
+                            stroke={ CHART_COL.grid }
+                            strokeDasharray="3 3"
+                          />
+                          <XAxis
+                            dataKey="tMs"
+                            type="number"
+                            scale="time"
+                            domain={ [ 'dataMin', 'dataMax' ] }
+                            interval={ 0 }
+                            { ...(tradeProfitChartUtcMidnightTicks != null &&
+                            tradeProfitChartUtcMidnightTicks.length > 0
+                              ? { ticks: tradeProfitChartUtcMidnightTicks }
+                              : {}) }
+                            tick={ { fontSize: 8, fill: CHART_COL.tick } }
+                            tickFormatter={ (ms: number) =>
+                            {
+                              if (typeof ms !== 'number' || !Number.isFinite(ms)) return ''
+                              const d = new Date(ms)
+                              return d.toLocaleString('ru-RU', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                timeZone: 'UTC',
+                              })
+                            } }
+                          />
+                          <YAxis
+                            domain={ tradeProfitByTypeChartYDomain }
+                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
+                            tickFormatter={ (n) => formatInteger(n as number) }
+                            width={ 56 }
+                          />
+                          <Tooltip
+                            contentStyle={ {
+                              background: 'rgba(16, 20, 28, 0.96)',
+                              border: '1px solid rgba(123, 142, 176, 0.45)',
+                              fontSize: 11,
+                              borderRadius: 4,
+                            } }
+                            labelFormatter={ (label) =>
+                            {
+                              const ms = typeof label === 'number'
+                                ? label
+                                : new Date(String(label)).getTime()
+                              if (!Number.isFinite(ms)) return String(label)
+                              return `${ new Date(ms).toLocaleString('ru-RU', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'UTC',
+                              }) } UTC`
+                            } }
+                            formatter={ (v: number) =>
+                              [ iskFormatter(v), 'Накопленная прибыль' ]
+                            }
+                          />
+                          <Legend />
+                          <ReferenceLine
+                            y={ 0 }
+                            stroke={ CHART_COL.zeroLine }
+                            strokeWidth={ 1.25 }
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="cumulativeProfit"
+                            name="По типам (накопл.), ISK"
+                            stroke={ CHART_COL.net }
+                            strokeWidth={ 2.25 }
+                            dot={ false }
+                            activeDot={ { r: 3 } }
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="mb-2 text-sm text-eve-muted">
+                      В выбранном периоде нет сделок и маркет-комиссий в журнале — график прибыли по типам пуст.
+                    </p>
+                  ) }
+                  <p className="text-[9px] text-eve-muted/75">
+                    Накопление по часам (UTC) в той же методике, что таблица; на графике учтены все типы, в таблице — до{ ' ' }
+                    { TRADE_PROFIT_TOP_N } строк по прибыли.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex w-full min-w-0 max-w-full flex-col gap-4">
+                <div className="grid w-full min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+                  <div className="w-full min-w-0">
+                    <ActiveMarketOrdersBlock
+                      data={ state.data.activeMarketOrders }
+                      errorMessage={ state.data.activeMarketOrdersError }
+                      onRefresh={ refreshActiveMarketOrders }
+                      refreshing={ activeMarketOrdersRefreshing }
+                    />
+                  </div>
+                  <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <h3 className="eve-section-title mb-2 leading-snug">
+                    Торговая прибыль по типам
+                    <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
+                      (таблица)
+                    </span>
+                  </h3>
+                  <p className="mb-2 text-[9px] leading-snug text-eve-muted/80">
+                    Параметры{ ' ' }
+                    <span className="whitespace-nowrap">Купля–продажа</span>
+                    { ' ' }/ Все типы и FIFO / Брутто — те же, что у{ ' ' }
+                    <span className="whitespace-nowrap">линейного графика</span>
+                    { ' ' }выше.
+                  </p>
                   <p className="mb-2 text-[9px] leading-snug text-eve-muted/80">
                     Сверка с чужой таблицей: часто совпадает по{ ' ' }
                     <span className="whitespace-nowrap">периоду</span> и
@@ -779,35 +869,42 @@ export function CharacterDashboard(
                               ) } ISK`
                               : '—'
                             const w = Math.min(100, shareBarW)
-                            const barFill
+                            const rgbVar
                               = r.profit > 0
-                                ? 'rgb(var(--eve-green-rgb) / 0.26)'
+                                ? 'var(--eve-green-rgb)'
                                 : r.profit < 0
-                                    ? 'rgb(var(--eve-red-rgb) / 0.26)'
+                                    ? 'var(--eve-red-rgb)'
                                     : null
-                            const rowBgStyle: CSSProperties | undefined
-                              = barFill != null && w > 0.001
-                                ? {
-                                    backgroundImage: `linear-gradient(to right, ${ barFill } 0%, ${ barFill } ${ w }%, transparent ${ w }%)`,
-                                  }
-                                : undefined
+                            const barPart
+                              = rgbVar != null && w > 0.001
+                                ? `linear-gradient(to right, rgb(${ rgbVar } / var(--trade-profit-bar-alpha)) 0%, rgb(${ rgbVar } / var(--trade-profit-bar-alpha)) ${ w }%, transparent ${ w }%)`
+                                : 'linear-gradient(to right, transparent 0%, transparent 100%)'
+                            const veilPart
+                              = 'linear-gradient(to right, rgb(18 22 31 / calc(0.75 * var(--trade-profit-veil-a))) 0%, rgb(18 22 31 / calc(0.75 * var(--trade-profit-veil-a))) 100%)'
+                            const rowBgStyle: CSSProperties = {
+                              ...({
+                                '--trade-profit-base-alpha': 0.26,
+                                '--trade-profit-hover-alpha': 0.48,
+                              } as CSSProperties),
+                              backgroundImage: `${ barPart }, ${ veilPart }`,
+                            }
                             return (
                             <tr
                               key={ r.type_id }
-                              className={ `border-t border-eve-border/25 ${
+                              className={ `trade-profit-data-row border-t border-eve-border/25 ${
                                 i === 0 ? 'border-t-0' : ''
                               } ${ stripe }` }
                               style={ rowBgStyle }
                               title={ shareTitle }
                             >
                               <td
-                                className="max-w-[9rem] truncate px-2 py-1.5 pr-1 font-medium text-eve-cyan/95"
+                                className="max-w-[9rem] truncate border-b border-eve-border/50 px-2 py-1.5 pr-1 font-medium text-eve-cyan/95"
                                 title={ r.name }
                               >
                                 { r.name }
                               </td>
                               <td
-                                className="px-1 py-1.5 pr-2 align-middle"
+                                className="border-b border-eve-border/50 px-1 py-1.5 pr-2 align-middle"
                                 title={ shareTitle }
                               >
                                 <span
@@ -822,11 +919,11 @@ export function CharacterDashboard(
                                   { shareText }
                                 </span>
                               </td>
-                              <td className="px-1 py-1.5 text-right tabular-nums text-eve-bright/95">
+                              <td className="border-b border-eve-border/50 px-1 py-1.5 text-right font-tabular-nums text-eve-bright/95">
                                 { formatInteger(r.quantitySold) }
                               </td>
                               <td
-                                className={ `px-2 py-1.5 pl-1 text-right font-semibold tabular-nums ${
+                                className={ `border-b border-eve-border/50 px-2 py-1.5 pl-1 text-right font-semibold font-tabular-nums ${
                                   r.profit >= 0
                                     ? 'eve-green'
                                     : 'eve-red'
@@ -891,187 +988,7 @@ export function CharacterDashboard(
                   ) : (
                     <p className="text-sm text-eve-muted">Нет сделок за период (или в режиме «Купля–продажа» нет пар buy+sell по типу).</p>
                   ) }
-                </div>
-
-                <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-2">Сделки по дням (ISK)</h3>
-                  { tradeByDayInRange.length > 0 ? (
-                    <div className="h-[260px] w-full min-w-0 sm:h-[280px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={ tradeByDayInRange }
-                          margin={ { top: 8, right: 8, left: 4, bottom: 0 } }
-                        >
-                          <CartesianGrid
-                            stroke={ CHART_COL.grid }
-                            strokeDasharray="3 3"
-                          />
-                          <XAxis
-                            dataKey="day"
-                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            minTickGap={ 8 }
-                          />
-                          <YAxis
-                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            tickFormatter={ (n) => formatInteger(n as number) }
-                            width={ 52 }
-                          />
-                          <Tooltip
-                            contentStyle={ {
-                              background: 'rgba(16, 20, 28, 0.96)',
-                              border: '1px solid rgba(123, 142, 176, 0.45)',
-                              fontSize: 11,
-                            } }
-                            formatter={ (v: number) => iskFormatter(v) }
-                          />
-                          <Legend />
-                          <Bar
-                            dataKey="buyIsk"
-                            name="Покупка"
-                            fill={ CHART_COL.buy }
-                            radius={ [ 2, 2, 0, 0 ] }
-                          />
-                          <Bar
-                            dataKey="sellIsk"
-                            name="Продажа"
-                            fill={ CHART_COL.sell }
-                            radius={ [ 2, 2, 0, 0 ] }
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-eve-muted">Нет рыночных транзакций.</p>
-                  ) }
-                </div>
-
-                <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-2">Транзакции за последние 30 дней</h3>
-                  { transactionsLast30DaysSeries.length > 0 ? (
-                    <div className="h-[260px] w-full min-w-0 sm:h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={ transactionsLast30DaysSeries }
-                          margin={ { top: 8, right: 8, left: 4, bottom: 0 } }
-                        >
-                          <CartesianGrid
-                            stroke={ CHART_COL.grid }
-                            strokeDasharray="3 3"
-                          />
-                          <XAxis
-                            dataKey="day"
-                            tick={ { fontSize: 8, fill: CHART_COL.tick } }
-                            tickFormatter={ (v) => String(v).slice(5, 10) }
-                            minTickGap={ 2 }
-                            interval="preserveStartEnd"
-                          />
-                          <YAxis
-                            domain={ transactionsLast30DaysYDomain }
-                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            tickFormatter={ (n) => formatInteger(n as number) }
-                            width={ 52 }
-                          />
-                          <Tooltip
-                            contentStyle={ {
-                              background: 'rgba(16, 20, 28, 0.96)',
-                              border: '1px solid rgba(123, 142, 176, 0.45)',
-                              fontSize: 11,
-                            } }
-                            labelFormatter={ (d) => `Дата: ${ d }` }
-                            formatter={ (v: number) =>
-                            {
-                              if (v == null || !Number.isFinite(v)) return [ '—', 'Динамика' ]
-                              return [ iskFormatter(v), 'Динамика' ]
-                            } }
-                          />
-                          <Legend />
-                          <ReferenceLine
-                            y={ 0 }
-                            stroke={ CHART_COL.zeroLine }
-                            strokeWidth={ 1.25 }
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="netIsk"
-                            name="Динамика"
-                            stroke={ CHART_COL.dynamics }
-                            strokeWidth={ 2.5 }
-                            dot={ false }
-                            activeDot={ { r: 3 } }
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-eve-muted">Нет данных ESI.</p>
-                  ) }
-                </div>
-
-                <div className="w-full min-w-0 max-w-full">
-                  <ActiveMarketOrdersBlock
-                    data={ state.data.activeMarketOrders }
-                    errorMessage={ state.data.activeMarketOrdersError }
-                    onRefresh={ refreshActiveMarketOrders }
-                    refreshing={ activeMarketOrdersRefreshing }
-                  />
-                </div>
-
-                <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                  <h3 className="eve-section-title mb-2">Доходность торговли</h3>
-                  { tradeNetSeries.length > 0 ? (
-                    <div className="h-[280px] w-full min-w-0 sm:h-[300px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart
-                          data={ tradeNetSeries }
-                          margin={ { top: 8, right: 8, bottom: 0, left: 4 } }
-                        >
-                          <CartesianGrid
-                            stroke={ CHART_COL.grid }
-                            strokeDasharray="3 3"
-                          />
-                          <XAxis
-                            dataKey="day"
-                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            minTickGap={ 18 }
-                          />
-                          <YAxis
-                            tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            tickFormatter={ (n) => formatInteger(n as number) }
-                            width={ 56 }
-                          />
-                          <Tooltip
-                            contentStyle={ {
-                              background: 'rgba(16, 20, 28, 0.96)',
-                              border: '1px solid rgba(123, 142, 176, 0.45)',
-                              fontSize: 11,
-                              borderRadius: 4,
-                            } }
-                            labelFormatter={ (l) => `Дата: ${ l }` }
-                            formatter={ (v: number) =>
-                              [ iskFormatter(v), 'Накопительная прибыль' ]
-                            }
-                          />
-                          <Legend />
-                          <ReferenceLine
-                            y={ 0 }
-                            stroke={ CHART_COL.zeroLine }
-                            strokeWidth={ 1.25 }
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="cumulativeNet"
-                            name="Суммарная торговая прибыль (ISK)"
-                            stroke={ CHART_COL.wallet }
-                            dot={ false }
-                            strokeWidth={ 2.5 }
-                            activeDot={ { r: 3 } }
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-eve-muted">В выбранном периоде нет торговых сделок.</p>
-                  ) }
+                  </div>
                 </div>
 
                 <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
