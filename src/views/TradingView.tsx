@@ -800,12 +800,13 @@ export function TradingView()
     }
     setSelectedLocalExportFile((prev) =>
     {
-      if (prev && localExportFilesSorted.some((f) => f.name === prev))
-      {
+      if (prev === '') {
+        return localExportFilesSorted[0]?.name ?? ''
+      }
+      if (localExportFilesSorted.some((f) => f.name === prev)) {
         return prev
       }
-      const head = localExportFilesSorted[0]
-      return head != null ? head.name : ''
+      return localExportFilesSorted[0]?.name ?? ''
     })
   }, [localExportFilesSorted])
 
@@ -820,17 +821,19 @@ export function TradingView()
     }
     setCompareLeftFile((prev) =>
     {
-      if (prev && localExportFilesSorted.some((f) => f.name === prev)) return prev
-      const head = localExportFilesSorted[0]
-      return head != null ? head.name : ''
+      if (prev === '') {
+        return localExportFilesSorted[0]?.name ?? ''
+      }
+      if (localExportFilesSorted.some((f) => f.name === prev)) return prev
+      return localExportFilesSorted[0]?.name ?? ''
     })
     setCompareRightFile((prev) =>
     {
-      if (prev && localExportFilesSorted.some((f) => f.name === prev)) return prev
-      const second = localExportFilesSorted[1]
-      const head = localExportFilesSorted[0]
-      if (second != null) return second.name
-      return head != null ? head.name : ''
+      if (prev === '') {
+        return localExportFilesSorted[1]?.name ?? localExportFilesSorted[0]?.name ?? ''
+      }
+      if (localExportFilesSorted.some((f) => f.name === prev)) return prev
+      return localExportFilesSorted[1]?.name ?? localExportFilesSorted[0]?.name ?? ''
     })
   }, [localExportFilesSorted])
 

@@ -236,6 +236,23 @@ function compareWalletTx(
 
 type BuyLot = { qty: number; unitPrice: number }
 
+function fifoDrainLotsForSell(lots: BuyLot[], need: number): { cost: number; remainingNeed: number }
+{
+  let cost = 0
+  let n = need
+  while (n > 0 && lots.length > 0)
+  {
+    const lot = lots[0]
+    if (lot == null) break
+    const take = Math.min(n, lot.qty)
+    cost += take * lot.unitPrice
+    lot.qty -= take
+    n -= take
+    if (lot.qty <= 0) lots.shift()
+  }
+  return { cost, remainingNeed: n }
+}
+
 function tradeProfitFifoForType(
   txs: EveWalletTransaction[]
 ): { quantitySold: number; buyIsk: number; sellIsk: number; profit: number }
@@ -257,19 +274,8 @@ function tradeProfitFifoForType(
     {
       quantitySold += t.quantity
       sellIsk += line
-      let need = t.quantity
-      let cost = 0
-      while (need > 0 && lots.length > 0)
-      {
-        const lot = lots[0]
-        if (lot == null) break
-        const take = Math.min(need, lot.qty)
-        cost += take * lot.unitPrice
-        lot.qty -= take
-        need -= take
-        if (lot.qty <= 0) lots.shift()
-      }
-      // need > 0: продали больше, чем buy в логе — остаток с себестоимостью 0
+      const { cost } = fifoDrainLotsForSell(lots, t.quantity)
+      // remainingNeed > 0: продали больше, чем buy в логе — остаток с себестоимостью 0
       profit += line - cost
     }
   }

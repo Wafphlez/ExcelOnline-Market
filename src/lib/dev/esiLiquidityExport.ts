@@ -847,12 +847,8 @@ function mergeOrdersInto(
   }
 }
 
-function bestAsk(a: Agg): number | null {
-  const [head] = a.asks
-  return head ?? null
-}
-function bestBid(a: Agg): number | null {
-  const [head] = a.bids
+function firstSortedPrice(prices: number[]): number | null {
+  const [head] = prices
   return head ?? null
 }
 
@@ -904,8 +900,8 @@ function composeLiquidityRow(
 ): LiquidityRow | null {
   const agg = byType.get(typeId)
   if (!agg) return null
-  const priceSell = bestAsk(agg)
-  const priceBuy = bestBid(agg)
+  const priceSell = firstSortedPrice(agg.asks)
+  const priceBuy = firstSortedPrice(agg.bids)
   if (priceSell == null || priceBuy == null) return null
   if (priceSell <= 0 || priceBuy <= 0) return null
   if (!parts) return null
@@ -981,8 +977,8 @@ export async function buildLiquidityRows(
     mergeOrdersInto(partialByType, hubRows)
     const preCandidates: { typeId: number; activity: number }[] = []
     for (const [typeId, agg] of partialByType) {
-      const ask = bestAsk(agg)
-      const bid = bestBid(agg)
+      const ask = firstSortedPrice(agg.asks)
+      const bid = firstSortedPrice(agg.bids)
       if (ask == null || bid == null) continue
       if (ask <= 0 || bid <= 0) continue
       preCandidates.push({ typeId, activity: agg.activity })
@@ -1027,8 +1023,8 @@ export async function buildLiquidityRows(
   const snapshotAtIso = new Date().toISOString()
   const candidates: { typeId: number; activity: number }[] = []
   for (const [typeId, agg] of byType) {
-    const ask = bestAsk(agg)
-    const bid = bestBid(agg)
+    const ask = firstSortedPrice(agg.asks)
+    const bid = firstSortedPrice(agg.bids)
     if (ask == null || bid == null) continue
     if (ask <= 0 || bid <= 0) continue
     candidates.push({ typeId, activity: agg.activity })

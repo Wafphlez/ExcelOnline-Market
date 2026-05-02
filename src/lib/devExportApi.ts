@@ -137,24 +137,22 @@ export async function fetchEsiDevLogs(): Promise<{
   lines: string[]
   progress: EsiExportProgressState
 }> {
-  if (!isDevExportServer) {
-    return { lines: [], progress: { ...ESI_EXPORT_PROGRESS_IDLE } }
+  const idle = { lines: [] as string[], progress: { ...ESI_EXPORT_PROGRESS_IDLE } }
+  if (isDevExportServer) {
+    const r = await fetch(`${BASE}/esi-logs`)
+    if (r.ok) {
+      const j = (await r.json()) as {
+        lines?: string[]
+        progress?: EsiExportProgressState
+      }
+      const progress = { ...ESI_EXPORT_PROGRESS_IDLE, ...(j.progress ?? {}) }
+      return {
+        lines: j.lines ?? [],
+        progress,
+      }
+    }
   }
-  const r = await fetch(`${BASE}/esi-logs`)
-  if (!r.ok) {
-    return { lines: [], progress: { ...ESI_EXPORT_PROGRESS_IDLE } }
-  }
-  const j = (await r.json()) as {
-    lines?: string[]
-    progress?: EsiExportProgressState
-  }
-  const progress = j.progress != null
-    ? { ...ESI_EXPORT_PROGRESS_IDLE, ...j.progress }
-    : { ...ESI_EXPORT_PROGRESS_IDLE }
-  return {
-    lines: j.lines ?? [],
-    progress,
-  }
+  return idle
 }
 
 /**

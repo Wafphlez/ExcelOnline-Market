@@ -41,6 +41,36 @@ export class EsiHttpError extends Error
   }
 }
 
+type EsiAttemptResult<T> =
+  | { kind: 'empty' }
+  | { kind: 'json'; data: T }
+  | { kind: 'retry'; err: EsiHttpError }
+  | { kind: 'fatal'; err: EsiHttpError }
+
+async function esiFetchAttempt<T>(
+  url: string,
+  path: string,
+  init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }
+): Promise<EsiAttemptResult<T>>
+{
+  const res = await fetch(url, init)
+  const status = res.status
+  if (status === 204) return { kind: 'empty' }
+  const retriable =
+    status === 420 || status === 429 || status === 503 || status >= 500
+  if (retriable)
+  {
+    const t = await res.text().catch(() => '')
+    return { kind: 'retry', err: new EsiHttpError(path, status, t) }
+  }
+  if (!res.ok)
+  {
+    const t = await res.text().catch(() => '')
+    return { kind: 'fatal', err: new EsiHttpError(path, status, t) }
+  }
+  return { kind: 'json', data: (await res.json()) as T }
+}
+
 export type EsiFetchOptions = {
   method?: 'GET' | 'POST' | 'DELETE'
   accessToken?: string
@@ -70,30 +100,21 @@ export async function esiFetchJson<T>(
     if (accessToken) headers.Authorization = `Bearer ${ accessToken }`
     if (body != null) headers['Content-Type'] = 'application/json'
 
-    const res = await fetch(url, { method, headers, body, signal })
-    const status = res.status
-    if (status === 204) return null as T
+    const attemptRes = await esiFetchAttempt<T>(url, path, {
+      method,
+      headers,
+      body,
+      signal,
+    })
+    if (attemptRes.kind === 'empty') return null as T
+    if (attemptRes.kind === 'fatal') throw attemptRes.err
+    if (attemptRes.kind === 'json') return attemptRes.data
 
-    if (status === 420 || status === 429 || status === 503)
-    {
-      lastErr = new EsiHttpError(path, status, await res.text().catch(() => ''))
-      await sleep(10_000)
-      continue
-    }
-    if (status >= 500)
-    {
-      const t = await res.text().catch(() => '')
-      lastErr = new EsiHttpError(path, status, t)
-      const w = 500 * Math.min(4, 1 + attempt)
-      await sleep(w)
-      continue
-    }
-    if (!res.ok)
-    {
-      const t = await res.text().catch(() => '')
-      throw new EsiHttpError(path, status, t)
-    }
-    return (await res.json()) as T
+    lastErr = attemptRes.err
+    const st = attemptRes.err.status
+    const backoffMs =
+      st >= 500 ? 500 * Math.min(4, 1 + attempt) : 10_000
+    await sleep(backoffMs)
   }
   if (lastErr instanceof Error) throw lastErr
   throw new EsiHttpError(path, 0, 'ESI: превышено число ретраев')

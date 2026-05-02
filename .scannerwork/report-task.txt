@@ -2,5 +2,5 @@ projectKey=excel-online-market
 serverUrl=http://127.0.0.1:9000
 serverVersion=26.4.0.121862
 dashboardUrl=http://127.0.0.1:9000/dashboard?id=excel-online-market
-ceTaskId=dd831d3e-ba1e-4863-987a-5edb3d8e7359
-ceTaskUrl=http://127.0.0.1:9000/api/ce/task?id=dd831d3e-ba1e-4863-987a-5edb3d8e7359
+ceTaskId=9787b5bb-fa9e-4755-95a3-58655e08a305
+ceTaskUrl=http://127.0.0.1:9000/api/ce/task?id=9787b5bb-fa9e-4755-95a3-58655e08a305

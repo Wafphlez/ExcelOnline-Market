@@ -77,7 +77,7 @@ export const SS_EVE_ACCESS_EXP = 'excelMarket_eveSsoAccessExpMs'
 export function getSsoClientId(): string
 {
   const v = import.meta.env.VITE_EVE_SSO_CLIENT_ID
-  return typeof v === 'string' ? v.trim() : ''
+  return v !== undefined ? v.trim() : ''
 }
 
 /**
@@ -87,8 +87,8 @@ export function getSsoClientId(): string
 export function getSsoRedirectUri(): string
 {
   const v = import.meta.env.VITE_EVE_SSO_REDIRECT_URI
-  if (typeof v === 'string' && v.trim().length > 0) return v.trim()
-  if (typeof globalThis.window === 'undefined') return ''
+  if (v !== undefined && v.trim().length > 0) return v.trim()
+  if (globalThis.window === undefined) return ''
   const { origin, pathname } = globalThis.window.location
   if (pathname === '/' || pathname === '') return origin
   return `${ origin }${ pathname }`

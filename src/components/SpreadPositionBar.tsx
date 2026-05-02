@@ -22,13 +22,16 @@ export function splitTradesAlongSpread(
   ratioTowardsSell: number
 ): { buy: number; sell: number } | null
 {
-  if (!Number.isFinite(totalRaw) || totalRaw <= 0) return null
-  const total = Math.max(0, Math.round(totalRaw))
-  if (total <= 0) return null
-  const r = Math.max(0, Math.min(1, ratioTowardsSell))
-  const sell = Math.round(total * r)
-  const buy = total - sell
-  return { buy, sell }
+  if (Number.isFinite(totalRaw) && totalRaw > 0)
+  {
+    const total = Math.max(0, Math.round(totalRaw))
+    if (total <= 0) return null
+    const r = Math.max(0, Math.min(1, ratioTowardsSell))
+    const sell = Math.round(total * r)
+    const buy = total - sell
+    return { buy, sell }
+  }
+  return null
 }
 
 /**

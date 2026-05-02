@@ -353,8 +353,11 @@ export function CharacterDashboard(
         const y = Number(parts[0])
         const mo = Number(parts[1])
         const d = Number(parts[2])
-        if (![ y, mo, d ].every((n) => Number.isFinite(n))) return null
-        return { dayMs: Date.UTC(y, mo - 1, d), cum: p.cumulativeProfit }
+        if ([ y, mo, d ].every((n) => Number.isFinite(n)))
+        {
+          return { dayMs: Date.UTC(y, mo - 1, d), cum: p.cumulativeProfit }
+        }
+        return null
       })
       .filter((x): x is { dayMs: number; cum: number } => x != null)
       .sort((a, b) => a.dayMs - b.dayMs)
@@ -366,7 +369,7 @@ export function CharacterDashboard(
       const cur = dailySorted[i]
       const prevRow = i > 0 ? dailySorted[i - 1] : undefined
       if (cur == null) continue
-      const prevCum = prevRow != null ? prevRow.cum : 0
+      const prevCum = prevRow?.cum ?? 0
       profitByDayMs.set(cur.dayMs, cur.cum - prevCum)
       prevEndCumByDayMs.set(cur.dayMs, prevCum)
     }
@@ -1082,19 +1085,19 @@ export function CharacterDashboard(
                                 : 'типов' } в витрине)
                             </th>
                             <td className="bg-eve-elevated/95 px-1 py-1.5 pr-2">
-                              { tradeProfitNetSharePct != null ? (
+                              { tradeProfitNetSharePct == null ? (
+                                <span className="text-eve-muted" title="Нет величин">
+                                  —
+                                </span>
+                              ) : (
                                 <span
                                   className={ `tabular-nums text-[9px] font-semibold ${ tradeProfitTableSumToneClass(tradeProfitTableProfitSum) }` }
                                   title="100×итог.приб./Σ|прибыль| по витрине (сальдо в доле)"
                                 >
-                                  { tradeProfitNetSharePct < 0 ? '−' : '' }
+                                  { tradeProfitNetSharePct >= 0 ? '' : '−' }
                                   { (Math.abs(
                                     tradeProfitNetSharePct
                                   )).toFixed(0) }%
-                                </span>
-                              ) : (
-                                <span className="text-eve-muted" title="Нет величин">
-                                  —
                                 </span>
                               ) }
                             </td>

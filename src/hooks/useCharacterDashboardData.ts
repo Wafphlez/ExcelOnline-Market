@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import
+  {
+    useCallback,
+    useEffect,
+    useState,
+    type Dispatch,
+    type SetStateAction,
+  } from 'react'
 import
   {
     fetchAllAssets,
@@ -61,6 +68,169 @@ export type CharacterDashboardBundle = {
   activeMarketOrdersError: string | null
 }
 
+async function fetchCharacterDashboardBundle(
+  characterId: number,
+  token: string,
+  signal: AbortSignal
+): Promise<CharacterDashboardBundle>
+{
+  const [wallet, character, journal, transactions, assets] = await Promise.all([
+    fetchCharacterWallet(characterId, token),
+    fetchPublicCharacter(characterId),
+    fetchAllWalletJournal(characterId, token, signal),
+    fetchAllWalletTransactions(characterId, token, signal),
+    fetchAllAssets(characterId, token, signal),
+  ])
+  let corporation: EveCorporation | null = null
+  if (character.corporation_id)
+  {
+    try
+    {
+      corporation = await fetchCorporation(character.corporation_id)
+    } catch
+    {
+      corporation = null
+    }
+  }
+  const byType = aggregateAssetQuantities(assets)
+  const typeIds = [...byType.keys()]
+  const pricesList = await fetchMarketPrices(typeIds, signal)
+  const priceMap = pricesToMap(pricesList)
+  const assetsValue = valueAssets(byType, priceMap)
+  const plexValueInAssetsIsk = valuePlexInAssets(byType, priceMap)
+  const walletSeries = buildWalletBalanceSeries(journal)
+  const tradeByDay = aggregateTradesByDay(transactions)
+  const info: EveCharacterInfo = {
+    ...character,
+    character_id: characterId,
+  }
+  let activeMarketOrders: ActiveMarketOrdersData | null = null
+  let activeMarketOrdersError: string | null = null
+  try
+  {
+    activeMarketOrders = await loadActiveMarketOrdersData(
+      characterId,
+      token,
+      signal
+    )
+  } catch (e)
+  {
+    activeMarketOrdersError = e instanceof Error ? e.message : 'Ордера: ошибка ESI'
+  }
+  const marketEscrowIsk = activeMarketOrders?.buyTotalEscrowIsk ?? 0
+  const netWorth = wallet + assetsValue + marketEscrowIsk
+  const netWorthSeries = buildNetWorthOverlayPoints(
+    walletSeries,
+    assetsValue,
+    marketEscrowIsk
+  )
+  return {
+    characterId,
+    character: info,
+    corporation,
+    wallet,
+    journal,
+    transactions,
+    assetsValue,
+    netWorth,
+    marketEscrowIsk,
+    plexValueInAssetsIsk,
+    walletSeries,
+    netWorthSeries,
+    tradeByDay,
+    activeMarketOrders,
+    activeMarketOrdersError,
+  }
+}
+
+function patchReadyActiveOrdersError(
+  prev: CharacterDashboardState,
+  message: string
+): CharacterDashboardState
+{
+  if (prev.status !== 'ready') return prev
+  return {
+    status: 'ready',
+    data: {
+      ...prev.data,
+      activeMarketOrdersError: message,
+    },
+  }
+}
+
+function mergeRefreshedActiveMarketOrders(
+  prev: CharacterDashboardState,
+  activeMarketOrders: ActiveMarketOrdersData | null
+): CharacterDashboardState
+{
+  if (prev.status !== 'ready') return prev
+  const marketEscrowIsk = activeMarketOrders?.buyTotalEscrowIsk ?? 0
+  const netWorth = prev.data.wallet + prev.data.assetsValue + marketEscrowIsk
+  const netWorthSeries = buildNetWorthOverlayPoints(
+    prev.data.walletSeries,
+    prev.data.assetsValue,
+    marketEscrowIsk
+  )
+  return {
+    status: 'ready',
+    data: {
+      ...prev.data,
+      activeMarketOrders,
+      activeMarketOrdersError: null,
+      marketEscrowIsk,
+      netWorth,
+      netWorthSeries,
+    },
+  }
+}
+
+async function runActiveMarketOrdersRefresh(
+  characterId: number | null,
+  setState: Dispatch<SetStateAction<CharacterDashboardState>>
+): Promise<void>
+{
+  try
+  {
+    const token = await ensureValidAccessToken()
+    if (token)
+    {
+      if (characterId)
+      {
+        const activeMarketOrders = await loadActiveMarketOrdersData(
+          characterId,
+          token,
+          undefined
+        )
+        setState((prev) =>
+          mergeRefreshedActiveMarketOrders(prev, activeMarketOrders)
+        )
+        return
+      }
+      setState((prev) =>
+        patchReadyActiveOrdersError(
+          prev,
+          'Не найден character_id — выполните вход заново.'
+        )
+      )
+      return
+    }
+    setState((prev) =>
+      patchReadyActiveOrdersError(
+        prev,
+        'Войдите через EVE SSO, чтобы обновить активные ордера.'
+      )
+    )
+  } catch (e)
+  {
+    setState((prev) =>
+      patchReadyActiveOrdersError(
+        prev,
+        e instanceof Error ? e.message : 'Ордера: ошибка ESI'
+      )
+    )
+  }
+}
+
 export function useCharacterDashboardData(
   enabled: boolean
 ): {
@@ -82,90 +252,12 @@ export function useCharacterDashboardData(
   const refreshActiveMarketOrders = useCallback(() =>
   {
     if (state.status !== 'ready' || activeMarketOrdersRefreshing) return
+    const characterId = prevCharacterId(state)
     setActiveMarketOrdersRefreshing(true)
-    void (async () =>
+    void runActiveMarketOrdersRefresh(characterId, setState).finally(() =>
     {
-      try
-      {
-        const token = await ensureValidAccessToken()
-        if (!token)
-        {
-          setState((prev) =>
-          {
-            if (prev.status !== 'ready') return prev
-            return {
-              status: 'ready',
-              data: {
-                ...prev.data,
-                activeMarketOrdersError: 'Войдите через EVE SSO, чтобы обновить активные ордера.',
-              },
-            }
-          })
-          return
-        }
-
-        const characterId = prevCharacterId(state)
-        if (!characterId)
-        {
-          setState((prev) =>
-          {
-            if (prev.status !== 'ready') return prev
-            return {
-              status: 'ready',
-              data: {
-                ...prev.data,
-                activeMarketOrdersError: 'Не найден character_id — выполните вход заново.',
-              },
-            }
-          })
-          return
-        }
-
-        const activeMarketOrders = await loadActiveMarketOrdersData(
-          characterId,
-          token,
-          undefined
-        )
-        setState((prev) =>
-        {
-          if (prev.status !== 'ready') return prev
-          const marketEscrowIsk = activeMarketOrders?.buyTotalEscrowIsk ?? 0
-          const netWorth = prev.data.wallet + prev.data.assetsValue + marketEscrowIsk
-          const netWorthSeries = buildNetWorthOverlayPoints(
-            prev.data.walletSeries,
-            prev.data.assetsValue,
-            marketEscrowIsk
-          )
-          return {
-            status: 'ready',
-            data: {
-              ...prev.data,
-              activeMarketOrders,
-              activeMarketOrdersError: null,
-              marketEscrowIsk,
-              netWorth,
-              netWorthSeries,
-            },
-          }
-        })
-      } catch (e)
-      {
-        setState((prev) =>
-        {
-          if (prev.status !== 'ready') return prev
-          return {
-            status: 'ready',
-            data: {
-              ...prev.data,
-              activeMarketOrdersError: e instanceof Error ? e.message : 'Ордера: ошибка ESI',
-            },
-          }
-        })
-      } finally
-      {
-        setActiveMarketOrdersRefreshing(false)
-      }
-    })()
+      setActiveMarketOrdersRefreshing(false)
+    })
   }, [activeMarketOrdersRefreshing, state])
 
   useEffect(() =>
@@ -196,79 +288,13 @@ export function useCharacterDashboardData(
       }
       try
       {
-        const [wallet, character, journal, transactions, assets] = await Promise.all([
-          fetchCharacterWallet(characterId, token),
-          fetchPublicCharacter(characterId),
-          fetchAllWalletJournal(characterId, token, ac.signal),
-          fetchAllWalletTransactions(characterId, token, ac.signal),
-          fetchAllAssets(characterId, token, ac.signal),
-        ])
-        if (ac.signal.aborted) return
-        let corporation: EveCorporation | null = null
-        if (character.corporation_id)
-        {
-          try
-          {
-            corporation = await fetchCorporation(character.corporation_id)
-          } catch
-          {
-            corporation = null
-          }
-        }
-        const byType = aggregateAssetQuantities(assets)
-        const typeIds = [...byType.keys()]
-        const pricesList = await fetchMarketPrices(typeIds, ac.signal)
-        if (ac.signal.aborted) return
-        const priceMap = pricesToMap(pricesList)
-        const assetsValue = valueAssets(byType, priceMap)
-        const plexValueInAssetsIsk = valuePlexInAssets(byType, priceMap)
-        const walletSeries = buildWalletBalanceSeries(journal)
-        const tradeByDay = aggregateTradesByDay(transactions)
-        const info: EveCharacterInfo = {
-          ...character,
-          character_id: characterId,
-        }
-        let activeMarketOrders: ActiveMarketOrdersData | null = null
-        let activeMarketOrdersError: string | null = null
-        try
-        {
-          activeMarketOrders = await loadActiveMarketOrdersData(
-            characterId,
-            token,
-            ac.signal
-          )
-        } catch (e)
-        {
-          activeMarketOrdersError = e instanceof Error ? e.message : 'Ордера: ошибка ESI'
-        }
-        if (ac.signal.aborted) return
-        const marketEscrowIsk = activeMarketOrders?.buyTotalEscrowIsk ?? 0
-        const netWorth = wallet + assetsValue + marketEscrowIsk
-        const netWorthSeries = buildNetWorthOverlayPoints(
-          walletSeries,
-          assetsValue,
-          marketEscrowIsk
+        const data = await fetchCharacterDashboardBundle(
+          characterId,
+          token,
+          ac.signal
         )
-        setState({
-          status: 'ready',
-          data: {
-            characterId,
-            character: info,
-            corporation,
-            wallet,
-            journal,
-            transactions,
-            assetsValue,
-            netWorth,
-            marketEscrowIsk,
-            plexValueInAssetsIsk,
-            walletSeries,
-            netWorthSeries,
-            tradeByDay,
-            activeMarketOrders,
-            activeMarketOrdersError,
-          },
-        })
+        if (ac.signal.aborted) return
+        setState({ status: 'ready', data })
       } catch (e)
       {
         if (ac.signal.aborted) return

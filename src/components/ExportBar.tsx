@@ -392,11 +392,13 @@ export function ExportBar({
       return
     }
     setSelectedExportFile((prev) => {
-      if (prev && exportFilesSorted.some((f) => f.name === prev)) {
+      if (prev === '') {
+        return exportFilesSorted[0]?.name ?? ''
+      }
+      if (exportFilesSorted.some((f) => f.name === prev)) {
         return prev
       }
-      const head = exportFilesSorted[0]
-      return head != null ? head.name : ''
+      return exportFilesSorted[0]?.name ?? ''
     })
   }, [exportFilesSorted, isDevExportServer])
 

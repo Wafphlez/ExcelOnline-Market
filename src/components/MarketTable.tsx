@@ -95,7 +95,9 @@ const numberSort: SortingFn<MarketRow> = (rowA, rowB, columnId) => {
   if (x === null && y === null) return 0
   if (x === null) return 1
   if (y === null) return -1
-  return x === y ? 0 : x < y ? -1 : 1
+  if (x === y) return 0
+  if (x < y) return -1
+  return 1
 }
 
 function formatByKindString(
@@ -158,6 +160,21 @@ function getRangeValue(v: unknown): NumberRange {
     min: typeof o.min === 'number' ? o.min : null,
     max: typeof o.max === 'number' ? o.max : null,
   }
+}
+
+function marketRowDataCellClass(columnId: string): string {
+  const heat =
+    'border-b border-eve-border/50 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
+  if (columnId === 'typeId') {
+    return `w-10 min-w-10 max-w-10 ${heat} px-0.5 py-1.5 text-center`
+  }
+  if (columnId === 'name') {
+    return `max-w-[18rem] ${heat} px-2 py-1.5`
+  }
+  if (columnId === 'entryScore') {
+    return `min-w-[8rem] max-w-[10.5rem] ${heat} px-2 py-1.5`
+  }
+  return `${heat} px-2 py-1.5 font-tabular-nums`
 }
 
 export function MarketTable({
@@ -629,7 +646,6 @@ export function MarketTable({
                 <tr className="pointer-events-none">
                   <td
                     colSpan={leafColumnCount}
-                    aria-hidden
                     style={{
                       height: padTop,
                       padding: 0,
@@ -653,15 +669,7 @@ export function MarketTable({
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
-                        className={
-                          cell.column.id === 'typeId'
-                            ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/50 px-0.5 py-1.5 text-center text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                            : cell.column.id === 'name'
-                              ? 'max-w-[18rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                              : cell.column.id === 'entryScore'
-                                ? 'min-w-[8rem] max-w-[10.5rem] border-b border-eve-border/50 px-2 py-1.5 text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                                : 'border-b border-eve-border/50 px-2 py-1.5 font-tabular-nums text-xs text-white transition-colors duration-200 group-hover/market-row:bg-eve-elevated/75'
-                        }
+                        className={marketRowDataCellClass(cell.column.id)}
                       >
                         {flexRender(
                           cell.column.columnDef.cell,
@@ -676,7 +684,6 @@ export function MarketTable({
                 <tr className="pointer-events-none">
                   <td
                     colSpan={leafColumnCount}
-                    aria-hidden
                     style={{
                       height: padBot,
                       padding: 0,
