@@ -59,6 +59,7 @@ import
 import
   {
     formatIsk,
+    formatCompactKmb,
     formatInteger,
     formatIskMillionsShort,
   } from '../../lib/formatNumber'
@@ -91,6 +92,62 @@ function floorUtcDayMsFromMs(ms: number): number
 {
   const d = new Date(ms)
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+}
+
+function pickNiceStep(rawStep: number): number
+{
+  if (!Number.isFinite(rawStep) || rawStep <= 0) return 1
+  const power = Math.floor(Math.log10(rawStep))
+  const scale = 10 ** power
+  const norm = rawStep / scale
+  if (norm <= 1) return 1 * scale
+  if (norm <= 2) return 2 * scale
+  if (norm <= 2.5) return 2.5 * scale
+  if (norm <= 5) return 5 * scale
+  return 10 * scale
+}
+
+function buildNiceIntegerAxis(
+  minValue: number,
+  maxValue: number,
+  targetTickCount = 5
+): {
+  domain: [ number, number ]
+  ticks: number[]
+}
+{
+  if (!Number.isFinite(minValue) || !Number.isFinite(maxValue))
+  {
+    return { domain: [ -1, 1 ], ticks: [ -1, 0, 1 ] }
+  }
+  const count = Math.max(3, Math.floor(targetTickCount))
+  const span = maxValue - minValue
+  const baseRawStep = span > 0 ? span / (count - 1) : Math.max(Math.abs(minValue), 1)
+  const step = Math.max(1, pickNiceStep(baseRawStep))
+  let niceMin = Math.floor(minValue / step) * step
+  let niceMax = Math.ceil(maxValue / step) * step
+  if (niceMin === niceMax)
+  {
+    niceMin -= step
+    niceMax += step
+  }
+  const ticks: number[] = []
+  for (let v = niceMin; v <= niceMax + step * 1e-9; v += step)
+  {
+    ticks.push(Math.round(v))
+    if (ticks.length > 1000) break
+  }
+  if (ticks.length < 2)
+  {
+    return {
+      domain: [ niceMin, niceMax ],
+      ticks: [ Math.round(niceMin), Math.round(niceMax) ],
+    }
+  }
+  return {
+    domain: [ ticks[0] ?? Math.round(niceMin), ticks[ticks.length - 1] ?? Math.round(niceMax) ],
+    ticks,
+  }
 }
 
 function tradeProfitShareCellClass(profit: number): string
@@ -387,22 +444,17 @@ export function CharacterDashboard(
     })
   }, [tradeProfitByTypeCumulativeSeries, tradeProfitDailySeries])
 
-  const tradeProfitByTypeChartYDomain = useMemo((): [ number, number ] =>
+  const tradeProfitByTypeChartYAxis = useMemo((): {
+    domain: [ number, number ]
+    ticks: number[]
+  } =>
   {
     const s = tradeProfitChartData
-    if (s.length === 0) return [ -1, 1 ]
+    if (s.length === 0) return { domain: [ -1, 1 ], ticks: [ -1, 0, 1 ] }
     const vals = s.flatMap((d) => [ d.cumulativeProfit, d.dailyOverlayStep ])
-    let dMin = Math.min(0, ...vals)
-    let dMax = Math.max(0, ...vals)
-    if (dMin === dMax)
-    {
-      if (dMin === 0) return [ -1, 1 ]
-      const pad = Math.max(Math.abs(dMin) * 0.05, 1e-6)
-      return [ dMin - pad, dMax + pad ]
-    }
-    const spread = dMax - dMin
-    const pad = Math.max(spread * 0.04, spread * 0.0001)
-    return [ dMin - pad, dMax + pad ]
+    const dMin = Math.min(0, ...vals)
+    const dMax = Math.max(0, ...vals)
+    return buildNiceIntegerAxis(dMin, dMax, 9)
   }, [tradeProfitChartData])
 
   const tradeProfitChartUtcMidnightTicks = useMemo((): number[] | undefined =>
@@ -885,10 +937,12 @@ export function CharacterDashboard(
                             } }
                           />
                           <YAxis
-                            domain={ tradeProfitByTypeChartYDomain }
+                            domain={ tradeProfitByTypeChartYAxis.domain }
+                            ticks={ tradeProfitByTypeChartYAxis.ticks }
+                            interval={ 0 }
                             tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                            tickFormatter={ (n) => formatInteger(n as number) }
-                            width={ 56 }
+                            tickFormatter={ (n) => formatCompactKmb(n as number) }
+                            width={ 64 }
                           />
                           <Tooltip content={ TradeProfitLineTooltipContent } />
                           <Legend />
