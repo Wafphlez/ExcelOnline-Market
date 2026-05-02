@@ -396,7 +396,7 @@ export function CharacterDashboard(
     )
   }, [state, period, tradeProfitMode, tradeProfitHow])
 
-  /** Почасовые точки + unix-ms; плюс дневная прибыль UTC и ступень «до конца предыдущих суток». */
+  /** Почасовые точки + unix-ms; плюс дневная прибыль UTC и ступень «итог текущих UTC-суток». */
   const tradeProfitChartData = useMemo(() =>
   {
     const hourly = tradeProfitByTypeCumulativeSeries
@@ -420,7 +420,7 @@ export function CharacterDashboard(
       .sort((a, b) => a.dayMs - b.dayMs)
 
     const profitByDayMs = new Map<number, number>()
-    const prevEndCumByDayMs = new Map<number, number>()
+    const endCumByDayMs = new Map<number, number>()
     for (let i = 0; i < dailySorted.length; i++)
     {
       const cur = dailySorted[i]
@@ -428,7 +428,7 @@ export function CharacterDashboard(
       if (cur == null) continue
       const prevCum = prevRow?.cum ?? 0
       profitByDayMs.set(cur.dayMs, cur.cum - prevCum)
-      prevEndCumByDayMs.set(cur.dayMs, prevCum)
+      endCumByDayMs.set(cur.dayMs, cur.cum)
     }
 
     return hourly.map((p) =>
@@ -439,7 +439,7 @@ export function CharacterDashboard(
         ...p,
         tMs: Number.isFinite(tMs) ? tMs : 0,
         profitUtcDay: profitByDayMs.get(dayMs) ?? 0,
-        dailyOverlayStep: prevEndCumByDayMs.get(dayMs) ?? 0,
+        dailyOverlayStep: endCumByDayMs.get(dayMs) ?? 0,
       }
     })
   }, [tradeProfitByTypeCumulativeSeries, tradeProfitDailySeries])
@@ -963,7 +963,7 @@ export function CharacterDashboard(
                           <Line
                             type="stepAfter"
                             dataKey="dailyOverlayStep"
-                            name="Сутки UTC (ступень до тек. дня)"
+                            name="Сутки UTC (ступень с начала дня)"
                             stroke={ CHART_COL.dailyStep }
                             strokeWidth={ 1.65 }
                             dot={ false }
@@ -979,8 +979,8 @@ export function CharacterDashboard(
                     </p>
                   ) }
                   <p className="text-[9px] text-eve-muted/75">
-                    Накопление по часам (UTC) в той же методике, что таблица; вторая линия — ступень «итог на конец предыдущих
-                    UTC-суток». В подсказке — накопленная прибыль и прибыль за календарные сутки UTC. На графике учтены все
+                    Накопление по часам (UTC) в той же методике, что таблица; вторая линия — ступень «итог на конец текущих
+                    UTC-суток», перенесённый на начало этих же суток UTC. В подсказке — накопленная прибыль и прибыль за календарные сутки UTC. На графике учтены все
                     типы, в таблице — до{ ' ' }
                     { TRADE_PROFIT_TOP_N } строк по прибыли.
                   </p>
