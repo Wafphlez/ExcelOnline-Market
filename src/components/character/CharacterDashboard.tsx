@@ -275,6 +275,7 @@ export function CharacterDashboard(
   const [tradeProfitMode, setTradeProfitMode] =
     useState<TradeProfitByTypeMode>('roundtrip')
   const [tradeProfitHow, setTradeProfitHow] = useState<TradeProfitHow>('fifo')
+  const [tradeProfitTypeQuery, setTradeProfitTypeQuery] = useState('')
   const [typeLabels, setTypeLabels] = useState<Map<number, string> | null>(null)
   const [loginErr, setLoginErr] = useState<string | null>(null)
   const ssoOk =
@@ -490,32 +491,6 @@ export function CharacterDashboard(
     [tradeProfitChartUtcMidnightTicks]
   )
 
-  /** Точки net worth в выбранном периоде (журнал кошелька + оценка активов на «сейчас»). */
-  const netWorthInPeriodSeries = useMemo(() =>
-  {
-    if (state.status !== 'ready' || !period) return []
-    const s = state.data.netWorthSeries
-    if (s.length === 0) return []
-    return filterNetWorthSeriesFrom(s, period.fromMs)
-  }, [state, period])
-
-  const netWorthChartYDomain = useMemo((): [ number, number ] =>
-  {
-    const s = netWorthInPeriodSeries
-    if (s.length === 0) return [ 0, 1 ]
-    const vals = s.map((p) => p.netWorth)
-    const dMin = Math.min(...vals)
-    const dMax = Math.max(...vals)
-    if (dMin === dMax)
-    {
-      const pad = Math.max(Math.abs(dMin) * 0.02, 1e6)
-      return [ dMin - pad, dMax + pad ]
-    }
-    const spread = dMax - dMin
-    const pad = Math.max(spread * 0.04, spread * 0.0001)
-    return [ dMin - pad, dMax + pad ]
-  }, [netWorthInPeriodSeries])
-
   const journalCoverageHint = useMemo(() =>
   {
     if (state.status !== 'ready' || !period) return null
@@ -589,18 +564,28 @@ export function CharacterDashboard(
     }))
   }, [state, typeLabels, tradeProfitInRange])
 
+  const tradeProfitTableRows = useMemo(() =>
+  {
+    const q = tradeProfitTypeQuery.trim().toLowerCase()
+    if (q === '') return tradeProfitWithNames
+    return tradeProfitWithNames.filter((r) =>
+      r.name.toLowerCase().includes(q)
+      || String(r.type_id).includes(q)
+    )
+  }, [tradeProfitWithNames, tradeProfitTypeQuery])
+
   /** Сумма |прибыль| по витрине; знаменатель для доли со знаком. */
   const tradeProfitAbsSum = useMemo(
-    () => tradeProfitWithNames.reduce(
+    () => tradeProfitTableRows.reduce(
       (s, r) => s + Math.abs(r.profit),
       0
     ),
-    [tradeProfitWithNames]
+    [tradeProfitTableRows]
   )
 
   const tradeProfitTableProfitSum = useMemo(
-    () => tradeProfitWithNames.reduce((s, r) => s + r.profit, 0),
-    [tradeProfitWithNames]
+    () => tradeProfitTableRows.reduce((s, r) => s + r.profit, 0),
+    [tradeProfitTableRows]
   )
 
   const tradeProfitNetSharePct = useMemo(
@@ -798,79 +783,8 @@ export function CharacterDashboard(
                 ) }
               </div>
 
-              <div className="flex w-full min-w-0 flex-col gap-3 lg:flex-row lg:items-stretch">
-                <div className="@container min-w-0 flex-1 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
-                <h3 className="eve-section-title mb-2">Динамика капитализации</h3>
-                { netWorthInPeriodSeries.length > 0 ? (
-                  <div className="h-[240px] w-full min-w-0 sm:h-[280px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={ netWorthInPeriodSeries }
-                        margin={ { top: 8, right: 8, left: 4, bottom: 0 } }
-                      >
-                        <CartesianGrid
-                          stroke={ CHART_COL.grid }
-                          strokeDasharray="3 3"
-                        />
-                        <XAxis
-                          dataKey="time"
-                          tick={ { fontSize: 8, fill: CHART_COL.tick } }
-                          tickFormatter={ (t: string) =>
-                          {
-                            const d = new Date(t)
-                            if (!Number.isFinite(d.getTime())) return t
-                            return d.toLocaleDateString('ru-RU', {
-                              day: '2-digit',
-                              month: '2-digit',
-                            })
-                          } }
-                          minTickGap={ 16 }
-                        />
-                        <YAxis
-                          domain={ netWorthChartYDomain }
-                          tick={ { fontSize: 9, fill: CHART_COL.tick } }
-                          tickFormatter={ (n) => formatInteger(n as number) }
-                          width={ 56 }
-                        />
-                        <Tooltip
-                          contentStyle={ {
-                            background: 'rgba(16, 20, 28, 0.96)',
-                            border: '1px solid rgba(123, 142, 176, 0.45)',
-                            fontSize: 11,
-                          } }
-                          labelFormatter={ (t) =>
-                            new Date(t).toLocaleString('ru-RU', {
-                              day: '2-digit',
-                              month: '2-digit',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })
-                          }
-                          formatter={ (v: number) =>
-                            [ iskFormatter(v), 'Капитализация' ]
-                          }
-                        />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="netWorth"
-                          name="Net worth (ISK)"
-                          stroke={ CHART_COL.net }
-                          strokeWidth={ 2.25 }
-                          dot={ false }
-                          activeDot={ { r: 3 } }
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <p className="text-sm text-eve-muted">
-                    Нет точек: в выгрузке журнала кошелька нет дат в выбранном периоде.
-                  </p>
-                ) }
-                </div>
-                <div className="@container min-w-0 flex-1 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+              <div className="w-full min-w-0">
+                <div className="@container min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
                   <h3 className="eve-section-title mb-2 leading-snug">
                     Торговая прибыль по типам{ ' ' }
                     <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
@@ -1021,7 +935,19 @@ export function CharacterDashboard(
                     { ' ' }или отдельному отчёту в игре; 1:1 не гарантируется (ESI обрезает историю,
                     исходы и налоги везде разные).
                   </p>
-                  { tradeProfitWithNames.length > 0 ? (
+                  <div className="mb-2 shrink-0">
+                    <label className="flex items-center gap-2 text-[10px] text-eve-muted">
+                      <span className="shrink-0">Поиск типа</span>
+                      <input
+                        type="text"
+                        value={ tradeProfitTypeQuery }
+                        onChange={ (e) => setTradeProfitTypeQuery(e.target.value) }
+                        placeholder="Название или ID"
+                        className="w-full rounded border border-eve-border/70 bg-eve-bg/75 px-2 py-1.5 text-[11px] text-eve-bright shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/60 focus:outline-none"
+                      />
+                    </label>
+                  </div>
+                  { tradeProfitTableRows.length > 0 ? (
                     <div className="min-h-0 flex-1 overflow-auto rounded border border-eve-border/40">
                       <table className="w-full min-w-0 text-left text-[11px] text-eve-bright/90">
                         <thead className="sticky top-0 z-10 bg-eve-elevated/95 text-eve-muted shadow-[0_1px_0_0_rgba(74,88,120,0.35)]">
@@ -1040,7 +966,7 @@ export function CharacterDashboard(
                           </tr>
                         </thead>
                         <tbody>
-                          { tradeProfitWithNames.map((r, i) =>
+                          { tradeProfitTableRows.map((r, i) =>
                           {
                             const profitShare = tradeProfitAbsSum > 0
                               ? (r.profit / tradeProfitAbsSum) * 100
@@ -1133,8 +1059,8 @@ export function CharacterDashboard(
                               scope="row"
                               className="bg-eve-elevated/95 px-2 py-1.5 pr-1 text-left font-semibold"
                             >
-                              Итого ({ tradeProfitWithNames.length }{ ' ' }
-                              { tradeProfitWithNames.length === 1
+                              Итого ({ tradeProfitTableRows.length }{ ' ' }
+                              { tradeProfitTableRows.length === 1
                                 ? 'тип'
                                 : 'типов' } в витрине)
                             </th>
@@ -1172,7 +1098,9 @@ export function CharacterDashboard(
                   ) : (
                     <div className="flex min-h-0 flex-1 items-start">
                       <p className="text-sm text-eve-muted">
-                        Нет сделок за период (или в режиме «Купля–продажа» нет пар buy+sell по типу).
+                        { tradeProfitWithNames.length === 0
+                          ? 'Нет сделок за период (или в режиме «Купля–продажа» нет пар buy+sell по типу).'
+                          : 'По вашему фильтру типы не найдены.' }
                       </p>
                     </div>
                   ) }
