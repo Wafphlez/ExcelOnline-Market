@@ -382,7 +382,14 @@ function devExportPlugin(): Plugin {
   }
 }
 
+/** Для GitHub Project Pages: `VITE_BASE_PATH=/имя-репозитория/` (со слэшем в конце). */
+const viteBase =
+  typeof process.env.VITE_BASE_PATH === 'string' && process.env.VITE_BASE_PATH.trim() !== ''
+    ? process.env.VITE_BASE_PATH.trim().replace(/\/?$/, '/')
+    : '/'
+
 export default defineConfig({
+  base: viteBase,
   plugins: [react(), devExportPlugin()],
   server: {
     fs: { allow: [projectRoot] },

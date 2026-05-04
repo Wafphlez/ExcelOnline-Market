@@ -1,0 +1,63 @@
+# Сборка и публикация на GitHub Pages (ветка main).
+# Репозиторий → Settings → Pages: Source = GitHub Actions.
+#
+# Секреты (Settings → Secrets and variables → Actions):
+#   VITE_EVE_SSO_CLIENT_ID — Client ID приложения EVE (Third Party).
+#
+# Опционально (если Callback URL в CCP должен совпасть не с авто-origin):
+#   VITE_EVE_SSO_REDIRECT_URI — например https://USER.github.io/REPO/ (как в CCP, посимвольно).
+#
+# Для сайта вида USER.github.io (репозиторий USER.github.io) задайте переменную репозитория:
+#   VITE_BASE_PATH=/   (или не задавать — по умолчанию /)
+# Для Project Pages (USER.github.io/REPO/) base задаётся автоматически из имени репозитория.
+
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        env:
+          # Project Pages: /repo-name/ ; для корня сайта задайте Repository variable VITE_BASE_PATH=/ или /
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || format('/{0}/', github.event.repository.name) }}
+          VITE_EVE_SSO_CLIENT_ID: ${{ secrets.VITE_EVE_SSO_CLIENT_ID }}
+          VITE_EVE_SSO_REDIRECT_URI: ${{ secrets.VITE_EVE_SSO_REDIRECT_URI }}
+        run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
