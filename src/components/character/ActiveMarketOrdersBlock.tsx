@@ -234,7 +234,7 @@ export function ActiveMarketOrdersBlock(
       type="button"
       onClick={ onRefresh }
       disabled={ refreshing }
-      className="inline-flex h-7 w-7 items-center justify-center rounded border border-eve-border/80 text-eve-muted shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-eve-border/70 bg-eve-surface/35 text-eve-muted shadow-glass-subtle transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
       title="Обновить Active Market Orders"
     >
       <RefreshCw
@@ -246,7 +246,7 @@ export function ActiveMarketOrdersBlock(
   if (!data)
   {
     return (
-      <div className="rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+      <div className="glass-subtle p-2.5">
         <div className="mb-1 flex items-center justify-between gap-2">
           <h3 className="eve-section-title">Активные Market Orders</h3>
           { refreshButton }
@@ -261,7 +261,7 @@ export function ActiveMarketOrdersBlock(
   if (data.scopeMissing)
   {
     return (
-      <div className="rounded border border-amber-500/35 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+      <div className="glass-subtle border-amber-500/35 p-2.5">
         <div className="mb-1 flex items-center justify-between gap-2">
           <h3 className="eve-section-title">Активные Market Orders</h3>
           { refreshButton }
@@ -276,7 +276,7 @@ export function ActiveMarketOrdersBlock(
   const buyH = `Ордеров: ${ data.buys.length } · Всего: ${ formatIskHeader(data.buyTotalEscrowIsk) } · Эскроу: ${ formatIskHeader(data.buyTotalEscrowIsk) } · Осталось внести: ${ formatInteger(data.buyRemainingToCover) }`
   return (
     <div
-      className={ `flex min-h-0 min-w-0 w-full flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset ${ dashboardTwinPanelHeightClass }` }
+      className={ `glass-subtle flex min-h-0 min-w-0 w-full flex-col p-2.5 ${ dashboardTwinPanelHeightClass }` }
     >
       <div className="mb-1 flex shrink-0 items-center justify-between gap-2">
         <h3 className="eve-section-title">Активные Market Orders</h3>

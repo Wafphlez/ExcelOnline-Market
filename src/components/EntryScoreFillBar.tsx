@@ -20,7 +20,7 @@ export function EntryScoreFillBar({ score }: EntryScoreFillBarProps) {
       title={`Выгодность входа: ${pct} % (0 = нет смысла, 100 = сильный вход по марже, ликвидности и спреду)`}
     >
       <div
-        className="relative box-border h-3.5 min-w-0 flex-1 overflow-hidden rounded-sm border-2 border-eve-accent bg-eve-bg/95 shadow-eve-inset"
+        className="relative box-border h-3.5 min-w-0 flex-1 overflow-hidden rounded-sm border border-eve-accent/85 bg-eve-surface/70 shadow-glass-subtle"
         role="img"
         aria-label={`Выгодность ${pct} из 100 процентов`}
       >
@@ -31,13 +31,13 @@ export function EntryScoreFillBar({ score }: EntryScoreFillBarProps) {
           <div
             className={
               pct > 0
-                ? 'h-full w-full min-w-[2px] bg-gradient-to-b from-eve-gold-bright/85 via-eve-accent to-eve-gold/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]'
+                ? 'h-full w-full min-w-[2px] bg-gradient-to-b from-eve-gold-bright/85 via-eve-accent to-eve-gold/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)]'
                 : 'h-full w-0'
             }
           />
         </div>
       </div>
-      <span className="w-8 shrink-0 text-right font-eve text-[10px] font-bold tabular-nums leading-none text-eve-accent [text-shadow:0_0_6px_rgba(184,150,61,0.25)]">
+      <span className="w-8 shrink-0 text-right font-eve text-[10px] font-bold tabular-nums leading-none text-eve-accent [text-shadow:0_0_8px_rgba(74,188,255,0.32)]">
         {pct}%
       </span>
     </div>

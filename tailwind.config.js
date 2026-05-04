@@ -6,24 +6,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        // База — почти «космический» тёмный UI в духе клиента EVE
-        'eve-bg': '#050608',
-        'eve-surface': '#0c0e14',
-        'eve-elevated': '#12161f',
-        'eve-border': '#2a3142',
-        /** Основной акцент — «фирменное» золото Neocom */
-        'eve-accent': '#d6ac3e',
-        'eve-accent-hover': '#d4b55a',
-        'eve-gold': '#d6ac3e',
-        'eve-gold-bright': '#e8d4a0',
-        'eve-accent-muted': 'rgba(184, 150, 61, 0.12)',
-        'eve-text': '#c8ccd6',
-        'eve-bright': '#eceef2',
-        'eve-muted': '#6d7588',
-        'eve-danger': '#c25a5a',
-        'eve-row-alt': 'rgba(18, 22, 31, 0.65)',
-        'eve-highlight': 'rgba(184, 150, 61, 0.08)',
-        'eve-cyan': '#5a8fa8',
+        'eve-bg': 'rgb(var(--eve-bg-rgb) / <alpha-value>)',
+        'eve-surface': 'rgb(var(--eve-surface-rgb) / <alpha-value>)',
+        'eve-elevated': 'rgb(var(--eve-elevated-rgb) / <alpha-value>)',
+        'eve-border': 'rgb(var(--eve-border-rgb) / <alpha-value>)',
+        'eve-accent': 'rgb(var(--eve-accent-rgb) / <alpha-value>)',
+        'eve-accent-hover': 'rgb(var(--eve-accent-hover-rgb) / <alpha-value>)',
+        'eve-gold': 'rgb(var(--eve-gold-rgb) / <alpha-value>)',
+        'eve-gold-bright': 'rgb(var(--eve-gold-bright-rgb) / <alpha-value>)',
+        'eve-accent-muted': 'rgb(var(--eve-accent-rgb) / 0.14)',
+        'eve-text': 'rgb(var(--eve-text-rgb) / <alpha-value>)',
+        'eve-bright': 'rgb(var(--eve-bright-rgb) / <alpha-value>)',
+        'eve-muted': 'rgb(var(--eve-muted-rgb) / <alpha-value>)',
+        'eve-danger': 'rgb(var(--eve-danger-rgb) / <alpha-value>)',
+        'eve-row-alt': 'rgb(var(--eve-elevated-rgb) / 0.68)',
+        'eve-highlight': 'rgb(var(--eve-accent-rgb) / 0.1)',
+        'eve-cyan': 'rgb(var(--eve-cyan-rgb) / <alpha-value>)',
       },
       fontFamily: {
         sans: [
@@ -49,6 +47,12 @@ export default {
         'eve-inset': 'inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.35)',
         'eve-panel':
           '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(184, 150, 61, 0.08)',
+        'glass-subtle':
+          'inset 0 1px 0 rgba(255,255,255,0.06), 0 6px 18px rgba(0,0,0,0.28)',
+        'glass-panel':
+          'inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 28px rgba(0,0,0,0.35)',
+        'glass-elevated':
+          'inset 0 1px 0 rgba(255,255,255,0.1), 0 16px 36px rgba(0,0,0,0.42)',
       },
     },
   },

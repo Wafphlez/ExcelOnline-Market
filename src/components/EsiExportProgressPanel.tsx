@@ -33,7 +33,7 @@ function ProgressRow({
           {current}/{max}
         </span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full border border-eve-border/40 bg-eve-bg/60 shadow-eve-inset">
+      <div className="h-1.5 w-full overflow-hidden rounded-full border border-eve-border/45 bg-eve-surface/65 shadow-glass-subtle">
         <div
           className={`h-full rounded-full transition-[width] duration-300 ease-out ${accentClass ?? 'bg-eve-accent/80'}`}
           style={{ width: `${w}%` }}
@@ -100,7 +100,7 @@ export function EsiExportProgressPanel({
   const sw = formatEsiStopwatch(elapsedSec)
 
   return (
-    <div className="mt-3 rounded border border-eve-border/60 bg-eve-elevated/50 p-3 shadow-eve-inset">
+    <div className="glass-panel mt-3 p-3">
       <div className="mb-2.5 flex flex-col gap-2 border-b border-eve-accent/15 pb-2.5">
         <div className="min-w-0">
           <span className="font-eve text-[11px] font-bold uppercase tracking-[0.12em] text-eve-gold">
@@ -109,7 +109,7 @@ export function EsiExportProgressPanel({
         </div>
         <div className="grid w-full shrink-0 grid-cols-[minmax(7.5rem,1fr)_minmax(9.5rem,1fr)] gap-x-3 gap-y-0.5 text-[10px] tabular-nums sm:w-[min(100%,19.5rem)]">
           <div
-            className="flex min-h-[2.25rem] min-w-0 flex-col justify-center rounded border border-eve-border/35 bg-eve-bg/35 px-2 py-1 shadow-eve-inset"
+            className="glass-subtle flex min-h-[2.25rem] min-w-0 flex-col justify-center px-2 py-1"
             title="Прошло с начала выгрузки"
           >
             <span className="text-[9px] uppercase tracking-wide text-eve-muted">
@@ -120,7 +120,7 @@ export function EsiExportProgressPanel({
             </span>
           </div>
           <div
-            className="flex min-h-[2.25rem] min-w-0 flex-col justify-center rounded border border-eve-border/35 bg-eve-bg/35 px-2 py-1 shadow-eve-inset"
+            className="glass-subtle flex min-h-[2.25rem] min-w-0 flex-col justify-center px-2 py-1"
             title={
               showEta
                 ? 'Линейная оценка по скорости текущей фазы'

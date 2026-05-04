@@ -702,7 +702,7 @@ export function ExportBar({
   return (
     <div className="space-y-5">
       {!hideLocalFileOpenSection && (
-        <section className="border-t border-eve-border/50 pt-4">
+        <section className="border-t border-eve-border/45 pt-4">
           <h3 className="eve-section-title mb-2">Открыть локальный файл</h3>
           <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
             Файлы из папки{' '}
@@ -714,7 +714,7 @@ export function ExportBar({
               <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
                 <span className="shrink-0">Файл</span>
                 <select
-                  className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
                   value={selectedExportFile}
                   onChange={(e) => setSelectedExportFile(e.target.value)}
                   disabled={disabled || exportFilesSorted.length === 0}
@@ -740,7 +740,7 @@ export function ExportBar({
                     !selectedExportFile
                   }
                   onClick={() => void onOpenLocalExportFile()}
-                  className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
                   title="Открыть в таблицу выбранный файл из exports/"
                 >
                   <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -749,7 +749,7 @@ export function ExportBar({
                 <button
                   type="button"
                   onClick={() => void refreshList()}
-                  className="inline-flex items-center justify-center rounded border border-eve-border/80 p-1.5 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright"
+                  className="inline-flex items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 p-1.5 text-eve-muted shadow-glass-subtle hover:border-eve-muted/60 hover:text-eve-bright"
                   title="Обновить список из exports/"
                 >
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden />
@@ -772,7 +772,7 @@ export function ExportBar({
             <label className="flex flex-col gap-1 text-xs text-eve-muted">
               <span>Регион ESI</span>
               <select
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
                 disabled={disabled || loading}
@@ -787,7 +787,7 @@ export function ExportBar({
             <label className="flex flex-col gap-1 text-xs text-eve-muted">
               <span>History (дней)</span>
               <select
-                className="w-full rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                className="w-full rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
                 value={String(esiHistoryDays)}
                 onChange={(e) => {
                   const v = e.target.value
@@ -806,7 +806,7 @@ export function ExportBar({
               Выгрузка идёт в полном режиме: все страницы ордеров до исчерпания и все
               доступные типы без ручных лимитов.
             </p>
-            <div className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
+            <div className="@[450px]:col-span-3 glass-subtle flex items-center justify-between gap-3 px-2 py-1.5 text-xs">
               <div className="min-w-0">
                 <p className="font-semibold text-eve-bright/95">
                   Выгрузить актуальные ордера
@@ -824,8 +824,8 @@ export function ExportBar({
                 disabled={disabled || loading}
                 className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 disabled:opacity-50 ${
                   esiIncludeOrderSnapshot
-                    ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
-                    : 'border-eve-border/80 bg-eve-bg/80 text-eve-muted/90'
+                  ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
+                    : 'border-eve-border/70 bg-eve-surface/35 text-eve-muted/90'
                 }`}
               >
                 <span
@@ -841,7 +841,7 @@ export function ExportBar({
                 />
               </button>
             </div>
-            <div className="@[450px]:col-span-3 flex items-center justify-between gap-3 rounded border border-eve-border/55 bg-eve-bg/45 px-2 py-1.5 text-xs shadow-eve-inset">
+            <div className="@[450px]:col-span-3 glass-subtle flex items-center justify-between gap-3 px-2 py-1.5 text-xs">
               <div className="min-w-0">
                 <p className="font-semibold text-eve-bright/95">
                   Выгрузить только торговый хаб
@@ -859,8 +859,8 @@ export function ExportBar({
                 disabled={disabled || loading}
                 className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 disabled:opacity-50 ${
                   esiTradeHubOnly
-                    ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
-                    : 'border-eve-border/80 bg-eve-bg/80 text-eve-muted/90'
+                  ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
+                    : 'border-eve-border/70 bg-eve-surface/35 text-eve-muted/90'
                 }`}
               >
                 <span
@@ -881,7 +881,7 @@ export function ExportBar({
                 type="button"
                 disabled={disabled || loading || !selected}
                 onClick={() => void onEsiBuildSelected()}
-                className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
               >
                 <Globe className="h-3.5 w-3.5 shrink-0" aria-hidden />
                 Сформировать (ESI)
@@ -928,7 +928,7 @@ export function ExportBar({
       )}
 
       {!hideMarketLogsSection && (
-        <section className="@container rounded border border-eve-border/50 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+        <section className="@container glass-panel p-2.5">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h3 className="eve-section-title">Market export logs</h3>
           <div className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
@@ -941,7 +941,7 @@ export function ExportBar({
               className={`relative inline-flex h-5 w-9 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 ${
                 marketExportLogsEnabled
                   ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
-                  : 'border-eve-border/80 bg-eve-bg/80 text-eve-muted/90'
+                  : 'border-eve-border/70 bg-eve-surface/35 text-eve-muted/90'
               }`}
             >
               <span
@@ -975,7 +975,7 @@ export function ExportBar({
               min={0}
               max={100}
               step={0.01}
-              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-white shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 rounded-md border border-eve-border/70 bg-eve-surface/35 px-1 py-0.5 text-xs tabular-nums text-white shadow-glass-subtle placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={brokerFeePct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -995,7 +995,7 @@ export function ExportBar({
               min={0}
               max={100}
               step={0.01}
-              className="w-20 min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1 py-0.5 text-xs tabular-nums text-white shadow-eve-inset placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+              className="w-20 min-w-0 rounded-md border border-eve-border/70 bg-eve-surface/35 px-1 py-0.5 text-xs tabular-nums text-white shadow-glass-subtle placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
               value={salesTaxPct}
               onChange={(e) => {
                 const n = Number(e.target.value.replace(',', '.'))
@@ -1015,7 +1015,7 @@ export function ExportBar({
             value={marketLogsPath}
             onChange={(e) => setMarketLogsPath(e.target.value)}
             placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
-            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 text-xs text-eve-bright shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+            className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 px-2 py-1.5 text-xs text-eve-bright shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
             disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
           />
         </label>
@@ -1042,10 +1042,10 @@ export function ExportBar({
             return (
               <article
                 key={`${r.name || 'empty'}-${idx}`}
-                className="rounded border border-eve-border/40 bg-eve-bg/40 p-2 shadow-eve-inset"
+                className="glass-subtle p-2"
               >
                 <div className="grid grid-cols-1 gap-2 text-xs @[450px]:grid-cols-4">
-                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                  <div className="glass-subtle px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Item name
                     </p>
@@ -1067,7 +1067,7 @@ export function ExportBar({
                       <p className="text-eve-bright/95">—</p>
                     )}
                   </div>
-                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                  <div className="glass-subtle px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Profit margin
                     </p>
@@ -1078,7 +1078,7 @@ export function ExportBar({
                       {r.margin === null ? '—' : formatPercent(r.margin)}
                     </span>
                   </div>
-                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                  <div className="glass-subtle px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Profit, ISK
                     </p>
@@ -1086,7 +1086,7 @@ export function ExportBar({
                       {r.profitIsk === null ? '—' : formatIsk(r.profitIsk)}
                     </p>
                   </div>
-                  <div className="rounded border border-eve-border/30 bg-eve-elevated/35 px-2 py-1.5">
+                  <div className="glass-subtle px-2 py-1.5">
                     <p className="mb-0.5 text-[10px] uppercase tracking-wide text-eve-gold">
                       Время экспорта
                     </p>

@@ -939,7 +939,7 @@ export function TradingView()
           </h1>
           <p className="sr-only">{ tickerScreenReader }</p>
           <div
-            className="relative mt-3 w-full overflow-hidden rounded-sm border border-eve-border/50 bg-eve-bg/55 shadow-eve-inset [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(42,49,66,0.12)_3px,transparent_4px)]"
+            className="relative mt-3 w-full overflow-hidden rounded-md border border-eve-border/55 bg-eve-surface/55 shadow-glass-subtle [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(71,91,125,0.14)_3px,transparent_4px)]"
             aria-hidden
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-eve-cyan/75 via-eve-accent/40 to-eve-cyan/50" />
@@ -1049,14 +1049,14 @@ export function TradingView()
             <div className="eve-panel p-1.5">
               { (isDevExportServer || exportMsg) && (
                 <>
-                  <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <section className="@container glass-subtle mb-3 p-2.5">
                     <h3 className="eve-section-title mb-2">Торговля в одном регионе</h3>
                     { isDevExportServer && (
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
                           <span className="shrink-0">Файл</span>
                           <select
-                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            className="min-w-0 flex-1 rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
                             value={ selectedLocalExportFile }
                             onChange={ (e) => setSelectedLocalExportFile(e.target.value) }
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
@@ -1077,7 +1077,7 @@ export function TradingView()
                             type="button"
                             onClick={ () => void refreshLocalExportFiles() }
                             disabled={ loading || localExportLoading }
-                            className="inline-flex h-8 w-8 items-center justify-center rounded border border-eve-border/80 text-eve-muted shadow-eve-inset hover:border-eve-muted/60 hover:text-eve-bright disabled:opacity-50"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 text-eve-muted shadow-glass-subtle hover:border-eve-muted/60 hover:text-eve-bright disabled:opacity-50"
                             title="Обновить список из exports/"
                           >
                             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
@@ -1091,7 +1091,7 @@ export function TradingView()
                               !selectedLocalExportFile
                             }
                             onClick={ () => void onOpenSelectedLocalExportFile() }
-                            className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
                             title="Открыть в таблицу выбранный файл из exports/"
                           >
                             <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
@@ -1113,7 +1113,7 @@ export function TradingView()
                   </section>
 
                   { isDevExportServer && (
-                    <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                    <section className="@container glass-subtle mb-3 p-2.5">
                       <h3 className="eve-section-title mb-2">
                         Торговля между регионами
                       </h3>
@@ -1121,7 +1121,7 @@ export function TradingView()
                         <label className="flex min-w-0 items-center gap-2 text-xs text-eve-muted">
                           <span className="shrink-0">Регион 1</span>
                           <select
-                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
                             value={ compareLeftFile }
                             onChange={ (e) => setCompareLeftFile(e.target.value) }
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
@@ -1140,7 +1140,7 @@ export function TradingView()
                         <label className="flex min-w-0 items-center gap-2 text-xs text-eve-muted">
                           <span className="shrink-0">Регион 2</span>
                           <select
-                            className="min-w-0 flex-1 rounded border border-eve-border/80 bg-eve-bg/80 py-1.5 pl-2 pr-8 text-xs text-white shadow-eve-inset focus:border-eve-accent/70 focus:outline-none"
+                            className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
                             value={ compareRightFile }
                             onChange={ (e) => setCompareRightFile(e.target.value) }
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
@@ -1159,7 +1159,7 @@ export function TradingView()
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex min-w-0 items-center gap-1">
                             <div
-                              className="inline-flex min-h-[2.125rem] min-w-0 items-center truncate rounded border border-eve-border/45 bg-eve-bg/55 px-2 text-xs font-semibold text-eve-gold"
+                            className="inline-flex min-h-[2.125rem] min-w-0 items-center truncate rounded-md border border-eve-border/55 bg-eve-surface/55 px-2 text-xs font-semibold text-eve-gold"
                               title="Выбранные регионы сравнения"
                             >
                               { compareLeftRegionLabel } → { compareRightRegionLabel }
@@ -1168,7 +1168,7 @@ export function TradingView()
                               type="button"
                               onClick={ onSwapCompareFiles }
                               disabled={ loading || localExportLoading }
-                              className="inline-flex items-center justify-center rounded border border-eve-border/80 bg-eve-bg/70 p-1.5 text-eve-bright/95 shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                              className="inline-flex items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/58 p-1.5 text-eve-bright/95 shadow-glass-subtle transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
                               title="Поменять регионы местами"
                               aria-label="Поменять выбранные регионы местами"
                             >
@@ -1185,7 +1185,7 @@ export function TradingView()
                               !compareLeftFile ||
                               !compareRightFile
                             }
-                            className="inline-flex items-center justify-center gap-1.5 rounded border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
                           >
                             Применить сравнение
                           </button>
@@ -1195,7 +1195,7 @@ export function TradingView()
                     </section>
                   ) }
 
-                  <section className="@container mb-3 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                  <section className="@container glass-subtle mb-3 p-2.5">
                     <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
                     <ExportBar
                       onLoadBuffer={ loadFromBuffer }
@@ -1212,7 +1212,7 @@ export function TradingView()
                     />
                   </section>
                   { exportMsg && (
-                    <p className="my-2 rounded border border-eve-border/50 bg-eve-bg/50 px-2.5 py-1.5 text-xs text-eve-muted shadow-eve-inset">
+                    <p className="glass-subtle my-2 px-2.5 py-1.5 text-xs text-eve-muted">
                       { exportMsg }
                     </p>
                   ) }
@@ -1232,7 +1232,7 @@ export function TradingView()
           <main className="mt-4 w-full lg:mt-0 lg:flex lg:min-h-0 lg:min-w-0 lg:flex-1 lg:flex-col lg:overflow-hidden lg:pl-1">
             { error && (
               <div
-                className="eve-panel mb-4 border-eve-danger/50 bg-eve-elevated/80 px-3 py-2.5 text-sm text-eve-danger"
+                className="eve-panel mb-4 border-eve-danger/50 bg-eve-elevated/70 px-3 py-2.5 text-sm text-eve-danger"
                 role="alert"
               >
                 { error }
@@ -1248,7 +1248,7 @@ export function TradingView()
                     e.currentTarget.blur()
                   } }
                   className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isAllPresetsActive
-                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
                       : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
                     }` }
                 >
@@ -1262,7 +1262,7 @@ export function TradingView()
                     e.currentTarget.blur()
                   } }
                   className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isNoPresetsActive
-                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
                       : 'border-eve-border/80 text-eve-muted hover:border-eve-muted/50 hover:text-eve-bright'
                     }` }
                 >
@@ -1280,7 +1280,7 @@ export function TradingView()
                       e.currentTarget.blur()
                     } }
                     className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePresetIdsSet.has(p.id)
-                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
+                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
                         : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
                       }` }
                   >
@@ -1298,7 +1298,7 @@ export function TradingView()
                 type="number"
                 min={ 0.1 }
                 step={ 1 }
-                className="w-24 rounded border border-eve-border/80 bg-eve-bg/90 px-2 py-1.5 tabular-nums text-eve-bright shadow-eve-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+                className="w-24 rounded-md border border-eve-border/75 bg-eve-surface/65 px-2 py-1.5 tabular-nums text-eve-bright shadow-glass-subtle [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
                 value={ priceThresholdMln }
                 onChange={ (e) =>
                 {

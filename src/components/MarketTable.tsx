@@ -466,10 +466,10 @@ export function MarketTable({
       ) : null}
       <div
         ref={scrollParentRef}
-        className="h-full w-full overflow-auto rounded border border-eve-border/70 bg-eve-bg/25 shadow-eve-inset"
+        className="glass-panel h-full w-full overflow-auto"
       >
         <table className="w-full min-w-[1140px] border-separate border-spacing-0 text-left text-sm text-white">
-        <thead className="sticky top-0 z-40 bg-eve-elevated/90 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/75">
+        <thead className="sticky top-0 z-40 bg-eve-elevated/88 text-xs font-semibold uppercase tracking-[0.12em] text-eve-gold/80 backdrop-blur-[6px]">
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => {
@@ -483,8 +483,8 @@ export function MarketTable({
                     key={h.id}
                     className={
                       isMarketCol
-                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-accent/25 bg-eve-elevated px-0.5 py-2 text-center align-bottom font-semibold normal-case shadow-[inset_0_-1px_0_rgba(184,150,61,0.25)]'
-                        : 'max-w-[14rem] border-b border-eve-accent/25 bg-eve-elevated px-2 py-2 align-bottom font-semibold normal-case shadow-[inset_0_-1px_0_rgba(184,150,61,0.25)]'
+                        ? 'w-10 min-w-10 max-w-10 border-b border-eve-accent/24 bg-eve-elevated/95 px-0.5 py-2 text-center align-bottom font-semibold normal-case shadow-[inset_0_-1px_0_rgba(120,188,255,0.2)]'
+                        : 'max-w-[14rem] border-b border-eve-accent/24 bg-eve-elevated/95 px-2 py-2 align-bottom font-semibold normal-case shadow-[inset_0_-1px_0_rgba(120,188,255,0.2)]'
                     }
                   >
                     <div
@@ -569,7 +569,7 @@ export function MarketTable({
                     className="border-b border-eve-border bg-eve-elevated p-1"
                   >
                     <input
-                      className="w-full min-w-0 rounded border border-eve-border/80 bg-eve-bg/80 px-1.5 py-1 text-xs text-white shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
+                      className="w-full min-w-0 rounded-md border border-eve-border/75 bg-eve-surface/65 px-1.5 py-1 text-xs text-white shadow-glass-subtle placeholder:text-eve-muted/60 focus:border-eve-accent/70 focus:outline-none"
                       placeholder={
                         isTypeTextFilter
                           ? 'Введите тип (напр. shi)…'
@@ -616,7 +616,7 @@ export function MarketTable({
                     className={
                       filterThNarrow
                         ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/60 bg-eve-elevated p-0.5'
-                        : 'border-b border-eve-border/60 bg-eve-elevated p-1'
+                        : 'border-b border-eve-border/60 bg-eve-elevated/92 p-1'
                     }
                   >
                     <NumberRangeFilterInputs

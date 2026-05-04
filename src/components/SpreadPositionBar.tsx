@@ -53,7 +53,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
   return (
     <div className="w-full min-w-[140px] max-w-[220px]">
       <div
-        className="relative rounded-sm border border-eve-gold/40 bg-eve-bg/95 p-px shadow-[0_0_0_1px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.06)]"
+        className="relative rounded-sm border border-eve-border/70 bg-eve-surface/72 p-px shadow-glass-subtle"
         title={
           split
             ? `Средняя в спреде: ${formatRatio(t, 3)} (0 = buy…1 = sell). Условное разбиение ${split.buy} buy / ${split.sell} sell из ${split.buy + split.sell} сделок.`
@@ -66,7 +66,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
             : `Позиция средней в спреде: ${formatRatio(t, 3)}. Центр оси 0,5, ${axisPositionHint}.`
         }
       >
-        <div className="relative h-8 w-full overflow-hidden rounded-sm border border-eve-border/70 bg-eve-elevated">
+        <div className="relative h-8 w-full overflow-hidden rounded-sm border border-eve-border/70 bg-eve-elevated/88">
           <div
             className="absolute inset-0"
             style={{ background: TRACK }}
@@ -97,7 +97,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
             }}
           />
           <div
-            className="absolute bottom-0 top-0 z-10 w-px -translate-x-1/2 bg-eve-gold/70 shadow-[0_0_4px_rgba(184,150,61,0.5)]"
+            className="absolute bottom-0 top-0 z-10 w-px -translate-x-1/2 bg-eve-gold/70 shadow-[0_0_4px_rgba(105,190,255,0.45)]"
             style={{ left: '50%' }}
           />
           <div
@@ -111,7 +111,7 @@ export function SpreadPositionBar({ ratio, tradeCount }: Props) {
             <div
               className="absolute left-1/2 top-[3px] h-[calc(100%-5px)] w-[1.5px] -translate-x-1/2 bg-gradient-to-b from-eve-gold/95 via-eve-accent/90 to-eve-gold/40"
             />
-            <div className="absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rotate-45 border border-eve-gold/85 bg-eve-bg shadow-[0_0_5px_rgba(184,150,61,0.45)]" />
+            <div className="absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rotate-45 border border-eve-gold/85 bg-eve-bg shadow-[0_0_5px_rgba(105,190,255,0.45)]" />
           </div>
           {split ? (
             <div

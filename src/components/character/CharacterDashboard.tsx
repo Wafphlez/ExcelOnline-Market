@@ -44,7 +44,6 @@ import
     buildWalletTransactionIdToTypeMap,
     DASHBOARD_RANGE_PRESETS,
     filterJournalInRange,
-    filterNetWorthSeriesFrom,
     filterTransactionsInRange,
     findDashboardRange,
     MS_DAY,
@@ -249,10 +248,10 @@ function TabButton(
     <button
       type="button"
       onClick={ onClick }
-      className={ `rounded border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 ${
+      className={ `rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 ${
         active
-          ? 'border-eve-accent bg-eve-accent-muted text-eve-accent shadow-[inset_0_0_0_1px_rgba(184,150,61,0.2)]'
-          : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+          ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
+          : 'border-eve-border/80 bg-eve-surface/45 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
       }` }
     >
       { children }
@@ -623,7 +622,7 @@ export function CharacterDashboard(
                 type="button"
                 onClick={ () => refresh() }
                 disabled={ state.status === 'loading' }
-                className="inline-flex h-8 w-8 items-center justify-center rounded border border-eve-border/80 text-eve-muted shadow-eve-inset transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-eve-border/70 bg-eve-surface/35 text-eve-muted shadow-glass-subtle transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
                 title="Обновить данные ESI"
               >
                 <RefreshCw
@@ -634,13 +633,13 @@ export function CharacterDashboard(
           </div>
 
           { loginErr && (
-            <p className="mb-3 rounded border border-eve-danger/50 bg-eve-elevated/60 px-3 py-2 text-sm text-eve-danger/95" role="alert">
+            <p className="mb-3 rounded-md border border-eve-danger/45 bg-eve-elevated/35 px-3 py-2 text-sm text-eve-danger/95" role="alert">
               { loginErr }
             </p>
           ) }
 
           { !isEveSsoConfigured() && (
-            <p className="mb-3 rounded border border-eve-danger/50 bg-eve-elevated/60 px-3 py-2 text-sm text-eve-danger/95">
+            <p className="mb-3 rounded-md border border-eve-danger/45 bg-eve-elevated/35 px-3 py-2 text-sm text-eve-danger/95">
               Укажите{ ' ' }
               <code className="text-eve-bright/90">VITE_EVE_SSO_CLIENT_ID</code>
               { ' ' }в .env (приложение CCP) и, при необходимости,{ ' ' }
@@ -690,7 +689,7 @@ export function CharacterDashboard(
           { state.status === 'ready' && (
             <div className="w-full min-w-0 max-w-full space-y-4">
               <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                <div className="glass-subtle p-3">
                   <div className="flex items-start gap-3">
                     <img
                       src={ characterPortraitUrl(state.data.characterId, 128) }
@@ -716,31 +715,31 @@ export function CharacterDashboard(
                     </div>
                   </div>
                 </div>
-                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                <div className="glass-subtle p-3">
                   <p className="eve-kicker text-[10px]">Net worth (оценка)</p>
                   <p className="mt-1 text-xl font-bold tabular-nums text-eve-gold-bright">
                     { iskFormatter(state.data.netWorth) }
                   </p>
                 </div>
-                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                <div className="glass-subtle p-3">
                   <p className="eve-kicker text-[10px]">Кошелёк (ISK)</p>
                   <p className="mt-1 text-lg font-bold tabular-nums text-eve-cyan/95">
                     { iskFormatter(state.data.wallet) }
                   </p>
                 </div>
-                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                <div className="glass-subtle p-3">
                   <p className="eve-kicker text-[10px]">Активы (оценка)</p>
                   <p className="mt-1 text-lg font-bold tabular-nums text-eve-accent/95">
                     { iskFormatter(state.data.assetsValue) }
                   </p>
                 </div>
-                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                <div className="glass-subtle p-3">
                   <p className="eve-kicker text-[10px]">Эскроу (buy-ордера)</p>
                   <p className="mt-1 text-lg font-bold tabular-nums text-eve-amber-200/90">
                     { iskFormatter(state.data.marketEscrowIsk) }
                   </p>
                 </div>
-                <div className="rounded border border-eve-border/50 bg-eve-bg/40 p-3 shadow-eve-inset">
+                <div className="glass-subtle p-3">
                   <p className="eve-kicker text-[10px]">PLEX в ассетах ESI (оценка)</p>
                   <p className="mt-1 text-lg font-bold tabular-nums text-eve-bright/95">
                     { iskFormatter(state.data.plexValueInAssetsIsk) }
@@ -748,7 +747,7 @@ export function CharacterDashboard(
                 </div>
               </div>
 
-              <div className="rounded border border-eve-border/45 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+              <div className="glass-subtle p-2.5">
                 <p className="eve-kicker mb-2 text-[10px]">Период анализа</p>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   { DASHBOARD_RANGE_PRESETS.map((p) => (
@@ -784,7 +783,7 @@ export function CharacterDashboard(
               </div>
 
               <div className="w-full min-w-0">
-                <div className="@container min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                <div className="@container glass-subtle min-w-0 p-2.5">
                   <h3 className="eve-section-title mb-2 leading-snug">
                     Торговая прибыль по типам{ ' ' }
                     <span className="block text-xs font-normal normal-case tracking-normal text-eve-muted/90 sm:inline sm:ml-1.5">
@@ -912,7 +911,7 @@ export function CharacterDashboard(
                     />
                   </div>
                   <div
-                    className={ `@container flex w-full min-w-0 flex-col rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset ${ dashboardTwinPanelHeightClass } min-h-0` }
+                    className={ `@container glass-subtle flex w-full min-w-0 flex-col p-2.5 ${ dashboardTwinPanelHeightClass } min-h-0` }
                   >
                   <h3 className="eve-section-title mb-2 shrink-0 leading-snug">
                     Торговая прибыль по типам{ ' ' }
@@ -943,7 +942,7 @@ export function CharacterDashboard(
                         value={ tradeProfitTypeQuery }
                         onChange={ (e) => setTradeProfitTypeQuery(e.target.value) }
                         placeholder="Название или ID"
-                        className="w-full rounded border border-eve-border/70 bg-eve-bg/75 px-2 py-1.5 text-[11px] text-eve-bright shadow-eve-inset placeholder:text-eve-muted/60 focus:border-eve-accent/60 focus:outline-none"
+                        className="w-full rounded-md border border-eve-border/70 bg-eve-surface/35 px-2 py-1.5 text-[11px] text-eve-bright shadow-glass-subtle placeholder:text-eve-muted/60 focus:border-eve-accent/60 focus:outline-none"
                       />
                     </label>
                   </div>
@@ -1107,7 +1106,7 @@ export function CharacterDashboard(
                   </div>
                 </div>
 
-                <div className="@container w-full min-w-0 rounded border border-eve-border/55 bg-eve-bg/35 p-2.5 shadow-eve-inset">
+                <div className="@container glass-subtle w-full min-w-0 p-2.5">
                 <h3 className="eve-section-title mb-2 flex items-center gap-2">
                   <Shield className="h-4 w-4 text-eve-muted" aria-hidden />
                   Транзакции
