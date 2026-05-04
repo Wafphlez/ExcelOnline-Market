@@ -29,34 +29,37 @@
     0 0 12px rgb(var(--eve-accent-rgb) / calc(0.14 * var(--glow-strength)));
 }
 
-:root[data-theme='photon'] {
-  --eve-accent-rgb: 110 202 252;
-  --eve-accent-hover-rgb: 142 218 255;
-  --eve-gold-rgb: 130 205 247;
-  --eve-gold-bright-rgb: 206 239 255;
-  --eve-cyan-rgb: 104 206 242;
+:root[data-theme='caldari'] {
+  /* Caldari palette: cold navy-blue tactical glow */
+  --eve-accent-rgb: 86 164 255;
+  --eve-accent-hover-rgb: 130 193 255;
+  --eve-gold-rgb: 112 171 245;
+  --eve-gold-bright-rgb: 198 222 255;
+  --eve-cyan-rgb: 98 180 245;
   --glow-strength: 0.35;
 }
 
-:root[data-theme='cyan'] {
-  --eve-accent-rgb: 55 226 226;
-  --eve-accent-hover-rgb: 88 237 236;
-  --eve-gold-rgb: 74 224 223;
-  --eve-gold-bright-rgb: 188 250 248;
-  --eve-cyan-rgb: 68 216 236;
+:root[data-theme='gallente'] {
+  /* Gallente palette: emerald-biotech neon */
+  --eve-accent-rgb: 74 208 148;
+  --eve-accent-hover-rgb: 112 224 175;
+  --eve-gold-rgb: 108 214 156;
+  --eve-gold-bright-rgb: 198 246 219;
+  --eve-cyan-rgb: 88 218 168;
   --glow-strength: 0.38;
 }
 
-:root[data-theme='violet'] {
-  --eve-accent-rgb: 166 129 248;
-  --eve-accent-hover-rgb: 186 154 252;
-  --eve-gold-rgb: 182 147 245;
-  --eve-gold-bright-rgb: 233 224 255;
-  --eve-cyan-rgb: 154 174 240;
+:root[data-theme='minmatar'] {
+  /* Minmatar palette: rust-red / industrial orange */
+  --eve-accent-rgb: 212 102 74;
+  --eve-accent-hover-rgb: 228 133 106;
+  --eve-gold-rgb: 221 124 92;
+  --eve-gold-bright-rgb: 249 205 182;
+  --eve-cyan-rgb: 214 139 108;
   --glow-strength: 0.42;
 }
 
-:root[data-theme='amber'] {
+:root[data-theme='amarr'] {
   --eve-accent-rgb: 230 179 74;
   --eve-accent-hover-rgb: 238 194 102;
   --eve-gold-rgb: 236 187 86;
