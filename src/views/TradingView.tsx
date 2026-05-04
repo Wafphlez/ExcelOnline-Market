@@ -1365,87 +1365,91 @@ export function TradingView()
               </div>
             ) }
             <div className="eve-panel p-1.5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
-              <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={ (e) =>
-                  {
-                    onApplyAllPresets()
-                    e.currentTarget.blur()
-                  } }
-                  className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isAllPresetsActive
-                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
-                      : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
-                    }` }
-                >
-                  Применить все
-                </button>
-                <button
-                  type="button"
-                  onClick={ (e) =>
-                  {
-                    onResetFilters()
-                    e.currentTarget.blur()
-                  } }
-                  className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isNoPresetsActive
-                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
-                      : 'border-eve-border/80 text-eve-muted hover:border-eve-muted/50 hover:text-eve-bright'
-                    }` }
-                >
-                  Сбросить фильтры
-                </button>
-              </div>
-              <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5 pb-2">
-                { PRESETS.map((p) => (
+              <div className="mb-2 flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center justify-start gap-1.5">
+                  { PRESETS.map((p) => (
+                    <button
+                      key={ p.id }
+                      type="button"
+                      onClick={ (e) =>
+                      {
+                        onPreset(p.id)
+                        e.currentTarget.blur()
+                      } }
+                      className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePresetIdsSet.has(p.id)
+                          ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
+                          : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
+                        }` }
+                    >
+                      { p.label }
+                    </button>
+                  )) }
+                </div>
+                <div className="flex flex-wrap items-center justify-start gap-1.5">
                   <button
-                    key={ p.id }
                     type="button"
                     onClick={ (e) =>
                     {
-                      onPreset(p.id)
+                      onApplyAllPresets()
                       e.currentTarget.blur()
                     } }
-                    className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ activePresetIdsSet.has(p.id)
+                    className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isAllPresetsActive
                         ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
                         : 'border-eve-border/80 text-eve-muted hover:border-eve-accent/40 hover:text-eve-bright'
                       }` }
                   >
-                    { p.label }
+                    Применить все
                   </button>
-                )) }
+                  <button
+                    type="button"
+                    onClick={ (e) =>
+                    {
+                      onResetFilters()
+                      e.currentTarget.blur()
+                    } }
+                    className={ `rounded border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${ isNoPresetsActive
+                        ? 'border-eve-accent bg-eve-accent-muted text-eve-accent glow-kpi'
+                        : 'border-eve-border/80 text-eve-muted hover:border-eve-muted/50 hover:text-eve-bright'
+                      }` }
+                  >
+                    Сбросить фильтры
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center justify-start gap-x-3 gap-y-1.5">
+                  <label className="flex min-w-0 flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:flex-wrap sm:items-center">
+                    <span className="max-w-[22rem] shrink-0">
+                      Дорогим товаром считать (влияет на выгодность)
+                    </span>
+                    <span className="flex flex-wrap items-center gap-2">
+                      <input
+                        ref={ setPriceInputEl }
+                        type="number"
+                        min={ 0.1 }
+                        step={ 1 }
+                        className="w-24 rounded-md border border-eve-border/75 bg-eve-surface/65 px-2 py-1.5 tabular-nums text-eve-bright shadow-glass-subtle [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
+                        value={ priceThresholdMln }
+                        onChange={ (e) =>
+                        {
+                          const n = Number(e.target.value.replace(',', '.'))
+                          if (!Number.isFinite(n) || n < 0.1) return
+                          setPriceThresholdMln(n)
+                          try
+                          {
+                            localStorage.setItem(LS_PRICE_MLN, String(n))
+                          } catch
+                          {
+                            /* ignore */
+                          }
+                        } }
+                      />
+                      <span className="tabular-nums text-eve-muted/90" title="В ISK">
+                        = { formatInteger(highPriceThresholdIsk) } ISK
+                      </span>
+                    </span>
+                  </label>
+                </div>
               </div>
-          <div className="mb-2 flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-xs text-eve-muted sm:flex-row sm:items-center">
-              <span className="max-w-[20rem]">
-                Дорогим товаром считать (влияет на выгодность)
-              </span>
-              <input
-                ref={ setPriceInputEl }
-                type="number"
-                min={ 0.1 }
-                step={ 1 }
-                className="w-24 rounded-md border border-eve-border/75 bg-eve-surface/65 px-2 py-1.5 tabular-nums text-eve-bright shadow-glass-subtle [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
-                value={ priceThresholdMln }
-                onChange={ (e) =>
-                {
-                  const n = Number(e.target.value.replace(',', '.'))
-                  if (!Number.isFinite(n) || n < 0.1) return
-                  setPriceThresholdMln(n)
-                  try
-                  {
-                    localStorage.setItem(LS_PRICE_MLN, String(n))
-                  } catch
-                  {
-                    /* ignore */
-                  }
-                } }
-              />
-              <span className="tabular-nums text-eve-muted/90" title="В ISK">
-                = { formatInteger(highPriceThresholdIsk) } ISK
-              </span>
-            </label>
-          </div>
-          <div className="lg:min-h-0 lg:flex-1">
+              <div className="lg:min-h-0 lg:flex-1">
             <MarketTable
               data={ rows ?? [] }
               columnFilters={ columnFilters }
