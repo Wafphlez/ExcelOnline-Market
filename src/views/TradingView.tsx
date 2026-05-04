@@ -42,6 +42,11 @@ import
     type ExportListItem,
   } from '../lib/devExportApi'
 import { EXPORT_REGIONS } from '../lib/exportRegions'
+import
+  {
+    ESI_TRADE_HUB_SHORT_FILE_TOKEN,
+    toSafeFileToken,
+  } from '../lib/esiExportFileName'
 import type { MarketRow } from '../types/market'
 
 const LS_PRICE_MLN = 'excelMarket_highPriceMln'
@@ -55,14 +60,37 @@ const DEFAULT_SALES_TAX_PCT = 4.2
 function detectRegionLabelFromExportFileName(fileName: string): string {
   const byReady = EXPORT_REGIONS.find((r) => r.fileName === fileName)
   if (byReady) return byReady.label
-  const m = /liquidity-esi-(\d+)-/i.exec(fileName)
-  if (m) {
-    const rid = Number(m[1])
+  for (const r of EXPORT_REGIONS) {
+    const hubTok = ESI_TRADE_HUB_SHORT_FILE_TOKEN[r.esiRegionId]
+    if (hubTok && fileName.startsWith(`eon-market-${hubTok}-`)) {
+      return r.label
+    }
+  }
+  const mEon = /eon-market-(\d+)-/i.exec(fileName)
+  if (mEon) {
+    const rid = Number(mEon[1])
     const byEsiId = EXPORT_REGIONS.find((r) => r.esiRegionId === rid)
     if (byEsiId) return byEsiId.label
     return `Region ${rid}`
   }
-  return fileName.replace(/\.(xlsx|xls)$/i, '')
+  for (const r of EXPORT_REGIONS) {
+    const pref = `eon-market-${toSafeFileToken(r.label)}-`
+    if (fileName.startsWith(pref)) return r.label
+  }
+  const mLegacy = /liquidity-esi-(\d+)-/i.exec(fileName)
+  if (mLegacy) {
+    const rid = Number(mLegacy[1])
+    const byEsiId = EXPORT_REGIONS.find((r) => r.esiRegionId === rid)
+    if (byEsiId) return byEsiId.label
+    return `Region ${rid}`
+  }
+  for (const r of EXPORT_REGIONS) {
+    const pref = `liquidity-esi-${toSafeFileToken(r.label)}-`
+    if (fileName.startsWith(pref)) return r.label
+  }
+  return fileName
+    .replace(/\.(xlsx|xls)$/i, '')
+    .replace(/^(eon-market|liquidity-esi)-/i, '')
 }
 
 function marketRowJoinKey(row: MarketRow): string {
