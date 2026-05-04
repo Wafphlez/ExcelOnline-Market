@@ -572,9 +572,6 @@ export function ExportBar({
         const key = `${latest.name}|${latest.mtime}|${latest.size}`
         if (!initialized) {
           initialized = true
-          lastSeenKey = key
-          setMarketLogInfo(`Ожидание новых файлов в папке… Последний: ${latest.name}`)
-          return
         }
         if (key === lastSeenKey) return
         const buf = await fetchMarketLogFileBuffer(trimmedMarketLogsPath, latest.name)
@@ -1036,17 +1033,16 @@ export function ExportBar({
             </button>
           </div>
         </div>
-        <div
-          className={`space-y-2 transition-opacity ${
-            marketExportLogsEnabled
-              ? 'opacity-100'
-              : 'pointer-events-none select-none opacity-45 saturate-50'
-          }`}
-          aria-disabled={!marketExportLogsEnabled}
-        >
+        {!marketExportLogsEnabled && (
+          <p className="mb-2 text-[11px] text-eve-muted/85">
+            Работа с файлами экспортов отключена.
+          </p>
+        )}
+        {marketExportLogsEnabled && (
+        <div className="space-y-2">
         <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white">
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="italic text-eve-muted">Broker fee:</span>
+            <span className="text-eve-muted">Broker fee:</span>
             <input
               ref={setBrokerInput}
               type="number"
@@ -1061,12 +1057,12 @@ export function ExportBar({
                 onBrokerFeeChange(n)
               }}
               aria-label="Broker fee, процент"
-              disabled={disabled || !marketExportLogsEnabled}
+              disabled={disabled}
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="italic text-eve-muted">Sales tax:</span>
+            <span className="text-eve-muted">Sales tax:</span>
             <input
               ref={setTaxInput}
               type="number"
@@ -1081,7 +1077,7 @@ export function ExportBar({
                 onSalesTaxChange(n)
               }}
               aria-label="Sales tax, процент"
-              disabled={disabled || !marketExportLogsEnabled}
+              disabled={disabled}
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
@@ -1095,14 +1091,14 @@ export function ExportBar({
               onChange={(e) => setMarketLogsPath(e.target.value)}
               placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
               className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 px-2 py-1.5 text-xs text-eve-bright shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
-              disabled={disabled || !marketExportLogsEnabled}
+              disabled={disabled}
             />
           </label>
         ) : (
           <div className="mb-2">
             <MarketLogTxtDropzone
               onFile={(f) => void onMarketLogTxtFile(f)}
-              disabled={disabled || !marketExportLogsEnabled}
+              disabled={disabled}
             />
           </div>
         )}
@@ -1185,6 +1181,7 @@ export function ExportBar({
           })}
         </div>
         </div>
+        )}
         </section>
       )}
     </>
