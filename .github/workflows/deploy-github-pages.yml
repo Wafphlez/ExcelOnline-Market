@@ -48,6 +48,14 @@ jobs:
           VITE_EVE_SSO_REDIRECT_URI: ${{ secrets.VITE_EVE_SSO_REDIRECT_URI }}
         run: npm run build
 
+      # Исходный index.html ссылается на /src/main.tsx — после vite build должны быть assets/*.js.
+      - name: Verify dist is a production bundle
+        run: |
+          if grep -qE 'main\.tsx|/src/main' dist/index.html; then
+            echo "::error::dist/index.html looks like dev entry — vite build did not transform HTML (or wrong folder uploaded)."
+            exit 1
+          fi
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
