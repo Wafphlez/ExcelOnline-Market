@@ -102,27 +102,27 @@
 
 @keyframes starTwinkle {
   0%,
-  100% { opacity: 0.46; filter: brightness(0.92) saturate(0.96); }
-  35% { opacity: 0.56; filter: brightness(1.04) saturate(1.02); }
-  65% { opacity: 0.52; filter: brightness(0.98) saturate(0.99); }
+  100% { opacity: 0.53; filter: brightness(0.97) saturate(1); }
+  35% { opacity: 0.63; filter: brightness(1.09) saturate(1.05); }
+  65% { opacity: 0.58; filter: brightness(1.03) saturate(1.02); }
 }
 
 @keyframes starFlickerA {
   0%,
-  100% { opacity: 0.06; filter: brightness(0.86); }
-  14% { opacity: 0.16; filter: brightness(1.02); }
-  36% { opacity: 0.08; filter: brightness(0.9); }
-  58% { opacity: 0.18; filter: brightness(1.06); }
-  81% { opacity: 0.07; filter: brightness(0.88); }
+  100% { opacity: 0.09; filter: brightness(0.91); }
+  14% { opacity: 0.21; filter: brightness(1.06); }
+  36% { opacity: 0.11; filter: brightness(0.94); }
+  58% { opacity: 0.23; filter: brightness(1.09); }
+  81% { opacity: 0.1; filter: brightness(0.93); }
 }
 
 @keyframes starFlickerB {
   0%,
-  100% { opacity: 0.05; filter: brightness(0.84); }
-  11% { opacity: 0.14; filter: brightness(0.98); }
-  33% { opacity: 0.07; filter: brightness(0.88); }
-  55% { opacity: 0.17; filter: brightness(1.04); }
-  77% { opacity: 0.06; filter: brightness(0.86); }
+  100% { opacity: 0.08; filter: brightness(0.89); }
+  11% { opacity: 0.18; filter: brightness(1.03); }
+  33% { opacity: 0.09; filter: brightness(0.93); }
+  55% { opacity: 0.21; filter: brightness(1.08); }
+  77% { opacity: 0.09; filter: brightness(0.91); }
 }
 
 @keyframes shootingStars {
@@ -263,46 +263,46 @@ body {
 
   .space-backdrop::before {
     background-image:
-      radial-gradient(circle at 12% 18%, rgb(var(--eve-bright-rgb) / 0.55) 0 1px, transparent 1.6px),
-      radial-gradient(circle at 27% 32%, rgb(var(--eve-bright-rgb) / 0.35) 0 1.2px, transparent 1.8px),
-      radial-gradient(circle at 45% 14%, rgb(var(--eve-bright-rgb) / 0.48) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 66% 26%, rgb(var(--eve-bright-rgb) / 0.36) 0 1.2px, transparent 1.8px),
-      radial-gradient(circle at 82% 12%, rgb(var(--eve-bright-rgb) / 0.52) 0 1px, transparent 1.7px),
-      radial-gradient(circle at 18% 62%, rgb(var(--eve-bright-rgb) / 0.42) 0 1.1px, transparent 1.7px),
-      radial-gradient(circle at 38% 70%, rgb(var(--eve-bright-rgb) / 0.38) 0 1px, transparent 1.6px),
-      radial-gradient(circle at 57% 62%, rgb(var(--eve-bright-rgb) / 0.44) 0 1.1px, transparent 1.8px),
-      radial-gradient(circle at 73% 74%, rgb(var(--eve-bright-rgb) / 0.32) 0 1px, transparent 1.6px),
-      radial-gradient(circle at 92% 60%, rgb(var(--eve-bright-rgb) / 0.4) 0 1.2px, transparent 1.8px),
-      radial-gradient(circle at 8% 8%, rgb(var(--eve-bright-rgb) / 0.45) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 16% 24%, rgb(var(--eve-bright-rgb) / 0.33) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 23% 12%, rgb(var(--eve-bright-rgb) / 0.5) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 31% 22%, rgb(var(--eve-bright-rgb) / 0.37) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 41% 8%, rgb(var(--eve-bright-rgb) / 0.41) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 52% 18%, rgb(var(--eve-bright-rgb) / 0.34) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 61% 10%, rgb(var(--eve-bright-rgb) / 0.47) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 71% 20%, rgb(var(--eve-bright-rgb) / 0.31) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 79% 6%, rgb(var(--eve-bright-rgb) / 0.44) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 89% 24%, rgb(var(--eve-bright-rgb) / 0.35) 0 1.1px, transparent 1.7px),
-      radial-gradient(circle at 6% 42%, rgb(var(--eve-bright-rgb) / 0.39) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 14% 50%, rgb(var(--eve-bright-rgb) / 0.3) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 26% 44%, rgb(var(--eve-bright-rgb) / 0.43) 0 1px, transparent 1.6px),
-      radial-gradient(circle at 34% 56%, rgb(var(--eve-bright-rgb) / 0.34) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 46% 48%, rgb(var(--eve-bright-rgb) / 0.49) 0 1.1px, transparent 1.7px),
-      radial-gradient(circle at 54% 40%, rgb(var(--eve-bright-rgb) / 0.36) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 64% 52%, rgb(var(--eve-bright-rgb) / 0.42) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 76% 46%, rgb(var(--eve-bright-rgb) / 0.33) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 86% 38%, rgb(var(--eve-bright-rgb) / 0.46) 0 1.1px, transparent 1.7px),
-      radial-gradient(circle at 94% 50%, rgb(var(--eve-bright-rgb) / 0.3) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 10% 78%, rgb(var(--eve-bright-rgb) / 0.41) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 22% 88%, rgb(var(--eve-bright-rgb) / 0.35) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 32% 80%, rgb(var(--eve-bright-rgb) / 0.47) 0 1.1px, transparent 1.7px),
-      radial-gradient(circle at 44% 90%, rgb(var(--eve-bright-rgb) / 0.3) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 53% 76%, rgb(var(--eve-bright-rgb) / 0.4) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 63% 86%, rgb(var(--eve-bright-rgb) / 0.34) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 74% 82%, rgb(var(--eve-bright-rgb) / 0.45) 0 1.1px, transparent 1.7px),
-      radial-gradient(circle at 84% 90%, rgb(var(--eve-bright-rgb) / 0.31) 0 0.9px, transparent 1.4px),
-      radial-gradient(circle at 91% 78%, rgb(var(--eve-bright-rgb) / 0.43) 0 1px, transparent 1.5px);
-    opacity: 0.52;
+      radial-gradient(circle at 12% 18%, rgb(var(--eve-bright-rgb) / 0.62) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 27% 32%, rgb(var(--eve-bright-rgb) / 0.42) 0 1.2px, transparent 1.8px),
+      radial-gradient(circle at 45% 14%, rgb(var(--eve-bright-rgb) / 0.55) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 66% 26%, rgb(var(--eve-bright-rgb) / 0.43) 0 1.2px, transparent 1.8px),
+      radial-gradient(circle at 82% 12%, rgb(var(--eve-bright-rgb) / 0.59) 0 1px, transparent 1.7px),
+      radial-gradient(circle at 18% 62%, rgb(var(--eve-bright-rgb) / 0.49) 0 1.1px, transparent 1.7px),
+      radial-gradient(circle at 38% 70%, rgb(var(--eve-bright-rgb) / 0.45) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 57% 62%, rgb(var(--eve-bright-rgb) / 0.51) 0 1.1px, transparent 1.8px),
+      radial-gradient(circle at 73% 74%, rgb(var(--eve-bright-rgb) / 0.39) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 92% 60%, rgb(var(--eve-bright-rgb) / 0.47) 0 1.2px, transparent 1.8px),
+      radial-gradient(circle at 8% 8%, rgb(var(--eve-bright-rgb) / 0.52) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 16% 24%, rgb(var(--eve-bright-rgb) / 0.4) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 23% 12%, rgb(var(--eve-bright-rgb) / 0.57) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 31% 22%, rgb(var(--eve-bright-rgb) / 0.44) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 41% 8%, rgb(var(--eve-bright-rgb) / 0.48) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 52% 18%, rgb(var(--eve-bright-rgb) / 0.41) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 61% 10%, rgb(var(--eve-bright-rgb) / 0.54) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 71% 20%, rgb(var(--eve-bright-rgb) / 0.38) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 79% 6%, rgb(var(--eve-bright-rgb) / 0.51) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 89% 24%, rgb(var(--eve-bright-rgb) / 0.42) 0 1.1px, transparent 1.7px),
+      radial-gradient(circle at 6% 42%, rgb(var(--eve-bright-rgb) / 0.46) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 14% 50%, rgb(var(--eve-bright-rgb) / 0.37) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 26% 44%, rgb(var(--eve-bright-rgb) / 0.5) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 34% 56%, rgb(var(--eve-bright-rgb) / 0.41) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 46% 48%, rgb(var(--eve-bright-rgb) / 0.56) 0 1.1px, transparent 1.7px),
+      radial-gradient(circle at 54% 40%, rgb(var(--eve-bright-rgb) / 0.43) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 64% 52%, rgb(var(--eve-bright-rgb) / 0.49) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 76% 46%, rgb(var(--eve-bright-rgb) / 0.4) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 86% 38%, rgb(var(--eve-bright-rgb) / 0.53) 0 1.1px, transparent 1.7px),
+      radial-gradient(circle at 94% 50%, rgb(var(--eve-bright-rgb) / 0.37) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 10% 78%, rgb(var(--eve-bright-rgb) / 0.48) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 22% 88%, rgb(var(--eve-bright-rgb) / 0.42) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 32% 80%, rgb(var(--eve-bright-rgb) / 0.54) 0 1.1px, transparent 1.7px),
+      radial-gradient(circle at 44% 90%, rgb(var(--eve-bright-rgb) / 0.37) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 53% 76%, rgb(var(--eve-bright-rgb) / 0.47) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 63% 86%, rgb(var(--eve-bright-rgb) / 0.41) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 74% 82%, rgb(var(--eve-bright-rgb) / 0.52) 0 1.1px, transparent 1.7px),
+      radial-gradient(circle at 84% 90%, rgb(var(--eve-bright-rgb) / 0.38) 0 0.9px, transparent 1.4px),
+      radial-gradient(circle at 91% 78%, rgb(var(--eve-bright-rgb) / 0.5) 0 1px, transparent 1.5px);
+    opacity: 0.58;
     animation: starDriftSlow 140s linear infinite, starTwinkle 13s ease-in-out infinite;
   }
 
@@ -317,15 +317,15 @@ body {
 
   .space-backdrop-flicker-a {
     background-image:
-      radial-gradient(circle at 11% 16%, rgb(var(--eve-bright-rgb) / 0.58) 0 1px, transparent 1.4px),
-      radial-gradient(circle at 36% 28%, rgb(var(--eve-bright-rgb) / 0.52) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 58% 12%, rgb(var(--eve-bright-rgb) / 0.62) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 83% 22%, rgb(var(--eve-bright-rgb) / 0.48) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 21% 54%, rgb(var(--eve-bright-rgb) / 0.56) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 47% 66%, rgb(var(--eve-bright-rgb) / 0.5) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 72% 58%, rgb(var(--eve-bright-rgb) / 0.6) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 89% 74%, rgb(var(--eve-bright-rgb) / 0.46) 0 1.1px, transparent 1.6px);
-    opacity: 0.1;
+      radial-gradient(circle at 11% 16%, rgb(var(--eve-bright-rgb) / 0.72) 0 1px, transparent 1.4px),
+      radial-gradient(circle at 36% 28%, rgb(var(--eve-bright-rgb) / 0.66) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 58% 12%, rgb(var(--eve-bright-rgb) / 0.76) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 83% 22%, rgb(var(--eve-bright-rgb) / 0.62) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 21% 54%, rgb(var(--eve-bright-rgb) / 0.7) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 47% 66%, rgb(var(--eve-bright-rgb) / 0.64) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 72% 58%, rgb(var(--eve-bright-rgb) / 0.74) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 89% 74%, rgb(var(--eve-bright-rgb) / 0.6) 0 1.1px, transparent 1.6px);
+    opacity: 0.13;
     animation:
       starDriftSlow 160s linear infinite,
       starFlickerA 11s ease-in-out infinite;
@@ -334,16 +334,16 @@ body {
 
   .space-backdrop-flicker-b {
     background-image:
-      radial-gradient(circle at 6% 34%, rgb(var(--eve-bright-rgb) / 0.55) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 28% 18%, rgb(var(--eve-bright-rgb) / 0.47) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 51% 38%, rgb(var(--eve-bright-rgb) / 0.61) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 67% 24%, rgb(var(--eve-bright-rgb) / 0.5) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 79% 46%, rgb(var(--eve-bright-rgb) / 0.58) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 15% 82%, rgb(var(--eve-bright-rgb) / 0.49) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 41% 88%, rgb(var(--eve-bright-rgb) / 0.57) 0 1.1px, transparent 1.6px),
-      radial-gradient(circle at 64% 80%, rgb(var(--eve-bright-rgb) / 0.53) 0 1px, transparent 1.5px),
-      radial-gradient(circle at 92% 86%, rgb(var(--eve-bright-rgb) / 0.45) 0 1.1px, transparent 1.6px);
-    opacity: 0.08;
+      radial-gradient(circle at 6% 34%, rgb(var(--eve-bright-rgb) / 0.62) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 28% 18%, rgb(var(--eve-bright-rgb) / 0.54) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 51% 38%, rgb(var(--eve-bright-rgb) / 0.68) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 67% 24%, rgb(var(--eve-bright-rgb) / 0.57) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 79% 46%, rgb(var(--eve-bright-rgb) / 0.65) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 15% 82%, rgb(var(--eve-bright-rgb) / 0.56) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 41% 88%, rgb(var(--eve-bright-rgb) / 0.64) 0 1.1px, transparent 1.6px),
+      radial-gradient(circle at 64% 80%, rgb(var(--eve-bright-rgb) / 0.6) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 92% 86%, rgb(var(--eve-bright-rgb) / 0.52) 0 1.1px, transparent 1.6px);
+    opacity: 0.11;
     animation:
       starDriftSlow 190s linear infinite reverse,
       starFlickerB 14s ease-in-out infinite;
