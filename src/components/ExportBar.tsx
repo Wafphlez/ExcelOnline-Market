@@ -93,6 +93,8 @@ type ExportBarProps = Readonly<{
   hideLocalFileOpenSection?: boolean
   hideEsiSection?: boolean
   hideMarketLogsSection?: boolean
+  /** Карточку ESI рисует родитель (TradingView) — без второй рамки `eve-panel`. */
+  hideEsiOuterCard?: boolean
   brokerFeePct: number
   salesTaxPct: number
   highPriceThresholdIsk: number
@@ -311,6 +313,7 @@ export function ExportBar({
   hideLocalFileOpenSection = false,
   hideEsiSection = false,
   hideMarketLogsSection = false,
+  hideEsiOuterCard = false,
   brokerFeePct,
   salesTaxPct,
   highPriceThresholdIsk,
@@ -770,9 +773,9 @@ export function ExportBar({
   )
 
   return (
-    <div className="space-y-5">
+    <>
       {!hideLocalFileOpenSection && (
-        <section className="border-t border-eve-border/45 pt-4">
+        <section className="@container eve-panel p-2.5">
           <h3 className="eve-section-title mb-2">Локальный Excel</h3>
           <p className="mb-2 text-[11px] leading-relaxed text-eve-muted/90">
             Перетащите файл сюда или нажмите «Выбрать .xlsx».
@@ -838,7 +841,11 @@ export function ExportBar({
       )}
 
       {!hideEsiSection && (
-        <div>
+        <section
+          className={
+            hideEsiOuterCard ? 'contents' : '@container eve-panel p-2.5'
+          }
+        >
           <div className="space-y-2 @[450px]:grid @[450px]:grid-cols-3 @[450px]:gap-2 @[450px]:space-y-0">
             <label className="flex flex-col gap-1 text-xs text-eve-muted">
               <span>Регион ESI</span>
@@ -995,11 +1002,11 @@ export function ExportBar({
               />
             </div>
           )}
-        </div>
+        </section>
       )}
 
       {!hideMarketLogsSection && (
-        <section className="@container glass-panel p-2.5">
+        <section className="@container eve-panel p-2.5">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h3 className="eve-section-title">Market export logs</h3>
           <div className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
@@ -1180,6 +1187,6 @@ export function ExportBar({
         </div>
         </section>
       )}
-    </div>
+    </>
   )
 }

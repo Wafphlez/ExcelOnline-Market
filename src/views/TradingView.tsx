@@ -971,7 +971,7 @@ export function TradingView()
     isResizingLeftPanelRef.current = true
     resizeStartXRef.current = e.clientX
     resizeStartWidthRef.current = leftPanelWidthPx
-    document.body.style.cursor = 'col-resize'
+    document.body.style.cursor = 'ew-resize'
     document.body.style.userSelect = 'none'
   }, [leftPanelWidthPx])
 
@@ -1005,7 +1005,7 @@ export function TradingView()
           </h1>
           <p className="sr-only">{ tickerScreenReader }</p>
           <div
-            className="relative mt-3 w-full overflow-hidden rounded-md border border-eve-border/55 bg-eve-surface/55 shadow-glass-subtle [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(71,91,125,0.14)_3px,transparent_4px)]"
+            className="relative mt-3 mb-2 w-full overflow-hidden rounded-md border border-eve-border/55 bg-eve-surface/55 shadow-glass-subtle sm:mb-3 [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(71,91,125,0.14)_3px,transparent_4px)]"
             aria-hidden
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-eve-cyan/75 via-eve-accent/40 to-eve-cyan/50" />
@@ -1097,23 +1097,20 @@ export function TradingView()
             className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:shrink-0 lg:overflow-y-auto lg:pr-1"
             style={{ width: `min(100%, ${leftPanelWidthPx}px)` }}
           >
-            <div className="eve-panel p-1.5">
-              <ExportBar
-                onLoadBuffer={ loadFromBuffer }
-                onOpenedExportFile={ onExportBarOpenedFile }
-                disabled={ loading }
-                hideEsiSection
-                brokerFeePct={ brokerFeePct }
-                salesTaxPct={ salesTaxPct }
-                highPriceThresholdIsk={ highPriceThresholdIsk }
-                onBrokerFeeChange={ onBrokerFeeChange }
-                onSalesTaxChange={ onSalesTaxChange }
-                onMessageChange={ setExportMsg }
-              />
-            </div>
+            <ExportBar
+              onLoadBuffer={ loadFromBuffer }
+              onOpenedExportFile={ onExportBarOpenedFile }
+              disabled={ loading }
+              hideEsiSection
+              brokerFeePct={ brokerFeePct }
+              salesTaxPct={ salesTaxPct }
+              highPriceThresholdIsk={ highPriceThresholdIsk }
+              onBrokerFeeChange={ onBrokerFeeChange }
+              onSalesTaxChange={ onSalesTaxChange }
+              onMessageChange={ setExportMsg }
+            />
             { !isDevExportServer && (
-            <div className="eve-panel p-1.5">
-              <section className="@container glass-subtle mb-3 p-2.5">
+              <section className="@container eve-panel p-2.5">
                 <h3 className="eve-section-title mb-2">Торговля между регионами</h3>
                 <p className="mb-3 text-[10px] leading-snug text-eve-muted/90">
                   Два экспорта ликвидности (.xlsx / .xls):{' '}
@@ -1190,11 +1187,10 @@ export function TradingView()
                   </button>
                 </div>
               </section>
-            </div>
             ) }
             { isDevExportServer && (
-            <div className="eve-panel p-1.5">
-                  <section className="@container glass-subtle mb-3 p-2.5">
+            <>
+                  <section className="@container eve-panel p-2.5">
                     <h3 className="eve-section-title mb-2">Торговля в одном регионе</h3>
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
@@ -1245,7 +1241,7 @@ export function TradingView()
                       </div>
                   </section>
 
-                    <section className="@container glass-subtle mb-3 p-2.5">
+                  <section className="@container eve-panel p-2.5">
                       <h3 className="eve-section-title mb-2">
                         Торговля между регионами
                       </h3>
@@ -1325,10 +1321,9 @@ export function TradingView()
                         </div>
                       </div>
                     </section>
-            </div>
+            </>
             ) }
-            <div className="eve-panel p-1.5">
-                  <section className="@container glass-subtle mb-3 p-2.5">
+            <section className="@container eve-panel p-2.5">
                     <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
                     <ExportBar
                       onLoadBuffer={ loadFromBuffer }
@@ -1336,6 +1331,7 @@ export function TradingView()
                       disabled={ loading }
                       hideLocalFileOpenSection
                       hideMarketLogsSection
+                      hideEsiOuterCard
                       brokerFeePct={ brokerFeePct }
                       salesTaxPct={ salesTaxPct }
                       highPriceThresholdIsk={ highPriceThresholdIsk }
@@ -1343,18 +1339,17 @@ export function TradingView()
                       onSalesTaxChange={ onSalesTaxChange }
                       onMessageChange={ setExportMsg }
                     />
-                  </section>
                   { exportMsg && (
-                    <p className="glass-subtle my-2 px-2.5 py-1.5 text-xs text-eve-muted">
+                    <p className="glass-subtle mt-2 px-2.5 py-1.5 text-xs text-eve-muted">
                       { exportMsg }
                     </p>
                   ) }
-            </div>
+            </section>
           </aside>
 
           <button
             type="button"
-            className="hidden lg:block lg:h-full lg:w-2 lg:cursor-col-resize lg:rounded-sm lg:border-0 lg:bg-eve-border/40 lg:p-0 lg:transition-colors hover:lg:bg-eve-accent/55"
+            className="left-panel-resize-handle hidden lg:block lg:h-full lg:w-1 lg:shrink-0 lg:cursor-ew-resize lg:rounded-none lg:border-0 lg:bg-eve-border/70 lg:p-0 lg:transition-colors hover:lg:bg-eve-accent/65"
             onMouseDown={startLeftPanelResize}
             aria-label="Изменить ширину левой панели"
             title="Потяните, чтобы изменить ширину левой панели"

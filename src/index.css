@@ -509,6 +509,11 @@ body {
     cursor: pointer;
   }
 
+  /** Разделитель ширины колонки — глобальный `pointer` для button здесь не подходит */
+  .eve-ui-root button.left-panel-resize-handle:not(:disabled) {
+    cursor: ew-resize !important;
+  }
+
   .eve-ui-root :where(button, input, select, textarea, [role='switch']):disabled {
     filter: saturate(0.72);
     opacity: 0.56;
