@@ -390,9 +390,9 @@ body {
    * Базовая soft-glass панель.
    */
   .eve-panel {
-    @apply rounded-md border border-eve-border/65 bg-eve-surface/35 shadow-glass-panel;
-    backdrop-filter: blur(var(--glass-blur-panel));
-    -webkit-backdrop-filter: blur(var(--glass-blur-panel));
+    @apply rounded-md border border-eve-border/65 bg-eve-surface/0 shadow-glass-panel;
+    backdrop-filter: blur(1px);
+    -webkit-backdrop-filter: blur(1px);
     background-clip: padding-box;
     box-shadow:
       0 0 0 1px rgb(var(--eve-border-rgb) / 0.16),
