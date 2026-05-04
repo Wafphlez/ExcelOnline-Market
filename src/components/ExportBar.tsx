@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Globe, RefreshCw } from 'lucide-react'
+import { FileDropzone } from './FileDropzone'
 import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import { EXPORT_REGIONS } from '../lib/exportRegions'
 import {
@@ -15,6 +16,7 @@ import {
   postEsiExportStop,
   type ExportListItem,
 } from '../lib/devExportApi'
+import { downloadXlsxBytes } from '../lib/downloadXlsx'
 import { marginPercentCellStyle } from '../lib/rowHeatmap'
 import { formatIsk, formatPercent } from '../lib/formatNumber'
 import { EsiExportProgressPanel } from './EsiExportProgressPanel'
@@ -576,10 +578,6 @@ export function ExportBar({
   const onEsiBuildSelected = async () => {
     if (!selected) return
     setMsg(null)
-    if (!isDevExportServer) {
-      setMsg('Выгрузка через ESI только в dev (npm run dev).')
-      return
-    }
     setLoading(true)
     setEsiExporting(true)
     setEsiStopRequestKind(null)
@@ -610,24 +608,27 @@ export function ExportBar({
         tradeHubOnly: esiTradeHubOnly,
         tradeHubLocationId: selected.tradeHubLocationId,
       })
+      const u8 = result.buffer
+      const tableAb = u8.buffer.slice(
+        u8.byteOffset,
+        u8.byteOffset + u8.byteLength
+      ) as ArrayBuffer
+      await onLoadBuffer(tableAb)
+      downloadXlsxBytes(result.buffer, result.fileName)
       setMsg(
-        `ESI: ${result.rowCount} позиций → exports/${result.fileName}${
+        `ESI: ${result.rowCount} позиций → «${result.fileName}» скачан и открыт в таблице${
           result.partial ? ' (частично, принудительный стоп)' : ''
         }`
       )
-      await refreshList()
-      setSelectedExportFile(result.fileName)
       onOpenedExportFile?.(result.fileName)
       try {
         localStorage.setItem(LS_LAST_EXPORT_FILE, result.fileName)
       } catch {
         /* ignore */
       }
-      const u = devExportFileUrl(result.fileName)
-      const res = await fetch(u)
-      if (res.ok) {
-        const buf = await res.arrayBuffer()
-        await onLoadBuffer(buf)
+      if (isDevExportServer) {
+        await refreshList()
+        setSelectedExportFile(result.fileName)
       }
     } catch (e) {
       if (e instanceof Error && /ESI:\s*stop-force/i.test(e.message)) {
@@ -699,70 +700,80 @@ export function ExportBar({
     }
   }
 
+  const onLocalExcelFile = useCallback(
+    async (file: File) => {
+      const buf = await file.arrayBuffer()
+      await onLoadBuffer(buf)
+    },
+    [onLoadBuffer]
+  )
+
   return (
     <div className="space-y-5">
       {!hideLocalFileOpenSection && (
         <section className="border-t border-eve-border/45 pt-4">
-          <h3 className="eve-section-title mb-2">Открыть локальный файл</h3>
+          <h3 className="eve-section-title mb-2">Локальный Excel</h3>
           <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
-            Файлы из папки{' '}
-            <code className="rounded bg-eve-bg/80 px-1 text-white">exports/</code>{' '}
-            на диске проекта
+            Перетащите файл сюда или нажмите «Выбрать .xlsx». Данные обрабатываются
+            только в браузере.
           </p>
+          <FileDropzone
+            onFile={(f) => void onLocalExcelFile(f)}
+            disabled={disabled || loading}
+          />
           {isDevExportServer ? (
-            <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-              <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
-                <span className="shrink-0">Файл</span>
-                <select
-                  className="min-w-0 flex-1 rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
-                  value={selectedExportFile}
-                  onChange={(e) => setSelectedExportFile(e.target.value)}
-                  disabled={disabled || exportFilesSorted.length === 0}
-                >
-                  {exportFilesSorted.length === 0 ? (
-                    <option value="">— папка пуста —</option>
-                  ) : (
-                    exportFilesSorted.map((f) => (
-                      <option key={f.name} value={f.name}>
-                        {f.name} ({Math.round(f.size / 1024)} KB)
-                      </option>
-                    ))
-                  )}
-                </select>
-              </label>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  disabled={
-                    disabled ||
-                    loading ||
-                    exportFilesSorted.length === 0 ||
-                    !selectedExportFile
-                  }
-                  onClick={() => void onOpenLocalExportFile()}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
-                  title="Открыть в таблицу выбранный файл из exports/"
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                  Открыть
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void refreshList()}
-                  className="inline-flex items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 p-1.5 text-eve-muted shadow-glass-subtle hover:border-eve-muted/60 hover:text-eve-bright"
-                  title="Обновить список из exports/"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                </button>
+            <>
+              <h4 className="eve-section-title mb-2 mt-5 text-[11px] uppercase tracking-wide text-eve-muted/95">
+                Папка exports/ на диске проекта
+              </h4>
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+                <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
+                  <span className="shrink-0">Файл</span>
+                  <select
+                    className="min-w-0 flex-1 rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
+                    value={selectedExportFile}
+                    onChange={(e) => setSelectedExportFile(e.target.value)}
+                    disabled={disabled || exportFilesSorted.length === 0}
+                  >
+                    {exportFilesSorted.length === 0 ? (
+                      <option value="">— папка пуста —</option>
+                    ) : (
+                      exportFilesSorted.map((f) => (
+                        <option key={f.name} value={f.name}>
+                          {f.name} ({Math.round(f.size / 1024)} KB)
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={
+                      disabled ||
+                      loading ||
+                      exportFilesSorted.length === 0 ||
+                      !selectedExportFile
+                    }
+                    onClick={() => void onOpenLocalExportFile()}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                    title="Открыть в таблицу выбранный файл из exports/"
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Открыть
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void refreshList()}
+                    className="inline-flex items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 p-1.5 text-eve-muted shadow-glass-subtle hover:border-eve-muted/60 hover:text-eve-bright"
+                    title="Обновить список из exports/"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <p className="text-[11px] leading-relaxed text-eve-muted/85">
-              Список <code>exports/</code> и чтение с диска проекта работают только
-              в режиме разработчика. В production используйте кнопки выгрузок
-              выше (ссылки) или перетаскивание файла в блоке «Локальный Excel».
-            </p>
-          )}
+            </>
+          ) : null}
         </section>
       )}
 
@@ -1101,9 +1112,9 @@ export function ExportBar({
         </section>
       )}
 
-      {!isDevExportServer && (
+      {!isDevExportServer && hideEsiSection && (
         <p className="text-[11px] leading-relaxed text-eve-muted/80">
-          Работа с <code>exports/</code> и ESI — только в режиме{' '}
+          Список файлов из папки <code>exports/</code> на диске — только в{' '}
           <code className="text-white">npm run dev</code>.
         </p>
       )}

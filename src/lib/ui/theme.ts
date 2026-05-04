@@ -4,7 +4,7 @@ export const APP_THEMES = ['caldari', 'gallente', 'minmatar', 'amarr'] as const
 
 export type AppThemeId = (typeof APP_THEMES)[number]
 
-const DEFAULT_THEME: AppThemeId = 'caldari'
+const DEFAULT_THEME: AppThemeId = 'amarr'
 
 const LEGACY_THEME_MAP: Record<string, AppThemeId> = {
   photon: 'caldari',

@@ -1,10 +1,7 @@
 /**
- * Сборка ликвидности для Excel по ESI (только Node / Vite dev middleware).
+ * Сборка ликвидности для Excel по ESI в браузере или в Node (Vite dev).
  * Ордера → лучший bid/ask; история → оборот/объём за ~30 дней.
  */
-import * as fs from 'node:fs/promises'
-import * as https from 'node:https'
-import * as path from 'node:path'
 import * as XLSX from 'xlsx'
 import {
   ESI_EXPORT_PROGRESS_IDLE,
@@ -171,17 +168,26 @@ const categoryNameById = new Map<number, string>()
  * иначе параллельные getEsiTypeName (prefetch с ордеров) видят пустой кэш и
  * дублируют парсинг JSON.
  */
-let typeNameCacheLoadFromDisk: Promise<void> | null = null
+let typeNameCacheLoadPromise: Promise<void> | null = null
 
-function typeCachePath(): string {
-  return path.join(process.cwd(), 'public', UNIVERSE_STATIC_FILE)
+function universeStaticJsonUrl(): string {
+  const base = import.meta.env.BASE_URL ?? '/'
+  const prefix = base.endsWith('/') ? base : `${base}/`
+  return `${prefix}${UNIVERSE_STATIC_FILE}`
 }
 
-async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
-  if (typeNameCacheLoadFromDisk) return typeNameCacheLoadFromDisk
-  typeNameCacheLoadFromDisk = (async () => {
+async function loadTypeNameCacheIfNeeded(): Promise<void> {
+  if (typeNameCacheLoadPromise) return typeNameCacheLoadPromise
+  typeNameCacheLoadPromise = (async () => {
     try {
-      const raw = await fs.readFile(typeCachePath(), 'utf8')
+      const res = await fetch(universeStaticJsonUrl())
+      if (!res.ok) {
+        esiDevLog(
+          `статический universe-каталог: HTTP ${res.status} (${universeStaticJsonUrl()})`
+        )
+        return
+      }
+      const raw = await res.text()
       const j = JSON.parse(raw) as EsiTypeCacheFile
       if (j && j.types && typeof j.types === 'object') {
         for (const [k, v] of Object.entries(j.types)) {
@@ -253,46 +259,39 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
         }
       }
       esiDevLog(
-        `статический universe-каталог: ${path.join('public', UNIVERSE_STATIC_FILE)} — types=${typeNameById.size}, groups=${groupNameById.size}/${groupCategoryById.size}, categories=${categoryNameById.size}`
+        `статический universe-каталог: ${UNIVERSE_STATIC_FILE} — types=${typeNameById.size}, groups=${groupNameById.size}/${groupCategoryById.size}, categories=${categoryNameById.size}`
       )
     } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code
-      if (code === 'ENOENT') {
-        esiDevLog(
-          `статический universe-каталог не найден: ${path.join('public', UNIVERSE_STATIC_FILE)}`
-        )
-      } else {
-        esiDevLog(
-          `статический universe-каталог: чтение пропущено (${e instanceof Error ? e.message : String(e)})`
-        )
-      }
+      esiDevLog(
+        `статический universe-каталог: не загружен (${e instanceof Error ? e.message : String(e)})`
+      )
     }
   })()
-  return typeNameCacheLoadFromDisk
+  return typeNameCacheLoadPromise
 }
 
 /**
  * Имя типа только из `public/esi-universe-static.json` (без HTTP к ESI).
  */
 async function getEsiTypeName(typeId: number): Promise<string | undefined> {
-  await loadTypeNameCacheFromDiskIfNeeded()
+  await loadTypeNameCacheIfNeeded()
   return typeNameById.get(typeId)
 }
 
 async function getEsiGroupName(groupId: number): Promise<string | undefined> {
-  await loadTypeNameCacheFromDiskIfNeeded()
+  await loadTypeNameCacheIfNeeded()
   return groupNameById.get(groupId)
 }
 
 async function getEsiCategoryName(
   categoryId: number
 ): Promise<string | undefined> {
-  await loadTypeNameCacheFromDiskIfNeeded()
+  await loadTypeNameCacheIfNeeded()
   return categoryNameById.get(categoryId)
 }
 
 async function getEsiTypeCategory(typeId: number): Promise<string | undefined> {
-  await loadTypeNameCacheFromDiskIfNeeded()
+  await loadTypeNameCacheIfNeeded()
   const payload = typePayloadById.get(typeId)
   const groupIdRaw = payload?.group_id
   if (typeof groupIdRaw !== 'number' || !Number.isFinite(groupIdRaw)) {
@@ -407,8 +406,8 @@ async function awaitEsiRequestSlot(): Promise<void> {
   release()
 }
 
-function buildEsiUrl(path: string, query: Record<string, string>): string {
-  const p = path.startsWith('/') ? path : `/${path}`
+function buildEsiUrl(esiPathSegment: string, query: Record<string, string>): string {
+  const p = esiPathSegment.startsWith('/') ? esiPathSegment : `/${esiPathSegment}`
   // Нельзя new URL(p, ESI_BASE): ведущий / заменяет путь и теряется сегмент /latest
   const u = new URL(`${ESI_BASE.replace(/\/$/, '')}${p}`)
   u.searchParams.set('datasource', 'tranquility')
@@ -418,13 +417,13 @@ function buildEsiUrl(path: string, query: Record<string, string>): string {
   return u.toString()
 }
 
-/** GET с повтором при 420/429/503/5xx. */
+/** GET с повтором при 420/429/503/5xx. В браузере — через fetch (ESI с CORS). */
 async function esiFetch<T>(
-  path: string,
+  esiPathSegment: string,
   query: Record<string, string>,
   shouldAbort?: () => boolean
 ): Promise<T> {
-  const requestUrl = buildEsiUrl(path, query)
+  const requestUrl = buildEsiUrl(esiPathSegment, query)
   for (let attempt = 0; attempt < 12; attempt++) {
     if (shouldAbort?.()) {
       throw new Error('ESI: page exhausted (skip queued request)')
@@ -438,39 +437,23 @@ async function esiFetch<T>(
     const t0 = Date.now()
     const controller = new AbortController()
     esiActiveRequestControllers.add(controller)
+    const timeoutMs = 120_000
+    const timeoutId = globalThis.setTimeout(() => {
+      controller.abort()
+    }, timeoutMs)
     let body = ''
     let status = 0
     try {
-      const out = await new Promise<{
-        body: string
-        status: number
-      }>((resolve, reject) => {
-        const req = https.get(
-          url,
-          {
-            headers: { 'user-agent': USER_AGENT, accept: 'application/json' },
-            signal: controller.signal,
-          },
-          (incoming) => {
-            const chunks: Buffer[] = []
-            incoming.on('data', (c) => chunks.push(c as Buffer))
-            incoming.on('end', () => {
-              resolve({
-                body: Buffer.concat(chunks).toString('utf8'),
-                status: incoming.statusCode ?? 0,
-              })
-            })
-          }
-        )
-        req.on('error', reject)
-        req.setTimeout(120_000, () => {
-          req.destroy()
-          reject(new Error('ESI timeout'))
-        })
-      })
-      body = out.body
-      status = out.status
+      const headers: Record<string, string> = { Accept: 'application/json' }
+      // В браузере User-Agent задать нельзя; для Node (Vitest) можно передать.
+      if (typeof globalThis.window === 'undefined') {
+        headers['user-agent'] = USER_AGENT
+      }
+      const res = await fetch(url, { headers, signal: controller.signal })
+      status = res.status
+      body = await res.text()
     } catch (e) {
+      globalThis.clearTimeout(timeoutId)
       if (
         isEsiForceStopRequested() &&
         (isAbortLikeError(e) || shouldAbort?.())
@@ -479,6 +462,7 @@ async function esiFetch<T>(
       }
       throw e
     } finally {
+      globalThis.clearTimeout(timeoutId)
       esiActiveRequestControllers.delete(controller)
     }
     const ms = Date.now() - t0
@@ -980,7 +964,7 @@ export async function buildLiquidityRows(
   esiProgress.typesDone = 0
   const historyFromDate = new Date(Date.now() - o.historyDays * 24 * 60 * 60 * 1000)
   const tAll = Date.now()
-  await loadTypeNameCacheFromDiskIfNeeded()
+  await loadTypeNameCacheIfNeeded()
   esiDevLog(
     `строки ликвидности: region=${regionId}; полный режим sell|buy до конца ESI + history/имя по мере прихода страниц; окно history=${o.historyDays}d; bid/ask в строке — по финальному агрегату; каталог universe — public/${UNIVERSE_STATIC_FILE}`
   )
@@ -1135,10 +1119,15 @@ export async function buildLiquidityRows(
   }
 }
 
+function writeWorkbookToXlsxUint8(wb: XLSX.WorkBook): Uint8Array {
+  const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+  return out instanceof Uint8Array ? out : new Uint8Array(out)
+}
+
 /**
- * Собирает xlsx (один лист) в Buffer — те же смыслы колонок, что [mapColumns](src/lib/mapColumns.ts).
+ * Собирает xlsx (один лист) — те же смыслы колонок, что [mapColumns](src/lib/mapColumns.ts).
  */
-export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Buffer {
+export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Uint8Array {
   const sheetRows = rows.map((r) => ({
     name: r.name,
     type: r.type,
@@ -1158,7 +1147,7 @@ export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Buffer {
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(sheetRows, { cellDates: true })
   XLSX.utils.book_append_sheet(wb, ws, 'liquidity')
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  return writeWorkbookToXlsxUint8(wb)
 }
 
 function appendOrdersSnapshotSheet(wb: XLSX.WorkBook, rows: LiquidityRow[]): void {
@@ -1180,7 +1169,7 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
   rows: LiquidityRow[],
   note: string,
   includeOrderSnapshot = false
-): Buffer {
+): Uint8Array {
   if (rows.length > 0) {
     if (!includeOrderSnapshot) {
       return liquidityRowsToXlsxBuffer(rows)
@@ -1207,7 +1196,7 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
     )
     XLSX.utils.book_append_sheet(wb, ws, 'liquidity')
     appendOrdersSnapshotSheet(wb, rows)
-    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    return writeWorkbookToXlsxUint8(wb)
   }
   return liquidityRowsToXlsxBuffer([
     {
@@ -1232,7 +1221,7 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
 export async function buildEsiLiquidityXlsx(
   regionId: number,
   opts?: Partial<EsiLiquidityExportOptions>
-): Promise<{ buffer: Buffer; rowCount: number; partial: boolean }> {
+): Promise<{ buffer: Uint8Array; rowCount: number; partial: boolean }> {
   const t0 = Date.now()
   try {
     assertNotEsiForceStopped()
@@ -1251,7 +1240,7 @@ export async function buildEsiLiquidityXlsx(
         mergedOpts.includeOrderSnapshot
       )
       esiDevLog(
-        `xlsx (частично): 0 позиций, ${buffer.length} B, ${((Date.now() - t0) / 1000).toFixed(1)} s`
+        `xlsx (частично): 0 позиций, ${buffer.byteLength} B, ${((Date.now() - t0) / 1000).toFixed(1)} s`
       )
       return { buffer, rowCount: 0, partial: true }
     }
@@ -1261,7 +1250,7 @@ export async function buildEsiLiquidityXlsx(
       mergedOpts.includeOrderSnapshot
     )
     esiDevLog(
-      `xlsx: ${rows.length} строк, ${buffer.length} B файла, всего ${((Date.now() - t0) / 1000).toFixed(1)} s${stoppedEarly ? ' (частично, стоп)' : ''}`
+      `xlsx: ${rows.length} строк, ${buffer.byteLength} B файла, всего ${((Date.now() - t0) / 1000).toFixed(1)} s${stoppedEarly ? ' (частично, стоп)' : ''}`
     )
     return { buffer, rowCount: rows.length, partial: stoppedEarly }
   } finally {

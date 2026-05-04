@@ -3,7 +3,6 @@ import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
 import { ArrowLeftRight, FolderOpen, RefreshCw } from 'lucide-react'
 import { ExportBar } from '../components/ExportBar'
-import { FileDropzone } from '../components/FileDropzone'
 import { MarketTable } from '../components/MarketTable'
 import { computeAllMetrics } from '../lib/computeMetrics'
 import { computeEntryScore } from '../lib/entryScore'
@@ -738,15 +737,6 @@ export function TradingView()
     }
   }, [selectedLocalExportFile, loadFromBuffer])
 
-  const onFile = useCallback(
-    async (file: File) =>
-    {
-      const buf = await file.arrayBuffer()
-      await loadFromBuffer(buf)
-    },
-    [loadFromBuffer]
-  )
-
   const onExportBarOpenedFile = useCallback((fileName: string) =>
   {
     setSelectedLocalExportFile(fileName)
@@ -1036,7 +1026,6 @@ export function TradingView()
                 onLoadBuffer={ loadFromBuffer }
                 onOpenedExportFile={ onExportBarOpenedFile }
                 disabled={ loading }
-                hideLocalFileOpenSection
                 hideEsiSection
                 brokerFeePct={ brokerFeePct }
                 salesTaxPct={ salesTaxPct }
@@ -1046,12 +1035,10 @@ export function TradingView()
                 onMessageChange={ setExportMsg }
               />
             </div>
+            { isDevExportServer && (
             <div className="eve-panel p-1.5">
-              { (isDevExportServer || exportMsg) && (
-                <>
                   <section className="@container glass-subtle mb-3 p-2.5">
                     <h3 className="eve-section-title mb-2">Торговля в одном регионе</h3>
-                    { isDevExportServer && (
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
                           <span className="shrink-0">Файл</span>
@@ -1098,21 +1085,9 @@ export function TradingView()
                             Открыть
                           </button>
                         </div>
-                        <div className="flex w-full items-center gap-2 text-xs text-eve-muted">
-                          <div>
-                            <FileDropzone
-                              onFile={ onFile }
-                              disabled={ loading || localExportLoading }
-                              embedded
-                            />
-                          </div>
-                          <span>Выбрать локальный файл .xlsx/.xls</span>
-                        </div>
                       </div>
-                    ) }
                   </section>
 
-                  { isDevExportServer && (
                     <section className="@container glass-subtle mb-3 p-2.5">
                       <h3 className="eve-section-title mb-2">
                         Торговля между регионами
@@ -1193,8 +1168,9 @@ export function TradingView()
                         </div>
                       </div>
                     </section>
-                  ) }
-
+            </div>
+            ) }
+            <div className="eve-panel p-1.5">
                   <section className="@container glass-subtle mb-3 p-2.5">
                     <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
                     <ExportBar
@@ -1216,8 +1192,6 @@ export function TradingView()
                       { exportMsg }
                     </p>
                   ) }
-                </>
-              ) }
             </div>
           </aside>
 

@@ -1,3 +1,12 @@
+import {
+  buildEsiLiquidityXlsx,
+  clearEsiDevLogs,
+  getEsiDevLogLines,
+  getEsiExportProgressState,
+  requestEsiExportForceStop,
+  requestEsiExportStop,
+} from './dev/esiLiquidityExport'
+import { defaultEsiLiquidityFileName } from './esiExportFileName'
 import { ESI_EXPORT_PROGRESS_IDLE } from './esiExportProgressTypes'
 import type { EsiExportProgressState } from './esiExportProgressTypes'
 
@@ -89,6 +98,8 @@ export type EsiLiquidityResult = {
   rowCount: number
   /** xlsx обрезан по кнопке «Принудительный стоп» */
   partial: boolean
+  /** Готовый файл для скачивания и открытия в таблице */
+  buffer: Uint8Array
 }
 
 /**
@@ -96,68 +107,29 @@ export type EsiLiquidityResult = {
  * дособерёт xlsx по уже накопленным строкам.
  */
 export async function postEsiExportStop(): Promise<void> {
-  if (!isDevExportServer) {
-    return
-  }
-  const r = await fetch(`${BASE}/esi-stop`, { method: 'POST' })
-  if (!r.ok) {
-    const t = await r.text()
-    let err = t
-    try {
-      const j = JSON.parse(t) as { error?: string }
-      if (j.error) err = j.error
-    } catch {
-      /* ignore */
-    }
-    throw new Error(err)
-  }
+  requestEsiExportStop()
 }
 
 /** Принудительно остановить ESI-экспорт без сборки xlsx. */
 export async function postEsiExportForceStop(): Promise<void> {
-  if (!isDevExportServer) {
-    return
-  }
-  const r = await fetch(`${BASE}/esi-stop-force`, { method: 'POST' })
-  if (!r.ok) {
-    const t = await r.text()
-    let err = t
-    try {
-      const j = JSON.parse(t) as { error?: string }
-      if (j.error) err = j.error
-    } catch {
-      /* ignore */
-    }
-    throw new Error(err)
-  }
+  requestEsiExportForceStop()
 }
 
-/** Буфер серверных логов ESI-экспорта + прогресс (страницы ордеров / типы). */
+/** Логи и прогресс ESI-экспорта (в памяти процесса клиента). */
 export async function fetchEsiDevLogs(): Promise<{
   lines: string[]
   progress: EsiExportProgressState
 }> {
-  const idle = { lines: [] as string[], progress: { ...ESI_EXPORT_PROGRESS_IDLE } }
-  if (isDevExportServer) {
-    const r = await fetch(`${BASE}/esi-logs`)
-    if (r.ok) {
-      const j = (await r.json()) as {
-        lines?: string[]
-        progress?: EsiExportProgressState
-      }
-      const progress = { ...ESI_EXPORT_PROGRESS_IDLE, ...(j.progress ?? {}) }
-      return {
-        lines: j.lines ?? [],
-        progress,
-      }
-    }
+  const { lines } = getEsiDevLogLines()
+  const progress = {
+    ...ESI_EXPORT_PROGRESS_IDLE,
+    ...getEsiExportProgressState(),
   }
-  return idle
+  return { lines, progress }
 }
 
 /**
- * Собрать ликвидность с официального ESI (только `npm run dev`).
- * Пишет файл в `exports/` и возвращает метаданные.
+ * Собрать ликвидность с официального ESI в браузере (GitHub Pages и dev).
  */
 export async function buildEsiLiquidityToExports(opts: {
   regionId: number
@@ -171,40 +143,32 @@ export async function buildEsiLiquidityToExports(opts: {
   /** location_id торгового хаба для фильтрации ордеров. */
   tradeHubLocationId?: number
 }): Promise<EsiLiquidityResult> {
-  if (!isDevExportServer) {
-    throw new Error(
-      'Выгрузка ESI доступна только в режиме разработки (npm run dev).'
-    )
-  }
-  const r = await fetch(`${BASE}/esi-liquidity`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      regionId: opts.regionId,
-      fileName: opts.fileName,
-      historyDays: opts.historyDays,
-      includeOrderSnapshot: opts.includeOrderSnapshot === true,
-      tradeHubOnly: opts.tradeHubOnly === true,
-      tradeHubLocationId:
-        typeof opts.tradeHubLocationId === 'number' && Number.isFinite(opts.tradeHubLocationId)
-          ? Math.floor(opts.tradeHubLocationId)
-          : undefined,
-    }),
+  clearEsiDevLogs()
+  const historyDays =
+    opts.historyDays === 2 || opts.historyDays === 7 || opts.historyDays === 30
+      ? opts.historyDays
+      : 30
+  const { buffer, rowCount, partial } = await buildEsiLiquidityXlsx(opts.regionId, {
+    historyDays,
+    includeOrderSnapshot: opts.includeOrderSnapshot === true,
+    tradeHubOnly: opts.tradeHubOnly === true,
+    tradeHubLocationId:
+      typeof opts.tradeHubLocationId === 'number' && Number.isFinite(opts.tradeHubLocationId)
+        ? Math.floor(opts.tradeHubLocationId)
+        : undefined,
   })
-  const t = await r.text()
-  if (!r.ok) {
-    let err = t
-    try {
-      const j = JSON.parse(t) as { error?: string }
-      if (j.error) err = j.error
-    } catch {
-      /* ignore */
-    }
-    throw new Error(err)
+  const fileName = defaultEsiLiquidityFileName(opts.regionId, {
+    tradeHubOnly: opts.tradeHubOnly,
+    fileName: opts.fileName,
+  })
+  return {
+    ok: true,
+    fileName,
+    bytes: buffer.byteLength,
+    rowCount,
+    partial,
+    buffer,
   }
-  const j = JSON.parse(t) as EsiLiquidityResult
-  j.partial ??= false
-  return j
 }
 
 /** Селектор: все известные регионы + (опц.) кастом в будущем */

@@ -1,23 +1,12 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { IncomingMessage, ServerResponse, Server } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { watch as fsWatch } from 'node:fs'
 import fs from 'node:fs/promises'
 import { URL } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { migrateColumnFiltersRatioToPercent } from './src/lib/filterPercentMigration'
-import {
-  buildEsiLiquidityXlsx,
-  clearEsiDevLogs,
-  getEsiDevLogLines,
-  getEsiExportProgressState,
-  isEsiForceStopError,
-  logEsiExportException,
-  requestEsiExportForceStop,
-  requestEsiExportStop,
-} from './src/lib/dev/esiLiquidityExport'
-import { EXPORT_REGIONS } from './src/lib/exportRegions'
 
 const __filename = fileURLToPath(import.meta.url)
 const projectRoot = path.resolve(path.dirname(__filename), '.')
@@ -47,25 +36,6 @@ function isSafeMarketLogFileName(name: string): boolean {
   if (trimmed.includes('/') || trimmed.includes('\\')) return false
   if (!/\.txt$/i.test(trimmed)) return false
   return true
-}
-
-function formatFileDateRu(d: Date): string {
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = String(d.getFullYear())
-  return `${dd}.${mm}.${yyyy}`
-}
-
-/** Только [a-zA-Z0-9._-] — иначе `isSafeFileName` отклонит `liquidity-esi-…`. */
-function toSafeFileToken(v: string): string {
-  const cleaned = v
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, ' ')
-    // Без «._» как диапазона: иначе в класс попадает почти весь ASCII и ломается санитизация.
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return cleaned || 'region'
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer> {
@@ -103,21 +73,11 @@ function applyDevCors(
   return { handled: false }
 }
 
-/** Долгий ESI-экспорт (минуты) — не обрывать сокет по умолчанию (Node 20: requestTimeout 300s). */
-function extendServerTimeoutsForEsiExport(httpServer: Server | null | undefined): void {
-  if (!httpServer) return
-  httpServer.setTimeout(45 * 60 * 1000)
-  const s = httpServer as Server & { requestTimeout?: number; headersTimeout?: number }
-  if (typeof s.requestTimeout === 'number') s.requestTimeout = 0
-  if (typeof s.headersTimeout === 'number') s.headersTimeout = 0
-}
-
 function devExportPlugin(): Plugin {
   return {
     name: 'dev-export-exports',
     configureServer(server) {
       void fs.mkdir(exportsDir, { recursive: true })
-      extendServerTimeoutsForEsiExport(server.httpServer)
       server.middlewares.use(
         (req: IncomingMessage, res: ServerResponse, next: () => void) => {
           if (!req.url) return next()
@@ -317,58 +277,6 @@ function devExportPlugin(): Plugin {
               }
             }
 
-            if (req.method === 'POST' && pathname === '/__dev/export/esi-stop') {
-              try {
-                requestEsiExportStop()
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(JSON.stringify({ ok: true }))
-              } catch (e) {
-                res.statusCode = 500
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(
-                  JSON.stringify({
-                    error: e instanceof Error ? e.message : 'esi stop failed',
-                  })
-                )
-              }
-              return
-            }
-
-            if (req.method === 'POST' && pathname === '/__dev/export/esi-stop-force') {
-              try {
-                requestEsiExportForceStop()
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(JSON.stringify({ ok: true }))
-              } catch (e) {
-                res.statusCode = 500
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(
-                  JSON.stringify({
-                    error: e instanceof Error ? e.message : 'esi stop-force failed',
-                  })
-                )
-              }
-              return
-            }
-
-            if (req.method === 'GET' && pathname === '/__dev/export/esi-logs') {
-              try {
-                const { lines } = getEsiDevLogLines()
-                const progress = getEsiExportProgressState()
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(JSON.stringify({ lines, progress }))
-              } catch (e) {
-                res.statusCode = 500
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(
-                  JSON.stringify({
-                    error: e instanceof Error ? e.message : 'esi logs failed',
-                  })
-                )
-              }
-              return
-            }
-
             if (req.method === 'GET' && pathname.startsWith('/__dev/export/file/')) {
               const raw = decodeURIComponent(
                 pathname.slice('/__dev/export/file/'.length) ?? ''
@@ -464,145 +372,6 @@ function devExportPlugin(): Plugin {
                 )
               }
               return
-            }
-
-            if (req.method === 'POST' && pathname === '/__dev/export/esi-liquidity') {
-              const esiPostStart = Date.now()
-              type EsiBody = {
-                regionId?: number
-                historyDays?: number
-                includeOrderSnapshot?: boolean
-                tradeHubOnly?: boolean
-                tradeHubLocationId?: number
-                fileName?: string
-              }
-              let raw: string
-              try {
-                raw = (await readBody(req)).toString('utf8')
-              } catch (e) {
-                clearEsiDevLogs()
-                logEsiExportException('readBody', e)
-                res.statusCode = 500
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({
-                    error:
-                      e instanceof Error
-                        ? e.message
-                        : 'не удалось прочитать тело запроса',
-                  })
-                )
-              }
-              let j: EsiBody
-              try {
-                j = JSON.parse(raw) as EsiBody
-              } catch (e) {
-                clearEsiDevLogs()
-                logEsiExportException('JSON тела', e)
-                res.statusCode = 400
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({
-                    error: 'неверный JSON в теле POST (пусто или битая строка)',
-                  })
-                )
-              }
-              const rid = j.regionId
-              if (
-                typeof rid !== 'number' ||
-                !Number.isInteger(rid) ||
-                rid <= 0 ||
-                rid > 99_999_999
-              ) {
-                res.statusCode = 400
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({ error: 'regionId: positive integer required' })
-                )
-              }
-              clearEsiDevLogs()
-              console.log(
-                `[ESI export] dev сервер: POST /esi-liquidity regionId=${rid} — старт`
-              )
-              try {
-                const historyDays =
-                  j.historyDays === 2 || j.historyDays === 7 || j.historyDays === 30
-                    ? j.historyDays
-                    : 30
-                const { buffer, rowCount, partial } = await buildEsiLiquidityXlsx(rid, {
-                  historyDays,
-                  includeOrderSnapshot: j.includeOrderSnapshot === true,
-                  tradeHubOnly: j.tradeHubOnly === true,
-                  tradeHubLocationId:
-                    typeof j.tradeHubLocationId === 'number' && Number.isFinite(j.tradeHubLocationId)
-                      ? Math.floor(j.tradeHubLocationId)
-                      : undefined,
-                })
-                const regionMeta = EXPORT_REGIONS.find((x) => x.esiRegionId === rid)
-                const fileRegionToken =
-                  j.tradeHubOnly === true && regionMeta?.tradeHubName
-                    ? toSafeFileToken(regionMeta.tradeHubName)
-                    : toSafeFileToken(regionMeta?.label ?? String(rid))
-                const baseName =
-                  typeof j.fileName === 'string' &&
-                  /^[a-zA-Z0-9._-]+\.xlsx$/.test(j.fileName)
-                    ? j.fileName
-                    : `liquidity-esi-${fileRegionToken}-${formatFileDateRu(new Date())}.xlsx`
-                if (!isSafeFileName(baseName)) {
-                  res.statusCode = 400
-                  return res.end('bad filename')
-                }
-                const filePath = path.join(exportsDir, baseName)
-                if (!isUnderExportsDir(filePath)) {
-                  res.statusCode = 400
-                  return res.end('bad path')
-                }
-                await fs.mkdir(exportsDir, { recursive: true })
-                await fs.writeFile(filePath, buffer)
-                const totalMs = Date.now() - esiPostStart
-                console.log(
-                  `[ESI export] dev сервер: готово ${baseName} (${rowCount} строк, ${buffer.length} B${partial ? ', частично' : ''}) за ${totalMs} ms`
-                )
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({
-                    ok: true,
-                    fileName: baseName,
-                    bytes: buffer.length,
-                    rowCount,
-                    partial,
-                  })
-                )
-              } catch (e) {
-                const msg = e instanceof Error ? e.message : 'esi export failed'
-                const ms = Date.now() - esiPostStart
-                if (isEsiForceStopError(e)) {
-                  console.log(
-                    `[ESI export] dev сервер: POST /esi-liquidity — stop-force за ${ms} ms`
-                  )
-                  res.statusCode = 409
-                  res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                  return res.end(
-                    JSON.stringify({
-                      error: msg,
-                      stopped: true,
-                      force: true,
-                    })
-                  )
-                }
-                logEsiExportException('сборка ESI / запись файла', e)
-                console.error(
-                  `[ESI export] dev сервер: POST /esi-liquidity — ошибка за ${ms} ms:`,
-                  e
-                )
-                res.statusCode = 502
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                return res.end(
-                  JSON.stringify({
-                    error: msg,
-                  })
-                )
-              }
             }
 
             next()
