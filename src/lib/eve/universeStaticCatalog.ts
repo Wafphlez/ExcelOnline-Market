@@ -12,6 +12,8 @@ type UniverseStaticCategory = {
   name: string
 }
 
+import { publicAssetUrl } from '../publicAssetUrl'
+
 type UniverseStaticCatalogRaw = {
   types?: Record<string, UniverseStaticType>
   groups?: Record<string, UniverseStaticGroup>
@@ -41,10 +43,11 @@ function toNumberMap<T>(
 }
 
 async function loadCatalogRaw(): Promise<UniverseStaticCatalogRaw> {
-  const res = await fetch('/esi-universe-static.json', { cache: 'force-cache' })
+  const url = publicAssetUrl('esi-universe-static.json')
+  const res = await fetch(url, { cache: 'force-cache' })
   if (!res.ok)
   {
-    throw new Error(`Не найден статический ESI-каталог: /esi-universe-static.json (HTTP ${ res.status })`)
+    throw new Error(`Не найден статический ESI-каталог: ${ url } (HTTP ${ res.status })`)
   }
   return (await res.json()) as UniverseStaticCatalogRaw
 }

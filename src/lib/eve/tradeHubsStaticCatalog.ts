@@ -1,6 +1,8 @@
 type RegionInfo = { name: string }
 type LocationInfo = { name: string; region_id: number }
 
+import { publicAssetUrl } from '../publicAssetUrl'
+
 type TradeHubsStaticRaw = {
   regions?: Record<string, RegionInfo>
   stations?: Record<string, LocationInfo>
@@ -31,7 +33,9 @@ export async function loadTradeHubsStaticCatalog(): Promise<TradeHubsStaticCatal
   if (catalogPromise) return catalogPromise
   catalogPromise = (async () =>
   {
-    const res = await fetch('/esi-trade-hubs-static.json', { cache: 'force-cache' })
+    const res = await fetch(publicAssetUrl('esi-trade-hubs-static.json'), {
+      cache: 'force-cache',
+    })
     if (!res.ok)
     {
       return { regions: new Map(), stations: new Map(), structures: new Map() }
