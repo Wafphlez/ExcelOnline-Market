@@ -42,6 +42,7 @@ export default function App(): JSX.Element
   const [theme, setTheme] = useState<AppThemeId>(() => readStoredAppTheme())
   const [bootMessage, setBootMessage] = useState<string | null>(null)
   const [uiHidden, setUiHidden] = useState(false)
+  const [bottomNebulaEnabled, setBottomNebulaEnabled] = useState(true)
 
   useEffect(() => {
     applyAppThemeToDocument(theme)
@@ -61,7 +62,9 @@ export default function App(): JSX.Element
   }, [])
 
   return (
-    <div className="min-h-screen eve-ui-root text-white lg:h-screen lg:overflow-hidden lg:flex lg:flex-col">
+    <div className={ `min-h-screen eve-ui-root text-white lg:h-screen lg:overflow-hidden lg:flex lg:flex-col ${
+      bottomNebulaEnabled ? '' : 'nebula-bottom-off'
+    }` }>
       <div className="space-backdrop" aria-hidden>
         <div className="space-backdrop-flicker-a" />
         <div className="space-backdrop-flicker-b" />
@@ -94,6 +97,18 @@ export default function App(): JSX.Element
                 title="Скрыть панели и контент, оставить только фон"
               >
                 Скрыть UI
+              </button>
+              <button
+                type="button"
+                onClick={ () => setBottomNebulaEnabled((current) => !current) }
+                className={ `rounded-md border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 focus-visible:ring-offset-1 focus-visible:ring-offset-eve-surface ${
+                  bottomNebulaEnabled
+                    ? 'border-eve-accent bg-eve-accent-muted text-eve-accent'
+                    : 'border-eve-border/80 bg-eve-surface/45 text-eve-muted hover:border-eve-accent/45 hover:text-eve-bright'
+                }` }
+                title={ bottomNebulaEnabled ? 'Выключить нижнее облако' : 'Включить нижнее облако' }
+              >
+                Облако низ: { bottomNebulaEnabled ? 'ON' : 'OFF' }
               </button>
               <span className="eve-kicker">Theme</span>
               <div className="inline-flex flex-wrap items-center gap-1.5">
