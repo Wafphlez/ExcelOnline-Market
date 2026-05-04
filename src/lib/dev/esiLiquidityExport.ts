@@ -577,6 +577,102 @@ function liquidityFromHistory(
 
 const UNBOUNDED_ORDER_PAGES_SAFETY = 10_000
 
+/** Пробные запросы стр. 10, 20, … пока не «нет страницы» — оценка верхней границы для ETA и шкалы. */
+const ORDER_PAGE_PROBE_STEP = 10
+
+type OrderPageProbeCacheEntry = {
+  rows: EsiMarketOrder[]
+  endOfSide: boolean
+  noSuchPage?: boolean
+}
+
+function setOrderSidePageBarEstimate(side: 'sell' | 'buy', pages: number): void {
+  const n = Math.max(
+    1,
+    Math.min(Math.floor(pages), UNBOUNDED_ORDER_PAGES_SAFETY)
+  )
+  if (side === 'sell') esiProgress.orderSellPageBarMax = n
+  else esiProgress.orderBuyPageBarMax = n
+}
+
+/** Если последовательный обход выходит за оценку проб — расширяем знаменатель шкалы. */
+function bumpOrderSideBarEstIfPastProbe(side: 'sell' | 'buy', completedPage: number): void {
+  const key =
+    side === 'sell' ? 'orderSellPageBarMax' : 'orderBuyPageBarMax'
+  if (completedPage >= esiProgress[key]) {
+    esiProgress[key] = Math.min(
+      completedPage + ORDER_PAGE_PROBE_STEP,
+      UNBOUNDED_ORDER_PAGES_SAFETY
+    )
+  }
+}
+
+/**
+ * Запросы стр. step, 2*step, … пока страница существует и не последняя по объёму (<1000 ордеров).
+ * Возвращает верхнюю оценку числа страниц и кэш для последующего полного прохода 1..N без повторных GET на стр. step.
+ */
+async function probeOrderSideUpperBoundAndCache(
+  regionId: number,
+  side: 'sell' | 'buy',
+  shouldAbort?: () => boolean
+): Promise<{ upperBound: number; cache: Map<number, OrderPageProbeCacheEntry> }> {
+  const cache = new Map<number, OrderPageProbeCacheEntry>()
+  let p = ORDER_PAGE_PROBE_STEP
+  for (;;)
+  {
+    assertNotEsiForceStopped()
+    if (isEsiStopRequested())
+    {
+      esiDevLog(`probe ${side}: стоп — оценка ≤ ${Math.max(1, p - ORDER_PAGE_PROBE_STEP)}`)
+      return {
+        upperBound: Math.max(1, p - ORDER_PAGE_PROBE_STEP),
+        cache,
+      }
+    }
+    if (p > UNBOUNDED_ORDER_PAGES_SAFETY)
+    {
+      esiDevLog(`probe ${side}: достигнут лимит безопасности ${UNBOUNDED_ORDER_PAGES_SAFETY}`)
+      return { upperBound: UNBOUNDED_ORDER_PAGES_SAFETY, cache }
+    }
+    let data: unknown
+    try {
+      data = await fetchOrderPageForSide(side, regionId, p, shouldAbort)
+    } catch (e) {
+      if (isEsiStopRequested())
+      {
+        return {
+          upperBound: Math.max(1, p - 1),
+          cache,
+        }
+      }
+      throw e
+    }
+    const parsed = parseEsiOrderPage(data, p, side, regionId)
+    cache.set(p, {
+      rows: parsed.rows,
+      endOfSide: parsed.endOfSide,
+      noSuchPage: parsed.noSuchPage,
+    })
+    esiDevLog(
+      `probe ${side} p.${p}: rows=${parsed.rows.length} end=${parsed.endOfSide}${parsed.noSuchPage ? ' noSuchPage' : ''}`
+    )
+    if (parsed.endOfSide)
+    {
+      const upper =
+        parsed.noSuchPage || parsed.rows.length === 0 ? Math.max(0, p - 1) : p
+      const bounded = Math.min(
+        Math.max(upper, 1),
+        UNBOUNDED_ORDER_PAGES_SAFETY
+      )
+      esiDevLog(
+        `probe ${side}: верхняя оценка страниц ≈ ${bounded} (ETA / шкала)`
+      )
+      return { upperBound: bounded, cache }
+    }
+    p += ORDER_PAGE_PROBE_STEP
+  }
+}
+
 /** Повтор страницы ордеров вне `esiFetch` (сеть, неожиданный отбор и т.д.). */
 const ORDER_PAGE_OUTER_RETRIES = 3
 const ORDER_PAGE_OUTER_BACKOFF_MS = 1_200
@@ -688,7 +784,7 @@ function setOrderSidePageBarActual(side: 'sell' | 'buy', page: number): void {
   }
 }
 
-/** Строгая пагинация до конца ESI: 1,2,... пока не endOfSide. */
+/** Строгая пагинация до конца ESI: 1,2,... пока не endOfSide. `probeCache` — страницы со стыковочного шага (10, 20, …). */
 async function fetchOrderBookSideSequential(
   regionId: number,
   side: 'sell' | 'buy',
@@ -697,7 +793,8 @@ async function fetchOrderBookSideSequential(
     side: 'sell' | 'buy',
     page: number,
     rows: EsiMarketOrder[]
-  ) => void
+  ) => void,
+  probeCache?: Map<number, OrderPageProbeCacheEntry>
 ): Promise<EsiMarketOrder[]> {
   const all: EsiMarketOrder[] = []
   const hardCap = UNBOUNDED_ORDER_PAGES_SAFETY
@@ -716,22 +813,32 @@ async function fetchOrderBookSideSequential(
       )
       return all
     }
-    let data: unknown
-    try {
-      data = await fetchOrderPageForSide(side, regionId, page)
-    } catch (e) {
-      if (isEsiStopRequested()) {
-        esiDevLog(`ордера ${side}: прервано — ${all.length} по стороне`)
-        return all
+    const cached = probeCache?.get(page)
+    let parsed: EsiOrderPageParseResult
+    if (cached)
+    {
+      parsed = {
+        rows: cached.rows,
+        endOfSide: cached.endOfSide,
+        noSuchPage: cached.noSuchPage,
       }
-      throw e
+      esiDevLog(
+        `ордера ${side} page=${page} — из пробного кэша (${parsed.rows.length} строк)`
+      )
+    } else
+    {
+      let data: unknown
+      try {
+        data = await fetchOrderPageForSide(side, regionId, page)
+      } catch (e) {
+        if (isEsiStopRequested()) {
+          esiDevLog(`ордера ${side}: прервано — ${all.length} по стороне`)
+          return all
+        }
+        throw e
+      }
+      parsed = parseEsiOrderPage(data, page, side, regionId)
     }
-    const parsed = parseEsiOrderPage(
-      data,
-      page,
-      side,
-      regionId
-    )
     const { rows, endOfSide } = parsed
     onPageCompleted(page)
     onPageRows?.(side, page, rows)
@@ -741,6 +848,9 @@ async function fetchOrderBookSideSequential(
       esiDevLog(
         `ордера region=${regionId} ${side} page=${page} — +${rows.length} (всего по ${side} ${all.length})`
       )
+    }
+    if (!endOfSide) {
+      bumpOrderSideBarEstIfPastProbe(side, page)
     }
     if (endOfSide) {
       setOrderSidePageBarActual(side, page)
@@ -774,6 +884,18 @@ export async function fetchAllMarketOrders(
   esiProgress.buyPage = 0
   esiProgress.orderSellPageBarMax = 0
   esiProgress.orderBuyPageBarMax = 0
+  esiDevLog(
+    `оценка объёма ордеров: sell и buy — пробные страницы ${ORDER_PAGE_PROBE_STEP}, 20, … до конца пагинации`
+  )
+  const [sellProbe, buyProbe] = await Promise.all([
+    probeOrderSideUpperBoundAndCache(regionId, 'sell'),
+    probeOrderSideUpperBoundAndCache(regionId, 'buy'),
+  ])
+  setOrderSidePageBarEstimate('sell', sellProbe.upperBound)
+  setOrderSidePageBarEstimate('buy', buyProbe.upperBound)
+  esiDevLog(
+    `оценка max страниц: sell ≤ ${sellProbe.upperBound}, buy ≤ ${buyProbe.upperBound} (шкала и ETA до полного прохода 1…N)`
+  )
   const [sellOrders, buyOrders] = await Promise.all([
     fetchOrderBookSideSequential(
       regionId,
@@ -781,7 +903,8 @@ export async function fetchAllMarketOrders(
       (p) => {
         esiProgress.sellPage = p
       },
-      onPageRows
+      onPageRows,
+      sellProbe.cache
     ),
     fetchOrderBookSideSequential(
       regionId,
@@ -789,7 +912,8 @@ export async function fetchAllMarketOrders(
       (p) => {
         esiProgress.buyPage = p
       },
-      onPageRows
+      onPageRows,
+      buyProbe.cache
     ),
   ])
   return [...sellOrders, ...buyOrders]

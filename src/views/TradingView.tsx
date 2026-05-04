@@ -3,6 +3,7 @@ import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
 import { ArrowLeftRight, FolderOpen, RefreshCw } from 'lucide-react'
 import { ExportBar } from '../components/ExportBar'
+import { FileDropzone } from '../components/FileDropzone'
 import { MarketTable } from '../components/MarketTable'
 import { computeAllMetrics } from '../lib/computeMetrics'
 import { computeEntryScore } from '../lib/entryScore'
@@ -308,6 +309,13 @@ export function TradingView()
     leftFile: string
     rightFile: string
   } | null>(null)
+  /** В проде — буферы из дропзон; в dev не используются (файлы читаются из exports/ по имени). */
+  const [compareLeftBuffer, setCompareLeftBuffer] = useState<ArrayBuffer | null>(
+    null
+  )
+  const [compareRightBuffer, setCompareRightBuffer] = useState<ArrayBuffer | null>(
+    null
+  )
   const [isCrossRegionMode, setIsCrossRegionMode] = useState(false)
   const [priceSellHeader, setPriceSellHeader] = useState<string | null>(null)
   const [priceBuyHeader, setPriceBuyHeader] = useState<string | null>(null)
@@ -604,6 +612,10 @@ export function TradingView()
       setCompareLeftRowsCache(null)
       setCompareRightRowsCache(null)
       setCompareAppliedFiles(null)
+      setCompareLeftFile('')
+      setCompareRightFile('')
+      setCompareLeftBuffer(null)
+      setCompareRightBuffer(null)
       setPriceSellHeader(null)
       setPriceBuyHeader(null)
       setCopiedNameKeys(new Set())
@@ -619,6 +631,40 @@ export function TradingView()
     }
   }, [mapRowsFromBuffer])
 
+  const onProdCrossLeftFile = useCallback((file: File) =>
+  {
+    void (async () =>
+    {
+      try
+      {
+        const buf = await file.arrayBuffer()
+        setCompareLeftFile(file.name)
+        setCompareLeftBuffer(buf)
+        setExportMsg(null)
+      } catch
+      {
+        setExportMsg('Не удалось прочитать файл региона 1.')
+      }
+    })()
+  }, [])
+
+  const onProdCrossRightFile = useCallback((file: File) =>
+  {
+    void (async () =>
+    {
+      try
+      {
+        const buf = await file.arrayBuffer()
+        setCompareRightFile(file.name)
+        setCompareRightBuffer(buf)
+        setExportMsg(null)
+      } catch
+      {
+        setExportMsg('Не удалось прочитать файл региона 2.')
+      }
+    })()
+  }, [])
+
   const onApplyCrossRegionFiles = useCallback(async () =>
   {
     if (!compareLeftFile || !compareRightFile) return
@@ -627,24 +673,43 @@ export function TradingView()
       setExportMsg('Выберите два разных файла для сравнения регионов.')
       return
     }
+    if (!isDevExportServer)
+    {
+      if (!compareLeftBuffer || !compareRightBuffer)
+      {
+        setExportMsg(
+          'Перетащите или выберите два .xlsx/.xls: по одному в зоне «Регион 1» и «Регион 2».'
+        )
+        return
+      }
+    }
     setError(null)
     setExportMsg(null)
     setLoading(true)
     try
     {
-      const [leftRes, rightRes] = await Promise.all([
-        fetch(devExportFileUrl(compareLeftFile)),
-        fetch(devExportFileUrl(compareRightFile)),
-      ])
-      if (!leftRes.ok || !rightRes.ok)
+      let leftBuf: ArrayBuffer
+      let rightBuf: ArrayBuffer
+      if (isDevExportServer)
       {
-        setExportMsg('Один из выбранных файлов не найден в exports/. Обновите список.')
-        return
+        const [leftRes, rightRes] = await Promise.all([
+          fetch(devExportFileUrl(compareLeftFile)),
+          fetch(devExportFileUrl(compareRightFile)),
+        ])
+        if (!leftRes.ok || !rightRes.ok)
+        {
+          setExportMsg('Один из выбранных файлов не найден в exports/. Обновите список.')
+          return
+        }
+        ;[leftBuf, rightBuf] = await Promise.all([
+          leftRes.arrayBuffer(),
+          rightRes.arrayBuffer(),
+        ])
+      } else
+      {
+        leftBuf = compareLeftBuffer!
+        rightBuf = compareRightBuffer!
       }
-      const [leftBuf, rightBuf] = await Promise.all([
-        leftRes.arrayBuffer(),
-        rightRes.arrayBuffer(),
-      ])
       const [leftRows, rightRows] = [
         mapRowsFromBuffer(leftBuf),
         mapRowsFromBuffer(rightBuf),
@@ -671,6 +736,8 @@ export function TradingView()
   }, [
     compareLeftFile,
     compareRightFile,
+    compareLeftBuffer,
+    compareRightBuffer,
     mapRowsFromBuffer,
     applyCrossRegionComparison,
   ])
@@ -682,6 +749,13 @@ export function TradingView()
     const nextRight = compareLeftFile
     setCompareLeftFile(nextLeft)
     setCompareRightFile(nextRight)
+    if (!isDevExportServer)
+    {
+      const lb = compareLeftBuffer
+      const rb = compareRightBuffer
+      setCompareLeftBuffer(rb)
+      setCompareRightBuffer(lb)
+    }
     if (
       compareAppliedFiles &&
       compareLeftRowsCache &&
@@ -706,6 +780,8 @@ export function TradingView()
   }, [
     compareLeftFile,
     compareRightFile,
+    compareLeftBuffer,
+    compareRightBuffer,
     compareAppliedFiles,
     compareLeftRowsCache,
     compareRightRowsCache,
@@ -1035,6 +1111,87 @@ export function TradingView()
                 onMessageChange={ setExportMsg }
               />
             </div>
+            { !isDevExportServer && (
+            <div className="eve-panel p-1.5">
+              <section className="@container glass-subtle mb-3 p-2.5">
+                <h3 className="eve-section-title mb-2">Торговля между регионами</h3>
+                <p className="mb-3 text-[10px] leading-snug text-eve-muted/90">
+                  Два экспорта ликвидности (.xlsx / .xls):{' '}
+                  <span className="text-eve-muted">регион 1</span> — откуда везём товар,{' '}
+                  <span className="text-eve-muted">регион 2</span> — рынок продажи;
+                  таблица покажет совпадающие типы и маржу между ними.
+                </p>
+                <div className="grid grid-cols-1 gap-3 @[520px]:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-eve-muted">Регион 1 — источник</p>
+                    <FileDropzone
+                      onFile={ onProdCrossLeftFile }
+                      disabled={ loading }
+                    />
+                    <p
+                      className="truncate text-[11px] text-eve-bright/85"
+                      title={ compareLeftFile || undefined }
+                    >
+                      { compareLeftFile ? compareLeftFile : 'Файл не выбран' }
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-eve-muted">Регион 2 — целевой рынок</p>
+                    <FileDropzone
+                      onFile={ onProdCrossRightFile }
+                      disabled={ loading }
+                    />
+                    <p
+                      className="truncate text-[11px] text-eve-bright/85"
+                      title={ compareRightFile || undefined }
+                    >
+                      { compareRightFile ? compareRightFile : 'Файл не выбран' }
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-eve-border/35 pt-3">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <div
+                      className="inline-flex min-h-[2.125rem] min-w-0 max-w-[min(100%,14rem)] items-center truncate rounded-md border border-eve-border/55 bg-eve-surface/55 px-2 text-xs font-semibold text-eve-gold"
+                      title="Направление сравнения"
+                    >
+                      { compareLeftRegionLabel } → { compareRightRegionLabel }
+                    </div>
+                    <button
+                      type="button"
+                      onClick={ onSwapCompareFiles }
+                      disabled={
+                        loading ||
+                        !compareLeftFile ||
+                        !compareRightFile ||
+                        !compareLeftBuffer ||
+                        !compareRightBuffer
+                      }
+                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/58 p-1.5 text-eve-bright/95 shadow-glass-subtle transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
+                      title="Поменять регионы местами"
+                      aria-label="Поменять выбранные регионы местами"
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={ () => void onApplyCrossRegionFiles() }
+                    disabled={
+                      loading ||
+                      !compareLeftFile ||
+                      !compareRightFile ||
+                      !compareLeftBuffer ||
+                      !compareRightBuffer
+                    }
+                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
+                  >
+                    Применить сравнение
+                  </button>
+                </div>
+              </section>
+            </div>
+            ) }
             { isDevExportServer && (
             <div className="eve-panel p-1.5">
                   <section className="@container glass-subtle mb-3 p-2.5">
