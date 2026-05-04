@@ -1,5 +1,5 @@
 # Сборка и публикация на GitHub Pages (ветка main).
-# Репозиторий → Settings → Pages: Source = GitHub Actions.
+# Репозиторий → Settings → Pages: Source = GitHub Actions (иначе deploy-pages даст 404).
 #
 # Секреты (Settings → Secrets and variables → Actions):
 #   VITE_EVE_SSO_CLIENT_ID — Client ID приложения EVE (Third Party).
@@ -54,6 +54,9 @@ jobs:
 
   deploy:
     needs: build
+    permissions:
+      pages: write
+      id-token: write
     runs-on: ubuntu-latest
     environment:
       name: github-pages
