@@ -7,6 +7,7 @@ describe('mapRawRow', () => {
       bame: 'Item A',
       day_volume: 5,
       day_turnover: 1,
+      packaged_volume: 2500,
       price: 100,
       price_sell: 120,
       price_bay: 100,
@@ -15,6 +16,7 @@ describe('mapRawRow', () => {
     if (m.ok) {
       expect(m.value.typeId).toBeNull()
       expect(m.value.name).toBe('Item A')
+      expect(m.value.packagedVolume).toBe(2500)
       expect(m.value.priceBuy).toBe(100)
       expect(m.value.priceSell).toBe(120)
       expect(m.value.dayTurnover).toBe(1_000_000)

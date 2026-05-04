@@ -9,6 +9,7 @@ function row(partial: Partial<MarketRow>): MarketRow {
     name: 't',
     dayVolume: 1,
     dayTurnover: 1_000_000,
+    packagedVolume: null,
     price: 100,
     priceSell: 100,
     priceBuy: 80,

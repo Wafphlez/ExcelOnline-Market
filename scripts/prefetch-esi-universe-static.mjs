@@ -153,9 +153,13 @@ async function main() {
   await runPool(typeIds, async (id, i) => {
     const j = await fetchJson(`/universe/types/${id}/`, { language: 'en' })
     const groupId = Number(j?.group_id)
+    const packagedVolumeRaw = Number(j?.packaged_volume)
+    const volumeRaw = Number(j?.volume)
     types[String(id)] = {
       name: typeof j?.name === 'string' ? j.name : `Type ${id}`,
       group_id: Number.isInteger(groupId) ? groupId : 0,
+      packaged_volume: Number.isFinite(packagedVolumeRaw) ? packagedVolumeRaw : undefined,
+      volume: Number.isFinite(volumeRaw) ? volumeRaw : undefined,
     }
     if ((i + 1) % 500 === 0 || i + 1 === typeIds.length)
     {

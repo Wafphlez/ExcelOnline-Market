@@ -41,6 +41,7 @@ import {
   formatInteger,
   formatPercent,
   formatRatio,
+  formatVolumeM3,
 } from '../lib/formatNumber'
 
 const EVE_TYCOON_MARKET = 'https://evetycoon.com/market/'
@@ -106,6 +107,10 @@ function formatByKindString(
   colId: ColumnId
 ): string {
   if (colId === 'name') return String(val ?? '')
+  if (colId === 'packagedVolume') {
+    const n = typeof val === 'number' ? val : null
+    return formatVolumeM3(n)
+  }
 
   const n = typeof val === 'number' ? val : null
   switch (kind) {

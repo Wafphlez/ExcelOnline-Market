@@ -99,6 +99,7 @@ function buildCrossRegionRows(
       // Ликвидность и «средняя» берём по целевому рынку (регион 2, куда продаём).
       dayVolume: r.dayVolume,
       dayTurnover: r.dayTurnover,
+      packagedVolume: r.packagedVolume ?? l.packagedVolume ?? null,
       price: r.price,
       // Для межрегионального сравнения: обе стороны — sell из выбранных регионов.
       priceSell: l.priceSell,

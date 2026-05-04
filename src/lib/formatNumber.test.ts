@@ -5,6 +5,7 @@ import {
   formatIsk,
   formatIskMillionsShort,
   formatPercent,
+  formatVolumeM3,
   normalizeFilterNumberValue,
   formatWithSpaces,
   parseNumberInput,
@@ -16,6 +17,7 @@ describe('formatFilterNumberDisplay', () => {
       '1 000 000 000'
     )
     expect(formatFilterNumberDisplay(20000, 'dayVolume')).toBe('20 000')
+    expect(formatFilterNumberDisplay(2500, 'packagedVolume')).toBe('2 500')
   })
   it('formats margin and spread in percent (0–100) for filter fields', () => {
     expect(formatFilterNumberDisplay(5, 'margin')).toBe('5,00') // 5 % 
@@ -27,6 +29,7 @@ describe('normalizeFilterNumberValue', () => {
   it('rounds non-decimal filter columns to integer', () => {
     expect(normalizeFilterNumberValue(1.7, 'dayVolume')).toBe(2)
     expect(normalizeFilterNumberValue(1.2e9, 'dayTurnover')).toBe(1_200_000_000)
+    expect(normalizeFilterNumberValue(12.345, 'packagedVolume')).toBe(12.35)
   })
   it('normalizes margin % and spread 0..100', () => {
     expect(normalizeFilterNumberValue(5.128, 'margin')).toBe(5.13)
@@ -59,6 +62,15 @@ describe('formatIsk', () => {
   it('hides fraction digits for values with 4+ integer digits', () => {
     expect(formatIsk(7_925)).toBe('7 925')
     expect(formatIsk(11_520_000)).toBe('11 520 000')
+  })
+})
+
+describe('formatVolumeM3', () => {
+  it('shows integer volumes without decimals', () => {
+    expect(formatVolumeM3(2500)).toBe('2 500')
+  })
+  it('shows fractional volumes with 2 decimals', () => {
+    expect(formatVolumeM3(2.5)).toBe('2,50')
   })
 })
 

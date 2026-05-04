@@ -11,6 +11,7 @@ describe('liquidityRowsToXlsxBuffer', () => {
         type_id: 34,
         day_volume: 10,
         day_turnover: 1.5,
+        packaged_volume: 2500,
         price: 100,
         price_sell: 102,
         price_bay: 99,

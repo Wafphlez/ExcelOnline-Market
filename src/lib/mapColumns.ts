@@ -17,6 +17,7 @@ const ALIAS_TO_FIELD: Record<
     | 'typeId'
     | 'dayVolume'
     | 'dayTurnover'
+    | 'packagedVolume'
     | 'price'
     | 'priceSell'
     | 'priceBuy'
@@ -43,6 +44,12 @@ const ALIAS_TO_FIELD: Record<
   dayvolume: 'dayVolume',
   day_turnover: 'dayTurnover',
   dayturnover: 'dayTurnover',
+  packaged_volume: 'packagedVolume',
+  packagedvolume: 'packagedVolume',
+  packaged_m3: 'packagedVolume',
+  volume_packaged: 'packagedVolume',
+  transport_volume: 'packagedVolume',
+  volume_m3: 'packagedVolume',
   price: 'price',
   avg_price: 'price',
   price_sell: 'priceSell',
@@ -141,6 +148,10 @@ export function mapRawRow(
       name: String(out.name),
       dayVolume: out.dayVolume as number,
       dayTurnover: excelMillionsToIsk(out.dayTurnover as number),
+      packagedVolume:
+        typeof out.packagedVolume === 'number' && Number.isFinite(out.packagedVolume)
+          ? out.packagedVolume
+          : null,
       price: out.price as number,
       priceSell: out.priceSell as number,
       priceBuy: out.priceBuy as number,

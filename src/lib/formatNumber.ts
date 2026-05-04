@@ -64,6 +64,12 @@ export function formatInteger(n: number | null | undefined): string {
   return formatWithSpaces(Math.round(n), 0)
 }
 
+export function formatVolumeM3(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—'
+  const hasFraction = Math.abs(n - Math.round(n)) > 1e-9
+  return formatWithSpaces(n, hasFraction ? 2 : 0)
+}
+
 function trimTrailingZerosAfterComma(s: string): string {
   const i = s.indexOf(',')
   if (i < 0) return s
@@ -106,7 +112,7 @@ export function formatCompactKmb(n: number): string {
  * (маржа: 5 = 5 %, спред: 0…100 = позиция buy…sell). Остальные колонки — целые.
  */
 export function filterColumnUsesDecimals(columnId: ColumnId): boolean {
-  return columnId === 'margin' // ввод с десятичной частью, % (5,5)
+  return columnId === 'margin' || columnId === 'packagedVolume'
 }
 
 /** Привязка введённого/прокрученного значения к целому или дробному по правилам колонки. */
@@ -116,6 +122,9 @@ export function normalizeFilterNumberValue(
 ): number {
   if (columnId === 'margin') {
     return Math.round(n * 100) / 100
+  }
+  if (columnId === 'packagedVolume') {
+    return Math.max(0, Math.round(n * 100) / 100)
   }
   if (columnId === 'buyToSellRatio') {
     return Math.max(0, Math.min(100, Math.round(n)))
@@ -132,6 +141,9 @@ export function formatFilterNumberDisplay(
   if (kind === 'text' || kind === 'market') return String(n)
   if (columnId === 'margin') {
     return formatWithSpaces(n, 2) // % в колонке уже подписаны
+  }
+  if (columnId === 'packagedVolume') {
+    return formatVolumeM3(n)
   }
   if (columnId === 'buyToSellRatio') {
     return formatWithSpaces(Math.round(n), 0) // 0…100

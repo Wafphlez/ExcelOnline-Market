@@ -79,20 +79,16 @@ export function EsiExportProgressPanel({
   const showUnifiedEta =
     (p.phase === 'orders' || p.phase === 'types') && p.maxOrderPages > 0
 
-  let etaNote = ''
   let etaValue: number | null = null
   if (showUnifiedEta) {
-    etaNote = 'все запросы ESI'
     etaValue = linearEtaRemaining(allReqP, Math.max(0, elapsedSec))
   } else if (p.phase === 'types' && p.typeTotal > 0) {
     // Фолбэк для редких состояний: если общий ETA недоступен, оставляем старую логику по типам.
-    etaNote = 'типы'
     etaValue =
       typesPhaseElapsedSec != null && typesPhaseElapsedSec > 0
         ? linearEtaRemaining(tp, typesPhaseElapsedSec)
         : null
   } else if (p.phase === 'orders' && p.maxOrderPages > 0) {
-    etaNote = 'ордера'
     etaValue = linearEtaRemaining(op, Math.max(0, elapsedSec))
   }
 
@@ -132,7 +128,7 @@ export function EsiExportProgressPanel({
             }
           >
             <span className="truncate text-[9px] uppercase tracking-wide text-eve-muted">
-              ETA{showEta ? ` (${etaNote})` : ''}
+              ETA
             </span>
             <span
               className={`font-semibold leading-tight ${showEta ? 'text-eve-accent/95' : 'text-eve-muted/50'}`}

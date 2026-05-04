@@ -6,6 +6,8 @@ export type MarketRow = {
   name: string
   dayVolume: number
   dayTurnover: number
+  /** Объём при перевозке, м3/шт (для кораблей — packaged volume). */
+  packagedVolume: number | null
   price: number
   priceSell: number
   priceBuy: number

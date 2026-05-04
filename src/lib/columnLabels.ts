@@ -45,6 +45,13 @@ export const COLUMN_DEFS: ColumnLabelDef[] = [
     kind: 'isk',
   },
   {
+    id: 'packagedVolume',
+    short: 'Объём перевозки, м3',
+    description:
+      'Объём при перевозке в м3 за единицу товара; для кораблей используется packaged volume.',
+    kind: 'ratio',
+  },
+  {
     id: 'price',
     short: 'Средняя цена, ISK',
     description: 'Средняя/типичная цена (как в файле), ISK.',

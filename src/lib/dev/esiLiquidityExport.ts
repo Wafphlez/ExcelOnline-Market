@@ -150,6 +150,8 @@ const UNIVERSE_STATIC_FILE = 'esi-universe-static.json'
 type EsiTypePayload = {
   name?: string
   group_id?: number
+  packaged_volume?: number
+  volume?: number
   [key: string]: unknown
 }
 type EsiTypeCacheFile = {
@@ -184,7 +186,12 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
       if (j && j.types && typeof j.types === 'object') {
         for (const [k, v] of Object.entries(j.types)) {
           const id = Number(k)
-          const entry = v as { name?: unknown; group_id?: unknown }
+          const entry = v as {
+            name?: unknown
+            group_id?: unknown
+            packaged_volume?: unknown
+            volume?: unknown
+          }
           if (
             Number.isInteger(id) &&
             entry &&
@@ -198,6 +205,18 @@ async function loadTypeNameCacheFromDiskIfNeeded(): Promise<void> {
               Number.isFinite(entry.group_id)
             ) {
               p.group_id = Math.floor(entry.group_id)
+            }
+            if (
+              typeof entry.packaged_volume === 'number' &&
+              Number.isFinite(entry.packaged_volume)
+            ) {
+              p.packaged_volume = entry.packaged_volume
+            }
+            if (
+              typeof entry.volume === 'number' &&
+              Number.isFinite(entry.volume)
+            ) {
+              p.volume = entry.volume
             }
             typePayloadById.set(id, p)
           }
@@ -523,6 +542,8 @@ export type LiquidityRow = {
   day_volume: number
   /** млн ISK, как в выгрузке для mapColumns (excelMillionsToIsk) */
   day_turnover: number
+  /** Объём при перевозке, м3/шт (для кораблей — packaged volume). */
+  packaged_volume: number | null
   price: number
   price_sell: number
   price_bay: number
@@ -890,6 +911,20 @@ async function fetchTypeNameAndHistory(
   return { name, type, hist }
 }
 
+function getTransportVolumeM3(typeId: number): number | null {
+  const payload = typePayloadById.get(typeId)
+  if (!payload) return null
+  const packaged = payload.packaged_volume
+  if (typeof packaged === 'number' && Number.isFinite(packaged) && packaged > 0) {
+    return packaged
+  }
+  const unpacked = payload.volume
+  if (typeof unpacked === 'number' && Number.isFinite(unpacked) && unpacked > 0) {
+    return unpacked
+  }
+  return null
+}
+
 /** Bid/ask — из **финального** агрегата по ордерам; история/имя — с префетча или свежий запрос. */
 function composeLiquidityRow(
   typeId: number,
@@ -915,6 +950,7 @@ function composeLiquidityRow(
     type_id: typeId,
     day_volume: liq.dayAvgVolume,
     day_turnover: liq.dayTurnoverMln,
+    packaged_volume: getTransportVolumeM3(typeId),
     price: liq.last3AvgPrice,
     price_sell: priceSell,
     price_bay: priceBuy,
@@ -1109,6 +1145,7 @@ export function liquidityRowsToXlsxBuffer(rows: LiquidityRow[]): Buffer {
     type_id: r.type_id,
     day_volume: r.day_volume,
     day_turnover: r.day_turnover,
+    packaged_volume: r.packaged_volume,
     price: r.price,
     price_sell: r.price_sell,
     price_bay: r.price_bay,
@@ -1156,6 +1193,7 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
         type_id: r.type_id,
         day_volume: r.day_volume,
         day_turnover: r.day_turnover,
+        packaged_volume: r.packaged_volume,
         price: r.price,
         price_sell: r.price_sell,
         price_bay: r.price_bay,
@@ -1178,6 +1216,7 @@ function liquidityXlsxFromRowsOrEmptyStopNote(
       type_id: 0,
       day_volume: 0,
       day_turnover: 0,
+      packaged_volume: null,
       price: 0,
       price_sell: 0,
       price_bay: 0,

@@ -13,6 +13,8 @@ export function getFilterColumnWheelStep(id: ColumnId): number {
     case 'typeId':
     case 'entryScore':
       return 1
+    case 'packagedVolume':
+      return 0.1
     case 'dayTurnover':
     case 'price':
     case 'priceBuy':
@@ -35,6 +37,7 @@ export function getFilterColumnWheelBounds(
       return { min: 0, max: 100 }
     case 'typeId':
     case 'dayVolume':
+    case 'packagedVolume':
     case 'dayTurnover':
     case 'price':
     case 'priceBuy':
