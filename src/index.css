@@ -227,6 +227,20 @@ body {
     --eve-nebula-bottom-opacity: 0;
   }
 
+  /**
+   * Canvas: полёт вперёд — звёзды из центра (см. StarfieldWarp.tsx).
+   */
+  .starfield-warp {
+    position: fixed;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    mix-blend-mode: screen;
+  }
+
   .space-backdrop {
     position: fixed;
     inset: 0;
