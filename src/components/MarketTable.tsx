@@ -616,7 +616,7 @@ export function MarketTable({
                     className={
                       filterThNarrow
                         ? 'w-10 min-w-10 max-w-10 border-b border-eve-border/60 bg-eve-elevated p-0.5'
-                        : 'border-b border-eve-border/60 bg-eve-elevated/92 p-1'
+                        : 'border-b border-eve-border/60 bg-eve-elevated p-1'
                     }
                   >
                     <NumberRangeFilterInputs

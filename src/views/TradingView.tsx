@@ -1178,7 +1178,6 @@ export function TradingView()
                       onOpenedExportFile={ onExportBarOpenedFile }
                       disabled={ loading }
                       hideLocalFileOpenSection
-                      hideMarketLogsSection
                       brokerFeePct={ brokerFeePct }
                       salesTaxPct={ salesTaxPct }
                       highPriceThresholdIsk={ highPriceThresholdIsk }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Globe, RefreshCw } from 'lucide-react'
 import { FileDropzone } from './FileDropzone'
+import { MarketLogTxtDropzone } from './MarketLogTxtDropzone'
 import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import { EXPORT_REGIONS } from '../lib/exportRegions'
 import {
@@ -136,6 +137,17 @@ function parseExportTime(birthtimeIso?: string, mtimeIso?: string): string {
   })
 }
 
+function formatMarketLogTimeNowRu(): string {
+  return new Date().toLocaleString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
 type ParsedMarketLog = {
   itemName: string
   bestSell: number | null
@@ -241,6 +253,57 @@ function parseMarketLogText(fileName: string, text: string): ParsedMarketLog {
   return { itemName: parseItemNameFromMarketLogFile(fileName), bestSell, bestBuy, typeId }
 }
 
+function buildMarketLogSummary(
+  fileName: string,
+  buf: ArrayBuffer,
+  brokerFeePct: number,
+  salesTaxPct: number,
+  timeMode: 'disk' | 'local',
+  diskTimes?: { birthtime?: string; mtime?: string }
+): { rows: MarketLogSummaryRow[]; info: string } {
+  const text = decodeMarketLogBuffer(buf)
+  const parsed = parseMarketLogText(fileName, text)
+  if (parsed.bestSell === null || parsed.bestBuy === null) {
+    return {
+      rows: [],
+      info:
+        timeMode === 'disk'
+          ? `Новый файл (${fileName}): bid/ask ещё неполные — дождитесь завершения экспорта в EVE.`
+          : 'Нет полных данных bid/ask (файл пустой, ещё пишется или не формат market export).',
+    }
+  }
+  const brokerFee = brokerFeePct / 100
+  const salesTax = salesTaxPct / 100
+  const cost = parsed.bestBuy * (1 + brokerFee)
+  const revenue = parsed.bestSell * (1 - salesTax - brokerFee)
+  const profitIsk = revenue - cost
+  const margin =
+    parsed.bestSell > 0 && Number.isFinite(parsed.bestSell)
+      ? profitIsk / parsed.bestSell
+      : null
+  const exportTime =
+    timeMode === 'local'
+      ? formatMarketLogTimeNowRu()
+      : parseExportTime(diskTimes?.birthtime, diskTimes?.mtime)
+  const summaryRows: MarketLogSummaryRow[] = [
+    {
+      name: parsed.itemName,
+      margin: Number.isFinite(margin) ? margin : null,
+      profitIsk: Number.isFinite(profitIsk) ? profitIsk : null,
+      exportTime,
+      price: parsed.bestSell,
+      typeId: parsed.typeId,
+    },
+  ]
+  return {
+    rows: summaryRows,
+    info:
+      timeMode === 'disk'
+        ? `Новый файл обработан: ${fileName}`
+        : `Обработан: ${fileName}`,
+  }
+}
+
 export function ExportBar({
   onLoadBuffer,
   onOpenedExportFile,
@@ -286,7 +349,11 @@ export function ExportBar({
     readEnableMarketExportLogs
   )
   const [marketLogRows, setMarketLogRows] = useState<MarketLogSummaryRow[]>([])
-  const [marketLogInfo, setMarketLogInfo] = useState<string>('Папка не выбрана')
+  const [marketLogInfo, setMarketLogInfo] = useState(() =>
+    isDevExportServer
+      ? 'Папка не выбрана'
+      : 'Перетащите .txt или нажмите «Выбрать .txt».'
+  )
   const [brokerInputEl, setBrokerInputEl] = useState<HTMLInputElement | null>(null)
   const [taxInputEl, setTaxInputEl] = useState<HTMLInputElement | null>(null)
 
@@ -509,38 +576,19 @@ export function ExportBar({
         if (key === lastSeenKey) return
         const buf = await fetchMarketLogFileBuffer(trimmedMarketLogsPath, latest.name)
         if (cancelled) return
-        const text = decodeMarketLogBuffer(buf)
-        const parsed = parseMarketLogText(latest.name, text)
-        if (parsed.bestSell === null || parsed.bestBuy === null) {
-          setMarketLogRows([])
-          setMarketLogInfo(
-            `Новый файл найден (${latest.name}), ожидаем завершения записи/разбора...`
-          )
-          return
+        const { rows, info } = buildMarketLogSummary(
+          latest.name,
+          buf,
+          brokerFeePct,
+          salesTaxPct,
+          'disk',
+          { birthtime: latest.birthtime, mtime: latest.mtime }
+        )
+        setMarketLogRows(rows)
+        setMarketLogInfo(info)
+        if (rows.length > 0) {
+          lastSeenKey = key
         }
-        const brokerFee = brokerFeePct / 100
-        const salesTax = salesTaxPct / 100
-        const cost = parsed.bestBuy * (1 + brokerFee)
-        const revenue = parsed.bestSell * (1 - salesTax - brokerFee)
-        const profitIsk = revenue - cost
-        const margin =
-          parsed.bestSell > 0 && Number.isFinite(parsed.bestSell)
-            ? profitIsk / parsed.bestSell
-            : null
-        const exportTime = parseExportTime(latest.birthtime, latest.mtime)
-        const summaryRows: MarketLogSummaryRow[] = [
-          {
-            name: parsed.itemName,
-            margin: Number.isFinite(margin) ? margin : null,
-            profitIsk: Number.isFinite(profitIsk) ? profitIsk : null,
-            exportTime,
-            price: parsed.bestSell,
-            typeId: parsed.typeId,
-          },
-        ]
-        lastSeenKey = key
-        setMarketLogRows(summaryRows)
-        setMarketLogInfo(`Новый файл обработан: ${latest.name}`)
       } catch (e) {
         if (cancelled) return
         setMarketLogRows([])
@@ -560,20 +608,33 @@ export function ExportBar({
     } catch {
       source = null
     }
-    // Редкий fallback на случай потери SSE или сетевых сбоев.
-    const id = globalThis.setInterval(() => void poll(), 5000)
     return () => {
       cancelled = true
       if (source) source.close()
-      clearInterval(id)
     }
-  }, [
-    marketExportLogsEnabled,
-    trimmedMarketLogsPath,
-    brokerFeePct,
-    salesTaxPct,
-    highPriceThresholdIsk,
-  ])
+  }, [marketExportLogsEnabled, trimmedMarketLogsPath, brokerFeePct, salesTaxPct])
+
+  const onMarketLogTxtFile = useCallback(
+    async (file: File) => {
+      if (!marketExportLogsEnabled) return
+      try {
+        const buf = await file.arrayBuffer()
+        const { rows, info } = buildMarketLogSummary(
+          file.name,
+          buf,
+          brokerFeePct,
+          salesTaxPct,
+          'local'
+        )
+        setMarketLogRows(rows)
+        setMarketLogInfo(info)
+      } catch (e) {
+        setMarketLogRows([])
+        setMarketLogInfo(e instanceof Error ? e.message : 'Ошибка чтения файла')
+      }
+    },
+    [marketExportLogsEnabled, brokerFeePct, salesTaxPct]
+  )
 
   const onEsiBuildSelected = async () => {
     if (!selected) return
@@ -713,9 +774,8 @@ export function ExportBar({
       {!hideLocalFileOpenSection && (
         <section className="border-t border-eve-border/45 pt-4">
           <h3 className="eve-section-title mb-2">Локальный Excel</h3>
-          <p className="mb-3 text-[11px] leading-relaxed text-eve-muted/90">
-            Перетащите файл сюда или нажмите «Выбрать .xlsx». Данные обрабатываются
-            только в браузере.
+          <p className="mb-2 text-[11px] leading-relaxed text-eve-muted/90">
+            Перетащите файл сюда или нажмите «Выбрать .xlsx».
           </p>
           <FileDropzone
             onFile={(f) => void onLocalExcelFile(f)}
@@ -977,8 +1037,8 @@ export function ExportBar({
           }`}
           aria-disabled={!marketExportLogsEnabled}
         >
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-white">
-          <div className="flex flex-wrap items-center gap-1.5 pr-3">
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="italic text-eve-muted">Broker fee:</span>
             <input
               ref={setBrokerInput}
@@ -998,7 +1058,7 @@ export function ExportBar({
             />
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-0 sm:mt-0 sm:pl-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span className="italic text-eve-muted">Sales tax:</span>
             <input
               ref={setTaxInput}
@@ -1019,17 +1079,26 @@ export function ExportBar({
             <span className="tabular-nums text-eve-muted">%</span>
           </div>
         </div>
-        <label className="mb-2 flex w-full items-center gap-2 text-xs text-eve-muted/95">
-          <span className="shrink-0">Путь к папке market logs</span>
-          <input
-            type="text"
-            value={marketLogsPath}
-            onChange={(e) => setMarketLogsPath(e.target.value)}
-            placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
-            className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 px-2 py-1.5 text-xs text-eve-bright shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
-            disabled={disabled || !isDevExportServer || !marketExportLogsEnabled}
-          />
-        </label>
+        {isDevExportServer ? (
+          <label className="mb-2 flex w-full items-center gap-2 text-xs text-eve-muted/95">
+            <span className="shrink-0">Путь к папке market logs</span>
+            <input
+              type="text"
+              value={marketLogsPath}
+              onChange={(e) => setMarketLogsPath(e.target.value)}
+              placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
+              className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 px-2 py-1.5 text-xs text-eve-bright shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
+              disabled={disabled || !marketExportLogsEnabled}
+            />
+          </label>
+        ) : (
+          <div className="mb-2">
+            <MarketLogTxtDropzone
+              onFile={(f) => void onMarketLogTxtFile(f)}
+              disabled={disabled || !marketExportLogsEnabled}
+            />
+          </div>
+        )}
         <p className="mb-2 text-[11px] text-eve-muted/85">{marketLogInfo}</p>
         <div className="space-y-2">
           {(marketLogRows.length > 0
@@ -1110,13 +1179,6 @@ export function ExportBar({
         </div>
         </div>
         </section>
-      )}
-
-      {!isDevExportServer && hideEsiSection && (
-        <p className="text-[11px] leading-relaxed text-eve-muted/80">
-          Список файлов из папки <code>exports/</code> на диске — только в{' '}
-          <code className="text-white">npm run dev</code>.
-        </p>
       )}
     </div>
   )
