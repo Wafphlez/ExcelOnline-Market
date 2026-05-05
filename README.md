@@ -6,6 +6,7 @@
 
 - **Локальный Excel** — перетаскивание или выбор файла; разбор полностью в браузере.
 - **Папка `exports/` (только `npm run dev`)** — список `.xlsx/.xls` из каталога `exports/` проекта, открытие выбранного файла в таблицу; обновление списка, запоминание выбора.
+- **Market Logs (`.txt`)** — импорт последнего или выбранного EVE market log из указанной папки; есть live-режим (SSE) для автоподхвата новых логов в dev.
 - **Пресеты фильтров** — отдельные заготовки и кнопка **«Применить все»** (совокупно те же условия, что и базовый набор фильтров).
 - **ESI (dev)** — длительная выгрузка в `exports/` с официального ESI, прогресс в UI, опция принудительного стопа.
 - **Сохранение фильтров** в `localStorage`; в dev — дополнительно `filters.json` в проекте (см. [`src/lib/filterPersistence.ts`](src/lib/filterPersistence.ts)).
@@ -59,20 +60,28 @@ Preview будет доступен на `http://localhost`.
 
 ## Скрипты
 
-| Команда         | Назначение                    |
-|-----------------|-------------------------------|
-| `npm run dev`   | Режим разработки, hot reload  |
-| `npm run build` | Сборка в `dist/`              |
-| `npm run preview` | Просмотр production-сборки  |
-| `npm test`      | Тесты (Vitest)                |
+| Команда | Назначение |
+|---|---|
+| `npm run dev` | Режим разработки (Vite + dev API `__dev/*`) |
+| `npm run build` | TypeScript-check + production-сборка в `dist/` |
+| `npm run preview` | Локальный просмотр production-сборки |
+| `npm test` | Тесты (Vitest) |
 | `npm run prefetch:esi-universe` | Предзагрузка `public/esi-universe-static.json` (types/groups/categories) |
+| `npm run sonar:scan` | Запуск SonarScanner |
+| `npm run sonar:export` | Экспорт issues Sonar в `reports/sonar/` |
+| `npm run sonar` | Полный sonar-цикл: scan + export |
 
 ## Папка `exports/` и dev API (только `npm run dev`)
 
-Сервер Vite отдаёт маршруты `/__dev/export/*`: список файлов, отдача файла по имени, ESI-экспорт. Статическая выкладка `dist` без dev-мидлвара **не** пишет и **не** читает `exports/`.
+Сервер Vite отдаёт маршруты `/__dev/export/*` и `/__dev/filters/*`: список файлов, отдача файла по имени, импорт market logs, ESI-экспорт, чтение/сохранение `filters.json`.
+Статическая выкладка `dist` без dev-мидлвара **не** пишет и **не** читает `exports/`.
 
 - Блок **«Открыть локальный файл»** работает с реальным содержимым `exports/`, не с выбором «регион → имя файла».
 - `filters.json` для фильтров таблицы — только в dev, через тот же dev-слой.
+- Для market logs используются dev-маршруты:
+  - `GET /__dev/export/marketlogs/stream?dirPath=...` (SSE-события по новым `.txt`),
+  - `POST /__dev/export/marketlogs/latest`,
+  - `POST /__dev/export/marketlogs/file`.
 
 ## Выгрузка через ESI (dev)
 
@@ -94,6 +103,19 @@ runtime-запросы к `/universe/stations/{id}/` и `/universe/regions/{id}/
 В production этот блок **не** показан; для публичного хоста нужен отдельный бэкенд с тем же пайплайном.
 
 **CORS / origin:** для dev путей `__dev` настроены заголовки; страница и API должны совпадать по origin (не смешивайте `localhost` и `127.0.0.1` в одной сессии).
+
+## GitHub Pages (CI/CD)
+
+В репозитории есть workflow [`deploy-github-pages.yml`](.github/workflows/deploy-github-pages.yml), который:
+
+- собирает проект на push в `main/master` или вручную через `workflow_dispatch`,
+- публикует содержимое `dist/` в GitHub Pages,
+- автоматически задаёт `VITE_BASE_PATH` как `/{repo}/` для Project Pages (или берёт `vars.VITE_BASE_PATH`, если задана переменная репозитория).
+
+Для EVE SSO в CI используйте секреты:
+
+- `VITE_EVE_SSO_CLIENT_ID` (обязательно для вкладки «Персонаж»),
+- `VITE_EVE_SSO_REDIRECT_URI` (опционально, если нужен фиксированный callback URI).
 
 ## Стек
 
