@@ -50,13 +50,8 @@ import
 import type { MarketRow } from '../types/market'
 
 const LS_PRICE_MLN = 'excelMarket_highPriceMln'
-const LS_BROKER_PCT = 'excelMarket_brokerFeePct'
-const LS_SALES_TAX_PCT = 'excelMarket_salesTaxPct'
 const LS_LAST_EXPORT_FILE = 'excelMarket_lastExportFileName'
 const LS_TRADING_LEFT_PANEL_WIDTH_PX = 'excelMarket_tradingLeftPanelWidthPx'
-
-const DEFAULT_BROKER_FEE_PCT = 1.4
-const DEFAULT_SALES_TAX_PCT = 4.2
 function detectRegionLabelFromExportFileName(fileName: string): string {
   const byReady = EXPORT_REGIONS.find((r) => r.fileName === fileName)
   if (byReady) return byReady.label
@@ -250,34 +245,6 @@ function readStoredPriceMln(): number
   }
 }
 
-function readStoredBrokerFeePct(): number
-{
-  try
-  {
-    const v = localStorage.getItem(LS_BROKER_PCT)
-    if (v === null) return DEFAULT_BROKER_FEE_PCT
-    const n = Number(String(v).replace(',', '.'))
-    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : DEFAULT_BROKER_FEE_PCT
-  } catch
-  {
-    return DEFAULT_BROKER_FEE_PCT
-  }
-}
-
-function readStoredSalesTaxPct(): number
-{
-  try
-  {
-    const v = localStorage.getItem(LS_SALES_TAX_PCT)
-    if (v === null) return DEFAULT_SALES_TAX_PCT
-    const n = Number(String(v).replace(',', '.'))
-    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : DEFAULT_SALES_TAX_PCT
-  } catch
-  {
-    return DEFAULT_SALES_TAX_PCT
-  }
-}
-
 function readLastExportFileName(): string
 {
   try
@@ -304,12 +271,16 @@ function readLeftPanelWidthPx(): number
   return 360
 }
 
-export function TradingView()
+export function TradingView(
+  { brokerFeePct, salesTaxPct, marketLogsPath }: Readonly<{
+    brokerFeePct: number
+    salesTaxPct: number
+    marketLogsPath: string
+  }>
+)
 {
   const [fileRows, setFileRows] = useState<MarketRow[] | null>(null)
   const [priceThresholdMln, setPriceThresholdMln] = useState(readStoredPriceMln)
-  const [brokerFeePct, setBrokerFeePct] = useState(readStoredBrokerFeePct)
-  const [salesTaxPct, setSalesTaxPct] = useState(readStoredSalesTaxPct)
   const [error, setError] = useState<string | null>(null)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -546,30 +517,6 @@ export function TradingView()
   const onNameCopied = useCallback((key: string) =>
   {
     setCopiedNameKeys((prev) => new Set([...prev, key]))
-  }, [])
-
-  const onBrokerFeeChange = useCallback((n: number) =>
-  {
-    setBrokerFeePct(n)
-    try
-    {
-      localStorage.setItem(LS_BROKER_PCT, String(n))
-    } catch
-    {
-      /* ignore */
-    }
-  }, [])
-
-  const onSalesTaxChange = useCallback((n: number) =>
-  {
-    setSalesTaxPct(n)
-    try
-    {
-      localStorage.setItem(LS_SALES_TAX_PCT, String(n))
-    } catch
-    {
-      /* ignore */
-    }
   }, [])
 
   const refreshLocalExportFiles = useCallback(async () =>
@@ -1005,35 +952,11 @@ export function TradingView()
 
   return (
     <div className="flex min-h-0 flex-1 flex-col text-white lg:min-h-0 lg:overflow-hidden">
-      <div className="w-full px-4 py-6 lg:flex lg:h-full lg:flex-col">
+      <div className="w-full px-4 pb-6 pt-1 lg:flex lg:h-full lg:flex-col">
         <header className="mb-0 shrink-0 text-center">
-          <div
-            className="eve-chrome-top mb-4 mx-auto max-w-md"
-            aria-hidden
-          />
-          <h1 className="font-eve leading-none">
-            <span className="inline-grid w-max min-w-0 max-w-full justify-items-stretch">
-              <span className="text-left text-3xl font-bold uppercase tracking-[0.12em] sm:text-4xl sm:tracking-[0.14em]">
-                <span className="eve-title-gold-shine">Excel Online</span>
-              </span>
-              <div className="mx-auto mt-0.5 w-[calc(100%-20px)] min-w-0 max-w-full sm:mt-1">
-                <span className="sr-only">Market</span>
-                <div
-                  className="flex w-full min-w-0 items-baseline justify-between text-sm font-bold uppercase text-eve-bright/95 [text-shadow:0_0_12px_rgba(236,238,242,0.08)] sm:text-base"
-                  aria-hidden="true"
-                >
-                  { 'Market'.split('').map((ch) => (
-                    <span key={ ch } className="inline-block leading-none">
-                      { ch }
-                    </span>
-                  )) }
-                </div>
-              </div>
-            </span>
-          </h1>
           <p className="sr-only">{ tickerScreenReader }</p>
           <div
-            className="relative mt-3 mb-2 w-full overflow-hidden rounded-md border border-eve-border/55 bg-eve-surface/55 shadow-glass-subtle sm:mb-3 [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(71,91,125,0.14)_3px,transparent_4px)]"
+            className="relative mt-1 mb-2 w-full overflow-hidden rounded-md border border-eve-border/55 bg-eve-surface/55 shadow-glass-subtle sm:mb-3 [background-image:repeating-linear-gradient(90deg,transparent,transparent_3px,rgba(71,91,125,0.14)_3px,transparent_4px)]"
             aria-hidden
           >
             <div className="pointer-events-none absolute inset-y-0 left-0 w-0.5 bg-gradient-to-b from-eve-cyan/75 via-eve-accent/40 to-eve-cyan/50" />
@@ -1122,8 +1045,8 @@ export function TradingView()
           className="flex min-h-0 flex-1 flex-col gap-1 lg:flex-row lg:overflow-hidden"
         >
           <aside
-            className="mt-4 space-y-4 w-full lg:mt-0 lg:h-full lg:shrink-0 lg:overflow-y-auto lg:pr-1"
-            style={{ width: `min(100%, ${leftPanelWidthPx}px)` }}
+            className="mt-4 w-full space-y-4 lg:mt-0 lg:h-full lg:w-[min(100%,var(--trading-left-panel))] lg:shrink-0 lg:overflow-y-auto lg:pr-1"
+            style={{ ['--trading-left-panel' as string]: `${ leftPanelWidthPx }px` }}
           >
             <ExportBar
               onLoadBuffer={ loadFromBuffer }
@@ -1133,8 +1056,7 @@ export function TradingView()
               brokerFeePct={ brokerFeePct }
               salesTaxPct={ salesTaxPct }
               highPriceThresholdIsk={ highPriceThresholdIsk }
-              onBrokerFeeChange={ onBrokerFeeChange }
-              onSalesTaxChange={ onSalesTaxChange }
+              marketLogsPath={ marketLogsPath }
               onMessageChange={ setExportMsg }
             />
             { !isDevExportServer && (
@@ -1152,6 +1074,7 @@ export function TradingView()
                     <FileDropzone
                       onFile={ onProdCrossLeftFile }
                       disabled={ loading }
+                      fileName={ compareLeftFile }
                     />
                     <p
                       className="truncate text-[11px] text-eve-bright/85"
@@ -1165,6 +1088,7 @@ export function TradingView()
                     <FileDropzone
                       onFile={ onProdCrossRightFile }
                       disabled={ loading }
+                      fileName={ compareRightFile }
                     />
                     <p
                       className="truncate text-[11px] text-eve-bright/85"
@@ -1363,8 +1287,7 @@ export function TradingView()
                       brokerFeePct={ brokerFeePct }
                       salesTaxPct={ salesTaxPct }
                       highPriceThresholdIsk={ highPriceThresholdIsk }
-                      onBrokerFeeChange={ onBrokerFeeChange }
-                      onSalesTaxChange={ onSalesTaxChange }
+                      marketLogsPath={ marketLogsPath }
                       onMessageChange={ setExportMsg }
                     />
                   { exportMsg && (
@@ -1395,6 +1318,7 @@ export function TradingView()
             <div className="eve-panel p-1.5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
               <div className="mb-2 flex flex-col gap-1.5">
                 <div className="flex flex-wrap items-center justify-start gap-1.5">
+                  <span className="eve-kicker mr-1 shrink-0">Быстрые фильтры</span>
                   { PRESETS.map((p) => (
                     <button
                       key={ p.id }

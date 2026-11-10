@@ -206,13 +206,15 @@ function spawn(
 }
 
 export type StarfieldWarpProps = {
-  speedK: number
+  speedK?: number
 }
 
 /**
  * Полёт «вперёд»: рождение в случайных пикселях всего экрана, объём задаётся z, движение — к наблюдателю.
  */
-export default function StarfieldWarp({ speedK }: StarfieldWarpProps): JSX.Element | null
+export default function StarfieldWarp(
+  { speedK = WARP_SPEED_K_DEFAULT }: StarfieldWarpProps
+): JSX.Element | null
 {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const speedKRef = useRef(clampWarpSpeedK(speedK))

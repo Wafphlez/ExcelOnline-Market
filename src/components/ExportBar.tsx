@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Globe, RefreshCw } from 'lucide-react'
 import { FileDropzone } from './FileDropzone'
 import { MarketLogTxtDropzone } from './MarketLogTxtDropzone'
-import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import { EXPORT_REGIONS } from '../lib/exportRegions'
 import {
   buildEsiLiquidityToExports,
@@ -98,10 +97,7 @@ type ExportBarProps = Readonly<{
   brokerFeePct: number
   salesTaxPct: number
   highPriceThresholdIsk: number
-  onBrokerFeeChange: (value: number) => void
-  onSalesTaxChange: (value: number) => void
-  brokerInputRef?: (el: HTMLInputElement | null) => void
-  taxInputRef?: (el: HTMLInputElement | null) => void
+  marketLogsPath: string
   onMessageChange?: (message: string | null) => void
 }>
 
@@ -116,11 +112,21 @@ type MarketLogSummaryRow = {
 
 const LS_MARKETLOGS_PATH = 'excelMarket_marketLogsPath'
 
-function readMarketLogsPath(): string {
+export function readMarketLogsPath(): string {
   try {
     return localStorage.getItem(LS_MARKETLOGS_PATH) ?? ''
   } catch {
     return ''
+  }
+}
+
+export function persistMarketLogsPath(path: string): void {
+  try {
+    const trimmed = path.trim()
+    if (trimmed) localStorage.setItem(LS_MARKETLOGS_PATH, trimmed)
+    else localStorage.removeItem(LS_MARKETLOGS_PATH)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -306,6 +312,41 @@ function buildMarketLogSummary(
   }
 }
 
+function ToggleSwitch(
+  { checked, label, disabled, onClick }: Readonly<{
+    checked: boolean
+    label: string
+    disabled?: boolean
+    onClick: () => void
+  }>
+): JSX.Element
+{
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ checked }
+      aria-label={ label }
+      onClick={ onClick }
+      disabled={ disabled }
+      className={ `relative h-5 w-9 shrink-0 rounded-md border p-0.5 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 disabled:opacity-50 ${
+        checked
+          ? 'border-eve-accent/75 bg-eve-accent-muted'
+          : 'border-eve-border/70 bg-eve-surface/40'
+      }` }
+    >
+      <span
+        aria-hidden
+        className={ `pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-sm border shadow-[0_1px_2px_rgba(0,0,0,0.35)] transition-[left] duration-200 ease-out ${
+          checked
+            ? 'left-[18px] border-eve-accent/80 bg-eve-accent'
+            : 'left-0.5 border-eve-border/80 bg-eve-elevated'
+        }` }
+      />
+    </button>
+  )
+}
+
 export function ExportBar({
   onLoadBuffer,
   onOpenedExportFile,
@@ -317,10 +358,7 @@ export function ExportBar({
   brokerFeePct,
   salesTaxPct,
   highPriceThresholdIsk,
-  onBrokerFeeChange,
-  onSalesTaxChange,
-  brokerInputRef,
-  taxInputRef,
+  marketLogsPath,
   onMessageChange,
 }: ExportBarProps) {
   const regions = EXPORT_REGIONS
@@ -347,7 +385,6 @@ export function ExportBar({
   const [esiSessionStartedAt, setEsiSessionStartedAt] = useState<number | null>(null)
   const [esiTypesPhaseAt, setEsiTypesPhaseAt] = useState<number | null>(null)
   const [esiTimerTick, setEsiTimerTick] = useState(0)
-  const [marketLogsPath, setMarketLogsPath] = useState(readMarketLogsPath)
   const [marketExportLogsEnabled, setMarketExportLogsEnabled] = useState(
     readEnableMarketExportLogs
   )
@@ -357,34 +394,7 @@ export function ExportBar({
       ? 'Папка не выбрана'
       : 'Перетащите .txt или нажмите «Выбрать .txt».'
   )
-  const [brokerInputEl, setBrokerInputEl] = useState<HTMLInputElement | null>(null)
-  const [taxInputEl, setTaxInputEl] = useState<HTMLInputElement | null>(null)
-
-  const setBrokerInput = useCallback((el: HTMLInputElement | null) => {
-    setBrokerInputEl(el)
-    brokerInputRef?.(el)
-  }, [brokerInputRef])
-
-  const setTaxInput = useCallback((el: HTMLInputElement | null) => {
-    setTaxInputEl(el)
-    taxInputRef?.(el)
-  }, [taxInputRef])
-
-  useInputWheelNudge(brokerInputEl, {
-    step: 0.01,
-    bounds: { min: 0, max: 100 },
-    getValue: () => brokerFeePct,
-    onNudge: (next) => onBrokerFeeChange(Math.round(next * 100) / 100),
-    enabled: !(disabled || !marketExportLogsEnabled),
-  })
-
-  useInputWheelNudge(taxInputEl, {
-    step: 0.01,
-    bounds: { min: 0, max: 100 },
-    getValue: () => salesTaxPct,
-    onNudge: (next) => onSalesTaxChange(Math.round(next * 100) / 100),
-    enabled: !(disabled || !marketExportLogsEnabled),
-  })
+  const [pickedExcelName, setPickedExcelName] = useState<string | null>(null)
 
   useEffect(() => {
     onMessageChange?.(msg)
@@ -518,18 +528,6 @@ export function ExportBar({
 
   useEffect(() => {
     try {
-      if (trimmedMarketLogsPath) {
-        localStorage.setItem(LS_MARKETLOGS_PATH, trimmedMarketLogsPath)
-      } else {
-        localStorage.removeItem(LS_MARKETLOGS_PATH)
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [trimmedMarketLogsPath])
-
-  useEffect(() => {
-    try {
       localStorage.setItem(
         LS_ENABLE_MARKET_EXPORT_LOGS,
         marketExportLogsEnabled ? '1' : '0'
@@ -540,14 +538,14 @@ export function ExportBar({
   }, [marketExportLogsEnabled])
 
   useEffect(() => {
-    if (!isDevExportServer) return
+    if (hideMarketLogsSection || !isDevExportServer) return
     if (!marketExportLogsEnabled) {
       setMarketLogInfo('Обработка market logs отключена')
       return
     }
     if (!trimmedMarketLogsPath) {
       setMarketLogRows([])
-      setMarketLogInfo('Укажите путь к папке market logs')
+      setMarketLogInfo('Укажите путь к папке market logs в настройках')
       return
     }
     let cancelled = false
@@ -612,7 +610,7 @@ export function ExportBar({
       cancelled = true
       if (source) source.close()
     }
-  }, [marketExportLogsEnabled, trimmedMarketLogsPath, brokerFeePct, salesTaxPct])
+  }, [hideMarketLogsSection, marketExportLogsEnabled, trimmedMarketLogsPath, brokerFeePct, salesTaxPct])
 
   const onMarketLogTxtFile = useCallback(
     async (file: File) => {
@@ -753,6 +751,7 @@ export function ExportBar({
       const buf = await res.arrayBuffer()
       await onLoadBuffer(buf)
       onOpenedExportFile?.(selectedExportFile)
+      setPickedExcelName(selectedExportFile)
       setMsg(`Открыт: ${selectedExportFile}`)
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Ошибка открытия')
@@ -763,6 +762,7 @@ export function ExportBar({
 
   const onLocalExcelFile = useCallback(
     async (file: File) => {
+      setPickedExcelName(file.name)
       const buf = await file.arrayBuffer()
       await onLoadBuffer(buf)
     },
@@ -780,6 +780,7 @@ export function ExportBar({
           <FileDropzone
             onFile={(f) => void onLocalExcelFile(f)}
             disabled={disabled || loading}
+            fileName={pickedExcelName}
           />
           {isDevExportServer ? (
             <>
@@ -890,31 +891,12 @@ export function ExportBar({
                   Добавляет top-of-book snapshot и лист orders_snapshot
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={esiIncludeOrderSnapshot}
-                aria-label="Выгружать актуальные ордера в snapshot"
-                onClick={() => setEsiIncludeOrderSnapshot((v) => !v)}
-                disabled={disabled || loading}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 disabled:opacity-50 ${
-                  esiIncludeOrderSnapshot
-                  ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
-                    : 'border-eve-border/70 bg-eve-surface/35 text-eve-muted/90'
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/45 to-transparent"
-                />
-                <span
-                  className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
-                    esiIncludeOrderSnapshot
-                      ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
-                      : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                checked={ esiIncludeOrderSnapshot }
+                label="Выгружать актуальные ордера в snapshot"
+                disabled={ disabled || loading }
+                onClick={ () => setEsiIncludeOrderSnapshot((v) => !v) }
+              />
             </div>
             <div className="@[450px]:col-span-3 glass-subtle flex items-center justify-between gap-3 px-2 py-1.5 text-xs">
               <div className="min-w-0">
@@ -925,31 +907,12 @@ export function ExportBar({
                   {`Фильтр по ${selectedHubName}`}
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={esiTradeHubOnly}
-                aria-label="Выгружать только ордера торгового хаба"
-                onClick={() => setEsiTradeHubOnly((v) => !v)}
-                disabled={disabled || loading}
-                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 disabled:opacity-50 ${
-                  esiTradeHubOnly
-                  ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
-                    : 'border-eve-border/70 bg-eve-surface/35 text-eve-muted/90'
-                }`}
-              >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/45 to-transparent"
-                />
-                <span
-                  className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
-                    esiTradeHubOnly
-                      ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
-                      : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
-                  }`}
-                />
-              </button>
+              <ToggleSwitch
+                checked={ esiTradeHubOnly }
+                label="Выгружать только ордера торгового хаба"
+                disabled={ disabled || loading }
+                onClick={ () => setEsiTradeHubOnly((v) => !v) }
+              />
             </div>
             <div className="flex flex-wrap items-center gap-2 pt-1 @[450px]:col-span-3 @[450px]:justify-end">
               <button
@@ -1006,31 +969,12 @@ export function ExportBar({
         <section className="@container eve-panel p-2.5">
         <div className="mb-2 flex flex-wrap items-center gap-3">
           <h3 className="eve-section-title">Market export logs</h3>
-          <div className="inline-flex items-center gap-2 text-xs text-eve-muted/95">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={marketExportLogsEnabled}
-              aria-label="Включить обработку market export logs"
-              onClick={() => setMarketExportLogsEnabled((v) => !v)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-md border shadow-eve-inset transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-eve-accent/45 ${
-                marketExportLogsEnabled
-                  ? 'border-eve-accent/75 bg-eve-accent-muted text-eve-accent'
-                  : 'border-eve-border/70 bg-eve-surface/35 text-eve-muted/90'
-              }`}
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-eve-accent/45 to-transparent"
-              />
-              <span
-                className={`relative z-[1] inline-block h-3.5 w-3.5 transform rounded-sm border transition-transform duration-200 ease-out ${
-                  marketExportLogsEnabled
-                    ? 'translate-x-[1.125rem] border-eve-accent/80 bg-eve-accent shadow-[0_0_0_1px_rgba(184,150,61,0.25),0_1px_2px_rgba(0,0,0,0.35)]'
-                    : 'translate-x-1 border-eve-border/90 bg-eve-elevated shadow-[0_1px_2px_rgba(0,0,0,0.35)]'
-                }`}
-              />
-            </button>
+          <div className="inline-flex items-center">
+            <ToggleSwitch
+              checked={ marketExportLogsEnabled }
+              label="Включить обработку market export logs"
+              onClick={ () => setMarketExportLogsEnabled((v) => !v) }
+            />
           </div>
         </div>
         {!marketExportLogsEnabled && (
@@ -1040,61 +984,7 @@ export function ExportBar({
         )}
         {marketExportLogsEnabled && (
         <div className="space-y-2">
-        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white">
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="text-eve-muted">Broker fee:</span>
-            <input
-              ref={setBrokerInput}
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              className="w-20 min-w-0 rounded-md border border-eve-border/70 bg-eve-surface/35 px-1 py-0.5 text-xs tabular-nums text-white shadow-glass-subtle placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
-              value={brokerFeePct}
-              onChange={(e) => {
-                const n = Number(e.target.value.replace(',', '.'))
-                if (!Number.isFinite(n) || n < 0 || n > 100) return
-                onBrokerFeeChange(n)
-              }}
-              aria-label="Broker fee, процент"
-              disabled={disabled}
-            />
-            <span className="tabular-nums text-eve-muted">%</span>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <span className="text-eve-muted">Sales tax:</span>
-            <input
-              ref={setTaxInput}
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              className="w-20 min-w-0 rounded-md border border-eve-border/70 bg-eve-surface/35 px-1 py-0.5 text-xs tabular-nums text-white shadow-glass-subtle placeholder:text-eve-muted/60 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-eve-accent/70 focus:outline-none"
-              value={salesTaxPct}
-              onChange={(e) => {
-                const n = Number(e.target.value.replace(',', '.'))
-                if (!Number.isFinite(n) || n < 0 || n > 100) return
-                onSalesTaxChange(n)
-              }}
-              aria-label="Sales tax, процент"
-              disabled={disabled}
-            />
-            <span className="tabular-nums text-eve-muted">%</span>
-          </div>
-        </div>
-        {isDevExportServer ? (
-          <label className="mb-2 flex w-full items-center gap-2 text-xs text-eve-muted/95">
-            <span className="shrink-0">Путь к папке market logs</span>
-            <input
-              type="text"
-              value={marketLogsPath}
-              onChange={(e) => setMarketLogsPath(e.target.value)}
-              placeholder="Например: B:\\Documents\\EVE\\logs\\marketlogs"
-              className="min-w-0 flex-1 rounded-md border border-eve-border/70 bg-eve-surface/35 px-2 py-1.5 text-xs text-eve-bright shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
-              disabled={disabled}
-            />
-          </label>
-        ) : (
+        {!isDevExportServer && (
           <div className="mb-2">
             <MarketLogTxtDropzone
               onFile={(f) => void onMarketLogTxtFile(f)}
