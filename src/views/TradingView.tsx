@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useInputWheelNudge } from '../hooks/useInputWheelNudge'
 import type { ColumnFiltersState } from '@tanstack/react-table'
-import { ArrowLeftRight, FolderOpen, RefreshCw } from 'lucide-react'
+import { ArrowLeftRight, FolderOpen, RefreshCw, Trash2 } from 'lucide-react'
 import { ExportBar } from '../components/ExportBar'
-import { FileDropzone } from '../components/FileDropzone'
 import { MarketTable } from '../components/MarketTable'
 import { computeAllMetrics } from '../lib/computeMetrics'
 import { computeEntryScore } from '../lib/entryScore'
@@ -36,11 +35,12 @@ import
   } from '../lib/lastExportRegionStorage'
 import
   {
-    devExportFileUrl,
-    isDevExportServer,
-    listExportFiles,
-    type ExportListItem,
-  } from '../lib/devExportApi'
+    deleteCachedExportWorkbook,
+    EXPORT_CACHE_CLEARED_EVENT,
+    getCachedExportWorkbook,
+    listCachedExportWorkbooks,
+    type ExportCacheMeta,
+  } from '../lib/exportWorkbookCache'
 import { EXPORT_REGIONS } from '../lib/exportRegions'
 import
   {
@@ -295,8 +295,11 @@ export function TradingView(
     () => new Set()
   )
   const [priceInputEl, setPriceInputEl] = useState<HTMLInputElement | null>(null)
-  const [localExportFiles, setLocalExportFiles] = useState<ExportListItem[]>([])
+  const [localExportFiles, setLocalExportFiles] = useState<ExportCacheMeta[]>([])
   const [localExportLoading, setLocalExportLoading] = useState(false)
+  const [exportListReady, setExportListReady] = useState(false)
+  const [sourceTab, setSourceTab] = useState<'excel' | 'esi'>('esi')
+  const [tradeTab, setTradeTab] = useState<'single' | 'cross'>('single')
   const [selectedLocalExportFile, setSelectedLocalExportFile] = useState(
     readLastExportFileName
   )
@@ -308,13 +311,6 @@ export function TradingView(
     leftFile: string
     rightFile: string
   } | null>(null)
-  /** В проде — буферы из дропзон; в dev не используются (файлы читаются из exports/ по имени). */
-  const [compareLeftBuffer, setCompareLeftBuffer] = useState<ArrayBuffer | null>(
-    null
-  )
-  const [compareRightBuffer, setCompareRightBuffer] = useState<ArrayBuffer | null>(
-    null
-  )
   const [isCrossRegionMode, setIsCrossRegionMode] = useState(false)
   const [priceSellHeader, setPriceSellHeader] = useState<string | null>(null)
   const [priceBuyHeader, setPriceBuyHeader] = useState<string | null>(null)
@@ -409,6 +405,7 @@ export function TradingView(
       .filter((f) => /\.(xlsx|xls)$/i.test(f.name))
       .sort((a, b) => b.mtime.localeCompare(a.mtime) || a.name.localeCompare(b.name))
   }, [localExportFiles])
+  const exportListEmptyLabel = '— кеш пуст —'
   const compareLeftRegionLabel = useMemo(
     () => (compareLeftFile ? detectRegionLabelFromExportFileName(compareLeftFile) : '—'),
     [compareLeftFile]
@@ -521,23 +518,32 @@ export function TradingView(
 
   const refreshLocalExportFiles = useCallback(async () =>
   {
-    if (!isDevExportServer)
-    {
-      setLocalExportFiles([])
-      return
-    }
     setLocalExportLoading(true)
     try
     {
-      const list = await listExportFiles()
+      const list = await listCachedExportWorkbooks()
       setLocalExportFiles(list)
     } catch
     {
       setLocalExportFiles([])
+      setExportMsg('Не удалось прочитать кеш выгрузок в браузере.')
     } finally
     {
       setLocalExportLoading(false)
+      setExportListReady(true)
     }
+  }, [])
+
+  const readNamedExportBuffer = useCallback(async (fileName: string): Promise<ArrayBuffer> =>
+  {
+    const buf = await getCachedExportWorkbook(fileName)
+    if (!buf)
+    {
+      throw new Error(
+        `«${ fileName }» нет в кеше браузера — импортируйте файл или соберите ESI ещё раз.`
+      )
+    }
+    return buf
   }, [])
 
   const mapRowsFromBuffer = useCallback((buf: ArrayBuffer): MarketRow[] =>
@@ -587,10 +593,6 @@ export function TradingView(
       setCompareLeftRowsCache(null)
       setCompareRightRowsCache(null)
       setCompareAppliedFiles(null)
-      setCompareLeftFile('')
-      setCompareRightFile('')
-      setCompareLeftBuffer(null)
-      setCompareRightBuffer(null)
       setPriceSellHeader(null)
       setPriceBuyHeader(null)
       setCopiedNameKeys(new Set())
@@ -606,40 +608,6 @@ export function TradingView(
     }
   }, [mapRowsFromBuffer])
 
-  const onProdCrossLeftFile = useCallback((file: File) =>
-  {
-    void (async () =>
-    {
-      try
-      {
-        const buf = await file.arrayBuffer()
-        setCompareLeftFile(file.name)
-        setCompareLeftBuffer(buf)
-        setExportMsg(null)
-      } catch
-      {
-        setExportMsg('Не удалось прочитать файл региона 1.')
-      }
-    })()
-  }, [])
-
-  const onProdCrossRightFile = useCallback((file: File) =>
-  {
-    void (async () =>
-    {
-      try
-      {
-        const buf = await file.arrayBuffer()
-        setCompareRightFile(file.name)
-        setCompareRightBuffer(buf)
-        setExportMsg(null)
-      } catch
-      {
-        setExportMsg('Не удалось прочитать файл региона 2.')
-      }
-    })()
-  }, [])
-
   const onApplyCrossRegionFiles = useCallback(async () =>
   {
     if (!compareLeftFile || !compareRightFile) return
@@ -648,43 +616,15 @@ export function TradingView(
       setExportMsg('Выберите два разных файла для сравнения регионов.')
       return
     }
-    if (!isDevExportServer)
-    {
-      if (!compareLeftBuffer || !compareRightBuffer)
-      {
-        setExportMsg(
-          'Перетащите или выберите два .xlsx/.xls: по одному в зоне «Регион 1» и «Регион 2».'
-        )
-        return
-      }
-    }
     setError(null)
     setExportMsg(null)
     setLoading(true)
     try
     {
-      let leftBuf: ArrayBuffer
-      let rightBuf: ArrayBuffer
-      if (isDevExportServer)
-      {
-        const [leftRes, rightRes] = await Promise.all([
-          fetch(devExportFileUrl(compareLeftFile)),
-          fetch(devExportFileUrl(compareRightFile)),
-        ])
-        if (!leftRes.ok || !rightRes.ok)
-        {
-          setExportMsg('Один из выбранных файлов не найден в exports/. Обновите список.')
-          return
-        }
-        ;[leftBuf, rightBuf] = await Promise.all([
-          leftRes.arrayBuffer(),
-          rightRes.arrayBuffer(),
-        ])
-      } else
-      {
-        leftBuf = compareLeftBuffer!
-        rightBuf = compareRightBuffer!
-      }
+      const [leftBuf, rightBuf] = await Promise.all([
+        readNamedExportBuffer(compareLeftFile),
+        readNamedExportBuffer(compareRightFile),
+      ])
       const [leftRows, rightRows] = [
         mapRowsFromBuffer(leftBuf),
         mapRowsFromBuffer(rightBuf),
@@ -711,10 +651,9 @@ export function TradingView(
   }, [
     compareLeftFile,
     compareRightFile,
-    compareLeftBuffer,
-    compareRightBuffer,
     mapRowsFromBuffer,
     applyCrossRegionComparison,
+    readNamedExportBuffer,
   ])
 
   const onSwapCompareFiles = useCallback(() =>
@@ -724,13 +663,6 @@ export function TradingView(
     const nextRight = compareLeftFile
     setCompareLeftFile(nextLeft)
     setCompareRightFile(nextRight)
-    if (!isDevExportServer)
-    {
-      const lb = compareLeftBuffer
-      const rb = compareRightBuffer
-      setCompareLeftBuffer(rb)
-      setCompareRightBuffer(lb)
-    }
     if (
       compareAppliedFiles &&
       compareLeftRowsCache &&
@@ -755,8 +687,6 @@ export function TradingView(
   }, [
     compareLeftFile,
     compareRightFile,
-    compareLeftBuffer,
-    compareRightBuffer,
     compareAppliedFiles,
     compareLeftRowsCache,
     compareRightRowsCache,
@@ -770,23 +700,29 @@ export function TradingView(
     setExportMsg(null)
     try
     {
-      const u = devExportFileUrl(selectedLocalExportFile)
-      const res = await fetch(u)
-      if (!res.ok)
-      {
-        setExportMsg(
-          'Файл не найден в exports/ — обновите список или скачайте выгрузку снова.'
-        )
-        return
-      }
-      const buf = await res.arrayBuffer()
+      const buf = await readNamedExportBuffer(selectedLocalExportFile)
       await loadFromBuffer(buf)
       setExportMsg(`Открыт: ${ selectedLocalExportFile }`)
     } catch (e)
     {
       setExportMsg(e instanceof Error ? e.message : 'Ошибка открытия')
     }
-  }, [selectedLocalExportFile, loadFromBuffer])
+  }, [selectedLocalExportFile, loadFromBuffer, readNamedExportBuffer])
+
+  const onDeleteCachedExportFile = useCallback(async () =>
+  {
+    if (!selectedLocalExportFile) return
+    setExportMsg(null)
+    try
+    {
+      await deleteCachedExportWorkbook(selectedLocalExportFile)
+      setExportMsg(`Удалён из кеша: ${ selectedLocalExportFile }`)
+      await refreshLocalExportFiles()
+    } catch (e)
+    {
+      setExportMsg(e instanceof Error ? e.message : 'Не удалось удалить файл из кеша')
+    }
+  }, [selectedLocalExportFile, refreshLocalExportFiles])
 
   const onExportBarOpenedFile = useCallback((fileName: string) =>
   {
@@ -828,13 +764,22 @@ export function TradingView(
 
   useEffect(() =>
   {
-    if (!isDevExportServer) return
     void refreshLocalExportFiles()
   }, [refreshLocalExportFiles])
 
   useEffect(() =>
   {
-    if (!isDevExportServer) return
+    const onCleared = () =>
+    {
+      void refreshLocalExportFiles()
+    }
+    globalThis.addEventListener(EXPORT_CACHE_CLEARED_EVENT, onCleared)
+    return () => globalThis.removeEventListener(EXPORT_CACHE_CLEARED_EVENT, onCleared)
+  }, [refreshLocalExportFiles])
+
+  useEffect(() =>
+  {
+    if (!exportListReady) return
     if (localExportFilesSorted.length === 0)
     {
       setSelectedLocalExportFile('')
@@ -850,37 +795,38 @@ export function TradingView(
       }
       return localExportFilesSorted[0]?.name ?? ''
     })
-  }, [localExportFilesSorted])
+  }, [exportListReady, localExportFilesSorted])
 
   useEffect(() =>
   {
-    if (!isDevExportServer) return
+    if (!exportListReady) return
     if (localExportFilesSorted.length === 0)
     {
       setCompareLeftFile('')
       setCompareRightFile('')
       return
     }
+    const resolveKept = (prev: string): string =>
+    {
+      if (prev !== '' && localExportFilesSorted.some((f) => f.name === prev)) return prev
+      return ''
+    }
     setCompareLeftFile((prev) =>
     {
-      if (prev === '') {
-        return localExportFilesSorted[0]?.name ?? ''
-      }
-      if (localExportFilesSorted.some((f) => f.name === prev)) return prev
-      return localExportFilesSorted[0]?.name ?? ''
+      return resolveKept(prev) || localExportFilesSorted[0]?.name || ''
     })
     setCompareRightFile((prev) =>
     {
-      if (prev === '') {
-        return localExportFilesSorted[1]?.name ?? localExportFilesSorted[0]?.name ?? ''
-      }
-      if (localExportFilesSorted.some((f) => f.name === prev)) return prev
-      return localExportFilesSorted[1]?.name ?? localExportFilesSorted[0]?.name ?? ''
+      const left = resolveKept(compareLeftFile) || localExportFilesSorted[0]?.name || ''
+      const keptRight = resolveKept(prev)
+      if (keptRight && keptRight !== left) return keptRight
+      return localExportFilesSorted.find((f) => f.name !== left)?.name ?? left
     })
-  }, [localExportFilesSorted])
+  }, [exportListReady, localExportFilesSorted, compareLeftFile])
 
   useEffect(() =>
   {
+    if (!exportListReady) return
     try
     {
       if (selectedLocalExportFile)
@@ -894,7 +840,7 @@ export function TradingView(
     {
       /* ignore */
     }
-  }, [selectedLocalExportFile])
+  }, [exportListReady, selectedLocalExportFile])
 
   useEffect(() =>
   {
@@ -1048,102 +994,128 @@ export function TradingView(
             className="mt-4 w-full space-y-4 lg:mt-0 lg:h-full lg:w-[min(100%,var(--trading-left-panel))] lg:shrink-0 lg:overflow-y-auto lg:pr-1"
             style={{ ['--trading-left-panel' as string]: `${ leftPanelWidthPx }px` }}
           >
-            <ExportBar
-              onLoadBuffer={ loadFromBuffer }
-              onOpenedExportFile={ onExportBarOpenedFile }
-              disabled={ loading }
-              hideEsiSection
-              brokerFeePct={ brokerFeePct }
-              salesTaxPct={ salesTaxPct }
-              highPriceThresholdIsk={ highPriceThresholdIsk }
-              marketLogsPath={ marketLogsPath }
-              onMessageChange={ setExportMsg }
-            />
-            { !isDevExportServer && (
-              <section className="@container eve-panel p-2.5">
-                <h3 className="eve-section-title mb-2">Торговля между регионами</h3>
-                <p className="mb-3 text-[10px] leading-snug text-eve-muted/90">
-                  Два экспорта ликвидности (.xlsx / .xls):{' '}
-                  <span className="text-eve-muted">регион 1</span> — откуда везём товар,{' '}
-                  <span className="text-eve-muted">регион 2</span> — рынок продажи;
-                  таблица покажет совпадающие типы и маржу между ними.
+            <section className="@container eve-panel p-2.5">
+              <div className="mb-3 grid grid-cols-2 gap-1" role="tablist" aria-label="Источник выгрузки">
+                <button
+                  type="button"
+                  role="tab"
+                  id="source-tab-esi"
+                  aria-controls="source-panel-esi"
+                  aria-selected={ sourceTab === 'esi' }
+                  onClick={ () => setSourceTab('esi') }
+                  className={ `rounded-md border px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 ${
+                    sourceTab === 'esi'
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent'
+                      : 'border-eve-border/80 bg-eve-surface/45 text-eve-muted hover:border-eve-accent/45 hover:text-eve-bright'
+                  }` }
+                >
+                  Новая выгрузка ESI
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="source-tab-excel"
+                  aria-controls="source-panel-excel"
+                  aria-selected={ sourceTab === 'excel' }
+                  onClick={ () => setSourceTab('excel') }
+                  className={ `rounded-md border px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 ${
+                    sourceTab === 'excel'
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent'
+                      : 'border-eve-border/80 bg-eve-surface/45 text-eve-muted hover:border-eve-accent/45 hover:text-eve-bright'
+                  }` }
+                >
+                  Локальный Excel
+                </button>
+              </div>
+              <div
+                role="tabpanel"
+                id="source-panel-esi"
+                aria-labelledby="source-tab-esi"
+                hidden={ sourceTab !== 'esi' }
+              >
+                <ExportBar
+                  onLoadBuffer={ loadFromBuffer }
+                  onOpenedExportFile={ onExportBarOpenedFile }
+                  disabled={ loading }
+                  hideLocalFileOpenSection
+                  hideMarketLogsSection
+                  hideEsiOuterCard
+                  brokerFeePct={ brokerFeePct }
+                  salesTaxPct={ salesTaxPct }
+                  highPriceThresholdIsk={ highPriceThresholdIsk }
+                  marketLogsPath={ marketLogsPath }
+                  onMessageChange={ setExportMsg }
+                />
+              </div>
+              <div
+                role="tabpanel"
+                id="source-panel-excel"
+                aria-labelledby="source-tab-excel"
+                hidden={ sourceTab !== 'excel' }
+              >
+                <ExportBar
+                  onLoadBuffer={ loadFromBuffer }
+                  onOpenedExportFile={ onExportBarOpenedFile }
+                  disabled={ loading }
+                  hideEsiSection
+                  hideMarketLogsSection
+                  hideLocalOuterCard
+                  brokerFeePct={ brokerFeePct }
+                  salesTaxPct={ salesTaxPct }
+                  highPriceThresholdIsk={ highPriceThresholdIsk }
+                  marketLogsPath={ marketLogsPath }
+                  onMessageChange={ setExportMsg }
+                />
+              </div>
+              { exportMsg && (
+                <p className="glass-subtle mt-2 px-2.5 py-1.5 text-xs text-eve-muted">
+                  { exportMsg }
                 </p>
-                <div className="grid grid-cols-1 gap-3 @[520px]:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-medium text-eve-muted">Регион 1 — источник</p>
-                    <FileDropzone
-                      onFile={ onProdCrossLeftFile }
-                      disabled={ loading }
-                      fileName={ compareLeftFile }
-                    />
-                    <p
-                      className="truncate text-[11px] text-eve-bright/85"
-                      title={ compareLeftFile || undefined }
-                    >
-                      { compareLeftFile ? compareLeftFile : 'Файл не выбран' }
+              ) }
+            </section>
+            <section className="@container eve-panel p-2.5">
+              <h3 className="eve-section-title mb-3">Торговля</h3>
+              <div className="mb-3 grid grid-cols-2 gap-1" role="tablist" aria-label="Режим торговли">
+                <button
+                  type="button"
+                  role="tab"
+                  id="trade-tab-single"
+                  aria-controls="trade-panel-single"
+                  aria-selected={ tradeTab === 'single' }
+                  onClick={ () => setTradeTab('single') }
+                  className={ `rounded-md border px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 ${
+                    tradeTab === 'single'
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent'
+                      : 'border-eve-border/80 bg-eve-surface/45 text-eve-muted hover:border-eve-accent/45 hover:text-eve-bright'
+                  }` }
+                >
+                  В одном регионе
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="trade-tab-cross"
+                  aria-controls="trade-panel-cross"
+                  aria-selected={ tradeTab === 'cross' }
+                  onClick={ () => setTradeTab('cross') }
+                  className={ `rounded-md border px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45 ${
+                    tradeTab === 'cross'
+                      ? 'border-eve-accent bg-eve-accent-muted text-eve-accent'
+                      : 'border-eve-border/80 bg-eve-surface/45 text-eve-muted hover:border-eve-accent/45 hover:text-eve-bright'
+                  }` }
+                >
+                  Между регионами
+                </button>
+              </div>
+              <div
+                role="tabpanel"
+                id="trade-panel-single"
+                aria-labelledby="trade-tab-single"
+                hidden={ tradeTab !== 'single' }
+              >
+                    <p className="mb-2 text-[10px] leading-snug text-eve-muted/90">
+                      Для работы с уже готовыми выгрузками сформируйте новую выгрузку ESI. Она сохранится в кеш сайта
                     </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className="text-xs font-medium text-eve-muted">Регион 2 — целевой рынок</p>
-                    <FileDropzone
-                      onFile={ onProdCrossRightFile }
-                      disabled={ loading }
-                      fileName={ compareRightFile }
-                    />
-                    <p
-                      className="truncate text-[11px] text-eve-bright/85"
-                      title={ compareRightFile || undefined }
-                    >
-                      { compareRightFile ? compareRightFile : 'Файл не выбран' }
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-eve-border/35 pt-3">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <div
-                      className="inline-flex min-h-[2.125rem] min-w-0 max-w-[min(100%,14rem)] items-center truncate rounded-md border border-eve-border/55 bg-eve-surface/55 px-2 text-xs font-semibold text-eve-gold"
-                      title="Направление сравнения"
-                    >
-                      { compareLeftRegionLabel } → { compareRightRegionLabel }
-                    </div>
-                    <button
-                      type="button"
-                      onClick={ onSwapCompareFiles }
-                      disabled={
-                        loading ||
-                        !compareLeftFile ||
-                        !compareRightFile ||
-                        !compareLeftBuffer ||
-                        !compareRightBuffer
-                      }
-                      className="inline-flex shrink-0 items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/58 p-1.5 text-eve-bright/95 shadow-glass-subtle transition-colors hover:border-eve-accent/50 hover:text-eve-accent disabled:opacity-50"
-                      title="Поменять регионы местами"
-                      aria-label="Поменять выбранные регионы местами"
-                    >
-                      <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={ () => void onApplyCrossRegionFiles() }
-                    disabled={
-                      loading ||
-                      !compareLeftFile ||
-                      !compareRightFile ||
-                      !compareLeftBuffer ||
-                      !compareRightBuffer
-                    }
-                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
-                  >
-                    Применить сравнение
-                  </button>
-                </div>
-              </section>
-            ) }
-            { isDevExportServer && (
-            <>
-                  <section className="@container eve-panel p-2.5">
-                    <h3 className="eve-section-title mb-2">Торговля в одном регионе</h3>
                       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
                           <span className="shrink-0">Файл</span>
@@ -1154,7 +1126,7 @@ export function TradingView(
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
                           >
                             { localExportFilesSorted.length === 0 ? (
-                              <option value="">— папка пуста —</option>
+                              <option value="">{ exportListEmptyLabel }</option>
                             ) : (
                               localExportFilesSorted.map((f) => (
                                 <option key={ f.name } value={ f.name }>
@@ -1170,9 +1142,23 @@ export function TradingView(
                             onClick={ () => void refreshLocalExportFiles() }
                             disabled={ loading || localExportLoading }
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 text-eve-muted shadow-glass-subtle hover:border-eve-muted/60 hover:text-eve-bright disabled:opacity-50"
-                            title="Обновить список из exports/"
+                            title="Обновить список из кеша браузера"
                           >
                             <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              loading ||
+                              localExportLoading ||
+                              !selectedLocalExportFile
+                            }
+                            onClick={ () => void onDeleteCachedExportFile() }
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 text-eve-muted shadow-glass-subtle hover:border-eve-danger/55 hover:text-eve-danger disabled:opacity-50"
+                            title="Удалить выбранный файл из кеша браузера"
+                            aria-label="Удалить выбранный файл из кеша браузера"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
                           </button>
                           <button
                             type="button"
@@ -1184,19 +1170,24 @@ export function TradingView(
                             }
                             onClick={ () => void onOpenSelectedLocalExportFile() }
                             className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
-                            title="Открыть в таблицу выбранный файл из exports/"
+                            title="Открыть в таблицу выбранный файл из кеша браузера"
                           >
                             <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
                             Открыть
                           </button>
                         </div>
                       </div>
-                  </section>
-
-                  <section className="@container eve-panel p-2.5">
-                      <h3 className="eve-section-title mb-2">
-                        Торговля между регионами
-                      </h3>
+              </div>
+              <div
+                role="tabpanel"
+                id="trade-panel-cross"
+                aria-labelledby="trade-tab-cross"
+                hidden={ tradeTab !== 'cross' }
+              >
+                      <p className="mb-2 text-[10px] leading-snug text-eve-muted/90">
+                        Регион 1 — откуда везём товар, регион 2 — рынок продажи.
+                        Оба файла из кеша браузера.
+                      </p>
                       <div className="flex flex-col gap-2.5">
                         <label className="flex min-w-0 items-center gap-2 text-xs text-eve-muted">
                           <span className="shrink-0">Регион 1</span>
@@ -1207,7 +1198,7 @@ export function TradingView(
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
                           >
                             { localExportFilesSorted.length === 0 ? (
-                              <option value="">— папка пуста —</option>
+                              <option value="">{ exportListEmptyLabel }</option>
                             ) : (
                               localExportFilesSorted.map((f) => (
                                 <option key={ `cmp-left-${ f.name }` } value={ f.name }>
@@ -1226,7 +1217,7 @@ export function TradingView(
                             disabled={ loading || localExportLoading || localExportFilesSorted.length === 0 }
                           >
                             { localExportFilesSorted.length === 0 ? (
-                              <option value="">— папка пуста —</option>
+                              <option value="">{ exportListEmptyLabel }</option>
                             ) : (
                               localExportFilesSorted.map((f) => (
                                 <option key={ `cmp-right-${ f.name }` } value={ f.name }>
@@ -1263,7 +1254,8 @@ export function TradingView(
                               loading ||
                               localExportLoading ||
                               !compareLeftFile ||
-                              !compareRightFile
+                              !compareRightFile ||
+                              compareLeftFile === compareRightFile
                             }
                             className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
                           >
@@ -1272,30 +1264,18 @@ export function TradingView(
                           </div>
                         </div>
                       </div>
-                    </section>
-            </>
-            ) }
-            <section className="@container eve-panel p-2.5">
-                    <h3 className="eve-section-title mb-2">Собрать через ESI</h3>
-                    <ExportBar
-                      onLoadBuffer={ loadFromBuffer }
-                      onOpenedExportFile={ onExportBarOpenedFile }
-                      disabled={ loading }
-                      hideLocalFileOpenSection
-                      hideMarketLogsSection
-                      hideEsiOuterCard
-                      brokerFeePct={ brokerFeePct }
-                      salesTaxPct={ salesTaxPct }
-                      highPriceThresholdIsk={ highPriceThresholdIsk }
-                      marketLogsPath={ marketLogsPath }
-                      onMessageChange={ setExportMsg }
-                    />
-                  { exportMsg && (
-                    <p className="glass-subtle mt-2 px-2.5 py-1.5 text-xs text-eve-muted">
-                      { exportMsg }
-                    </p>
-                  ) }
+              </div>
             </section>
+            <ExportBar
+              onLoadBuffer={ loadFromBuffer }
+              disabled={ loading }
+              hideLocalFileOpenSection
+              hideEsiSection
+              brokerFeePct={ brokerFeePct }
+              salesTaxPct={ salesTaxPct }
+              highPriceThresholdIsk={ highPriceThresholdIsk }
+              marketLogsPath={ marketLogsPath }
+            />
           </aside>
 
           <button

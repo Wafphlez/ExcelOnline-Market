@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
 import { useInputWheelNudge } from './hooks/useInputWheelNudge'
 import { CharacterDashboard } from './components/character/CharacterDashboard'
+import { HeaderEveAccount } from './components/character/HeaderEveAccount'
 import { tryFinishOAuthOnLoad } from './lib/eve/eveSso'
 import {
   APP_THEMES,
@@ -13,6 +14,7 @@ import {
 } from './lib/ui/theme'
 import { readMarketLogsPath, persistMarketLogsPath } from './components/ExportBar'
 import { isDevExportServer } from './lib/devExportApi'
+import { clearCachedExportWorkbooks, listCachedExportWorkbooks } from './lib/exportWorkbookCache'
 import TradingView from './views/TradingView'
 import StarfieldWarp from './components/StarfieldWarp'
 
@@ -23,6 +25,16 @@ const LS_BROKER_PCT = 'excelMarket_brokerFeePct'
 const LS_SALES_TAX_PCT = 'excelMarket_salesTaxPct'
 const DEFAULT_BROKER_FEE_PCT = 1.4
 const DEFAULT_SALES_TAX_PCT = 4.2
+
+function formatCacheMegabytes(bytes: number | null): string
+{
+  if (bytes == null) return '…'
+  const mb = bytes / (1024 * 1024)
+  return `${ mb.toLocaleString('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }) } МБ`
+}
 
 function readStoredFeePct(key: string, fallback: number): number
 {
@@ -80,6 +92,11 @@ export default function App(): JSX.Element
   const [staticStarsEnabled, setStaticStarsEnabled] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('main')
+  const [clearExportsPhase, setClearExportsPhase] = useState<
+    'idle' | 'confirm' | 'busy' | 'done' | 'error'
+  >('idle')
+  const [clearExportsError, setClearExportsError] = useState<string | null>(null)
+  const [exportCacheBytes, setExportCacheBytes] = useState<number | null>(null)
   const [marketLogsPath, setMarketLogsPath] = useState(readMarketLogsPath)
   const [brokerFeePct, setBrokerFeePct] = useState(() =>
     readStoredFeePct(LS_BROKER_PCT, DEFAULT_BROKER_FEE_PCT)
@@ -108,6 +125,61 @@ export default function App(): JSX.Element
     applyAppThemeToDocument(theme)
     persistAppTheme(theme)
   }, [theme])
+
+  useEffect(() =>
+  {
+    if (settingsOpen) return
+    setClearExportsPhase('idle')
+    setClearExportsError(null)
+  }, [settingsOpen])
+
+  useEffect(() =>
+  {
+    if (!settingsOpen || settingsTab !== 'main') return
+    let cancelled = false
+    void listCachedExportWorkbooks()
+      .then((list) =>
+      {
+        if (cancelled) return
+        setExportCacheBytes(list.reduce((sum, item) => sum + item.size, 0))
+      })
+      .catch(() =>
+      {
+        if (!cancelled) setExportCacheBytes(null)
+      })
+    return () =>
+    {
+      cancelled = true
+    }
+  }, [settingsOpen, settingsTab, clearExportsPhase])
+
+  const onClearCachedExports = () =>
+  {
+    if (clearExportsPhase === 'busy') return
+    if (clearExportsPhase !== 'confirm')
+    {
+      setClearExportsPhase('confirm')
+      setClearExportsError(null)
+      return
+    }
+    setClearExportsPhase('busy')
+    void (async () =>
+    {
+      try
+      {
+        await clearCachedExportWorkbooks()
+        setClearExportsPhase('done')
+      } catch (error)
+      {
+        setClearExportsError(
+          error instanceof Error
+            ? error.message
+            : 'Не удалось удалить выгрузки из кеша браузера.'
+        )
+        setClearExportsPhase('error')
+      }
+    })()
+  }
 
   useEffect(() =>
   {
@@ -186,7 +258,7 @@ export default function App(): JSX.Element
       <div className="relative z-[1] min-h-screen lg:flex lg:h-screen lg:flex-col">
         <header className="relative z-[60] shrink-0 overflow-visible px-3 pt-3 pb-1 sm:px-4">
           <div className="flex w-full flex-col items-stretch gap-2 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center lg:gap-x-6">
-            <div className="flex items-center justify-between gap-2 lg:contents">
+            <div className="flex flex-wrap items-center justify-between gap-2 lg:contents">
             <nav
               aria-label="Навигация"
               className="inline-flex min-w-0 items-center justify-start lg:col-start-1 lg:row-start-1"
@@ -197,7 +269,7 @@ export default function App(): JSX.Element
                   active={ tab === 'trading' }
                   onClick={ () => setTab('trading') }
                 >
-                  Trading
+                  Торговля
                 </TabButton>
                 <TabButton
                   active={ tab === 'character' }
@@ -207,7 +279,8 @@ export default function App(): JSX.Element
                 </TabButton>
               </div>
             </nav>
-            <div className="flex min-w-0 justify-end lg:col-start-3 lg:row-start-1 lg:justify-self-end">
+            <div className="flex shrink-0 items-center justify-end gap-2 lg:col-start-3 lg:row-start-1 lg:justify-self-end">
+            <HeaderEveAccount />
             <div ref={settingsDropdownRef} className="relative">
               <button
                 type="button"
@@ -377,6 +450,46 @@ export default function App(): JSX.Element
                         />
                       </div>
                     )}
+                    <div className="rounded-md border border-eve-border/45 bg-eve-bg/35 p-2.5">
+                      <span className="eve-kicker mb-2 block">Выгрузки</span>
+                      <p className="mb-2 text-[11px] leading-snug text-eve-muted">
+                        Текущий кеш — { formatCacheMegabytes(exportCacheBytes) }
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={ onClearCachedExports }
+                          disabled={ clearExportsPhase === 'busy' || clearExportsPhase === 'done' }
+                          className={ `rounded-md border px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-danger/45 disabled:opacity-60 ${
+                            clearExportsPhase === 'confirm'
+                              ? 'border-eve-danger bg-eve-danger/20 text-eve-danger'
+                              : 'border-eve-danger/55 bg-eve-danger/10 text-eve-danger/95 hover:border-eve-danger/80 hover:bg-eve-danger/20'
+                          }` }
+                        >
+                          { clearExportsPhase === 'confirm'
+                            ? 'Подтвердить удаление'
+                            : clearExportsPhase === 'busy'
+                              ? 'Удаляем…'
+                              : clearExportsPhase === 'done'
+                                ? 'Выгрузки удалены'
+                                : 'Удалить выгрузки' }
+                        </button>
+                        { clearExportsPhase === 'confirm' && (
+                          <button
+                            type="button"
+                            onClick={ () => setClearExportsPhase('idle') }
+                            className="rounded-md border border-eve-border/80 bg-eve-surface/55 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-eve-muted hover:border-eve-accent/45 hover:text-eve-bright focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-accent/45"
+                          >
+                            Отмена
+                          </button>
+                        ) }
+                      </div>
+                      { clearExportsPhase === 'error' && clearExportsError && (
+                        <p className="mt-2 text-[11px] text-eve-danger" role="alert">
+                          { clearExportsError }
+                        </p>
+                      ) }
+                    </div>
                     </>
                     )}
                     {settingsTab === 'interface' && (

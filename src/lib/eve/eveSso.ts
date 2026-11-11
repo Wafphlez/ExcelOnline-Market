@@ -18,9 +18,11 @@ import
     readPendingPkce,
     clearPendingPkce,
     savePendingPkce,
+    notifyEveSessionChanged,
     setAccessToken,
     setRefreshToken,
     setStoredCharacterId,
+    setStoredCharacterName,
   } from './authStore'
 
 export function isEveSsoConfigured(): boolean
@@ -175,6 +177,8 @@ export async function tryFinishOAuthOnLoad(
     setAccessToken(token.access_token, token.expires_in)
     const v = await verifyAccess(token.access_token)
     setStoredCharacterId(v.CharacterID)
+    setStoredCharacterName(v.CharacterName)
+    notifyEveSessionChanged()
     onMessage?.(`Вход выполнен: ${ v.CharacterName }`)
   } catch (e)
   {

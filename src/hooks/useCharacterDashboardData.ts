@@ -29,6 +29,7 @@ import
     type TimePoint,
     type TradeDayAgg,
   } from '../lib/eve/capitalMetrics'
+import { EVE_SESSION_CHANGED_EVENT } from '../lib/eve/constants'
 import { getStoredCharacterId } from '../lib/eve/authStore'
 import { ensureValidAccessToken } from '../lib/eve/eveSso'
 import type
@@ -262,6 +263,16 @@ export function useCharacterDashboardData(
 
   useEffect(() =>
   {
+    const onSession = (): void =>
+    {
+      setVersion((n) => n + 1)
+    }
+    window.addEventListener(EVE_SESSION_CHANGED_EVENT, onSession)
+    return () => window.removeEventListener(EVE_SESSION_CHANGED_EVENT, onSession)
+  }, [])
+
+  useEffect(() =>
+  {
     if (!enabled) return
     const ac = new AbortController()
     setState({ status: 'loading' })
@@ -273,7 +284,7 @@ export function useCharacterDashboardData(
       {
         setState({
           status: 'unauthorized',
-          message: 'Войдите через EVE SSO (кнопка на вкладке «Персонаж»).',
+          message: '',
         })
         return
       }

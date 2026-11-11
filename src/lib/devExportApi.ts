@@ -16,24 +16,11 @@ const BASE = '/__dev/export'
 
 export const isDevExportServer = import.meta.env.DEV
 
-export type ExportListItem = { name: string; size: number; mtime: string }
 export type MarketLogLatestFile = {
   name: string
   size: number
   mtime: string
   birthtime?: string
-}
-
-export async function listExportFiles(): Promise<ExportListItem[]> {
-  if (!isDevExportServer) return []
-  const r = await fetch(`${BASE}/list`)
-  if (!r.ok) return []
-  const j = (await r.json()) as { files?: ExportListItem[] }
-  return j.files ?? []
-}
-
-export function devExportFileUrl(fileName: string): string {
-  return `${BASE}/file/${encodeURIComponent(fileName)}?v=${Date.now()}`
 }
 
 export function marketLogsStreamUrl(dirPath: string): string {

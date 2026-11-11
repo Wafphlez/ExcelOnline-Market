@@ -3,7 +3,7 @@ export type ExportRegion = {
   label: string
   /** GET к liquidity Excel (только известные регионы) */
   downloadUrl: string
-  /** Имя в `exports/`, перезапись при повторном скачивании */
+  /** Старое имя файла выгрузки; по нему узнаётся регион в названии книги. */
   fileName: string
   /** EVE `region_id` для выгрузки через ESI (dev) */
   esiRegionId: number

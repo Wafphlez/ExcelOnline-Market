@@ -142,7 +142,7 @@ export function EsiExportProgressPanel({
       {m > 0 && (
         <div className="space-y-2.5">
           <p className="text-[10px] text-eve-muted/90">
-            Поиск завершится досрочно если в evetech закончатся записи
+            Ожидайте завершения выгрузки ордеров...
           </p>
           <ProgressRow
             label="Sell"

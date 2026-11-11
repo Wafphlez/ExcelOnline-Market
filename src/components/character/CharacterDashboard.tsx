@@ -608,15 +608,14 @@ export function CharacterDashboard(
             </h2>
             <div className="flex flex-wrap items-center gap-1.5">
               { ssoOk ? (
-                <TabButton
-                  active
+                <button
+                  type="button"
                   onClick={ onLogout }
+                  className="inline-flex h-8 items-center gap-1 rounded-md border border-eve-danger/70 bg-eve-danger/15 px-3 text-xs font-semibold uppercase tracking-wide text-eve-danger hover:border-eve-danger hover:bg-eve-danger/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-eve-danger/45"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    <LogOut className="h-3.5 w-3.5" />
-                    Выйти (EVE SSO)
-                  </span>
-                </TabButton>
+                  <LogOut className="h-3.5 w-3.5" aria-hidden />
+                  Выйти
+                </button>
               ) : null }
               <button
                 type="button"
@@ -672,7 +671,7 @@ export function CharacterDashboard(
             </p>
           ) }
 
-          { state.status === 'unauthorized' && (
+          { state.status === 'unauthorized' && state.message && (
             <p className="text-sm text-eve-muted">{ state.message }</p>
           ) }
           { state.status === 'error' && (

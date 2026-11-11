@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FolderOpen, Globe, RefreshCw } from 'lucide-react'
+import { Globe } from 'lucide-react'
 import { FileDropzone } from './FileDropzone'
 import { MarketLogTxtDropzone } from './MarketLogTxtDropzone'
 import { EXPORT_REGIONS } from '../lib/exportRegions'
@@ -8,15 +8,13 @@ import {
   fetchLatestMarketLogFile,
   fetchMarketLogFileBuffer,
   marketLogsStreamUrl,
-  devExportFileUrl,
   fetchEsiDevLogs,
   isDevExportServer,
-  listExportFiles,
   postEsiExportForceStop,
   postEsiExportStop,
-  type ExportListItem,
 } from '../lib/devExportApi'
 import { downloadXlsxBytes } from '../lib/downloadXlsx'
+import { putCachedExportWorkbook } from '../lib/exportWorkbookCache'
 import { marginPercentCellStyle } from '../lib/rowHeatmap'
 import { formatIsk, formatPercent } from '../lib/formatNumber'
 import { EsiExportProgressPanel } from './EsiExportProgressPanel'
@@ -35,15 +33,6 @@ const LS_ESI_INCLUDE_ORDER_SNAPSHOT = 'excelMarket_esiIncludeOrderSnapshot'
 const LS_ESI_TRADE_HUB_ONLY = 'excelMarket_esiTradeHubOnly'
 const LS_ESI_HISTORY_DAYS = 'excelMarket_esiHistoryDays'
 const LS_ENABLE_MARKET_EXPORT_LOGS = 'excelMarket_enableMarketExportLogs'
-
-function readLastExportFileName(): string {
-  try {
-    const v = localStorage.getItem(LS_LAST_EXPORT_FILE)
-    return v ?? ''
-  } catch {
-    return ''
-  }
-}
 
 function readEnableMarketExportLogs(): boolean {
   try {
@@ -94,6 +83,8 @@ type ExportBarProps = Readonly<{
   hideMarketLogsSection?: boolean
   /** Карточку ESI рисует родитель (TradingView) — без второй рамки `eve-panel`. */
   hideEsiOuterCard?: boolean
+  /** Карточку локального Excel рисует родитель — без второй рамки и заголовка. */
+  hideLocalOuterCard?: boolean
   brokerFeePct: number
   salesTaxPct: number
   highPriceThresholdIsk: number
@@ -355,6 +346,7 @@ export function ExportBar({
   hideEsiSection = false,
   hideMarketLogsSection = false,
   hideEsiOuterCard = false,
+  hideLocalOuterCard = false,
   brokerFeePct,
   salesTaxPct,
   highPriceThresholdIsk,
@@ -366,7 +358,6 @@ export function ExportBar({
     const id = readLastExportRegionId()
     return regions.some((r) => r.id === id) ? id : (regions[0]?.id ?? '')
   })
-  const [files, setFiles] = useState<ExportListItem[]>([])
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [esiIncludeOrderSnapshot, setEsiIncludeOrderSnapshot] = useState(
@@ -374,9 +365,6 @@ export function ExportBar({
   )
   const [esiTradeHubOnly, setEsiTradeHubOnly] = useState(readEsiTradeHubOnly)
   const [esiHistoryDays, setEsiHistoryDays] = useState<2 | 7 | 30>(readEsiHistoryDays)
-  const [selectedExportFile, setSelectedExportFile] = useState(
-    readLastExportFileName
-  )
   const [esiProgress, setEsiProgress] = useState<EsiExportProgressState>(() => ({
     ...ESI_EXPORT_PROGRESS_IDLE,
   }))
@@ -404,13 +392,6 @@ export function ExportBar({
   const trimmedMarketLogsPath = marketLogsPath.trim()
   const selectedHubName = selected?.tradeHubName ?? 'торгового хаба выбранного региона'
 
-  /** Только .xlsx/.xls из exports/, свежие сверху */
-  const exportFilesSorted = useMemo(() => {
-    return [...files]
-      .filter((f) => /\.(xlsx|xls)$/i.test(f.name))
-      .sort((a, b) => b.mtime.localeCompare(a.mtime) || a.name.localeCompare(b.name))
-  }, [files])
-
   useEffect(() => {
     if (!esiExporting) return
     const id = globalThis.setInterval(() => {
@@ -435,23 +416,6 @@ export function ExportBar({
     return (Date.now() - esiTypesPhaseAt) / 1000
   }, [esiTimerTick, esiTypesPhaseAt])
 
-  const refreshList = useCallback(async () => {
-    if (!isDevExportServer) {
-      setFiles([])
-      return
-    }
-    try {
-      const list = await listExportFiles()
-      setFiles(list)
-    } catch {
-      setFiles([])
-    }
-  }, [])
-
-  useEffect(() => {
-    void refreshList()
-  }, [refreshList])
-
   useEffect(() => {
     try {
       if (selectedId) {
@@ -466,35 +430,6 @@ export function ExportBar({
       /* ignore */
     }
   }, [selectedId])
-
-  useEffect(() => {
-    if (!isDevExportServer) return
-    if (exportFilesSorted.length === 0) {
-      setSelectedExportFile('')
-      return
-    }
-    setSelectedExportFile((prev) => {
-      if (prev === '') {
-        return exportFilesSorted[0]?.name ?? ''
-      }
-      if (exportFilesSorted.some((f) => f.name === prev)) {
-        return prev
-      }
-      return exportFilesSorted[0]?.name ?? ''
-    })
-  }, [exportFilesSorted, isDevExportServer])
-
-  useEffect(() => {
-    try {
-      if (selectedExportFile) {
-        localStorage.setItem(LS_LAST_EXPORT_FILE, selectedExportFile)
-      } else {
-        localStorage.removeItem(LS_LAST_EXPORT_FILE)
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [selectedExportFile])
 
   useEffect(() => {
     try {
@@ -672,22 +607,32 @@ export function ExportBar({
         u8.byteOffset,
         u8.byteOffset + u8.byteLength
       ) as ArrayBuffer
+      let cachedInBrowser = false
+      let cacheError: string | null = null
+      try {
+        await putCachedExportWorkbook(result.fileName, tableAb)
+        cachedInBrowser = true
+      } catch (cacheErr) {
+        cacheError =
+          cacheErr instanceof Error
+            ? cacheErr.message
+            : 'Не удалось записать файл в кеш браузера.'
+      }
       await onLoadBuffer(tableAb)
       downloadXlsxBytes(result.buffer, result.fileName)
+      const cacheNote = cachedInBrowser
+        ? ', сохранён в кеш браузера'
+        : `. ${cacheError ?? 'В кеш браузера записать не удалось'}`
       setMsg(
         `ESI: ${result.rowCount} позиций → «${result.fileName}» скачан и открыт в таблице${
           result.partial ? ' (частично, принудительный стоп)' : ''
-        }`
+        }${cacheNote}`
       )
       onOpenedExportFile?.(result.fileName)
       try {
         localStorage.setItem(LS_LAST_EXPORT_FILE, result.fileName)
       } catch {
         /* ignore */
-      }
-      if (isDevExportServer) {
-        await refreshList()
-        setSelectedExportFile(result.fileName)
       }
     } catch (e) {
       if (e instanceof Error && /ESI:\s*stop-force/i.test(e.message)) {
@@ -732,109 +677,39 @@ export function ExportBar({
     }
   }
 
-  const onOpenLocalExportFile = async () => {
-    if (!selectedExportFile) return
-    setMsg(null)
-    if (!isDevExportServer) {
-      return
-    }
-    setLoading(true)
-    try {
-      const u = devExportFileUrl(selectedExportFile)
-      const res = await fetch(u)
-      if (!res.ok) {
-        setMsg(
-          'Файл не найден в exports/ — обновите список или скачайте выгрузку снова.'
-        )
-        return
-      }
-      const buf = await res.arrayBuffer()
-      await onLoadBuffer(buf)
-      onOpenedExportFile?.(selectedExportFile)
-      setPickedExcelName(selectedExportFile)
-      setMsg(`Открыт: ${selectedExportFile}`)
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : 'Ошибка открытия')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const onLocalExcelFile = useCallback(
     async (file: File) => {
       setPickedExcelName(file.name)
       const buf = await file.arrayBuffer()
+      try {
+        await putCachedExportWorkbook(file.name, buf)
+        onOpenedExportFile?.(file.name)
+        setMsg(`В кеше браузера: ${file.name}`)
+      } catch (e) {
+        setMsg(
+          e instanceof Error ? e.message : 'Не удалось записать файл в кеш браузера.'
+        )
+      }
       await onLoadBuffer(buf)
     },
-    [onLoadBuffer]
+    [onLoadBuffer, onOpenedExportFile]
   )
 
   return (
     <>
       {!hideLocalFileOpenSection && (
-        <section className="@container eve-panel p-2.5">
-          <h3 className="eve-section-title mb-2">Локальный Excel</h3>
+        <section className={ hideLocalOuterCard ? '@container contents' : '@container eve-panel p-2.5' }>
+          { !hideLocalOuterCard && (
+            <h3 className="eve-section-title mb-2">Локальный Excel</h3>
+          ) }
           <p className="mb-2 text-[11px] leading-relaxed text-eve-muted/90">
-            Перетащите файл сюда или нажмите «Выбрать .xlsx».
+            Перетащите файл сюда или нажмите «Выбрать .xlsx». Файл останется в кеше браузера — его можно снова открыть в списке выгрузок.
           </p>
           <FileDropzone
             onFile={(f) => void onLocalExcelFile(f)}
             disabled={disabled || loading}
             fileName={pickedExcelName}
           />
-          {isDevExportServer ? (
-            <>
-              <h4 className="eve-section-title mb-2 mt-5 text-[11px] uppercase tracking-wide text-eve-muted/95">
-                Папка exports/ на диске проекта
-              </h4>
-              <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-                <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-eve-muted sm:max-w-md">
-                  <span className="shrink-0">Файл</span>
-                  <select
-                    className="min-w-0 flex-1 rounded-md border border-eve-border/75 bg-eve-surface/65 py-1.5 pl-2 pr-8 text-xs text-white shadow-glass-subtle focus:border-eve-accent/70 focus:outline-none"
-                    value={selectedExportFile}
-                    onChange={(e) => setSelectedExportFile(e.target.value)}
-                    disabled={disabled || exportFilesSorted.length === 0}
-                  >
-                    {exportFilesSorted.length === 0 ? (
-                      <option value="">— папка пуста —</option>
-                    ) : (
-                      exportFilesSorted.map((f) => (
-                        <option key={f.name} value={f.name}>
-                          {f.name} ({Math.round(f.size / 1024)} KB)
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </label>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={
-                      disabled ||
-                      loading ||
-                      exportFilesSorted.length === 0 ||
-                      !selectedExportFile
-                    }
-                    onClick={() => void onOpenLocalExportFile()}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-md border border-eve-accent/70 bg-eve-accent-muted px-4 py-2 text-xs font-semibold text-eve-accent transition-colors hover:border-eve-accent hover:bg-eve-highlight focus:outline-none focus:ring-2 focus:ring-eve-accent/35 disabled:opacity-50"
-                    title="Открыть в таблицу выбранный файл из exports/"
-                  >
-                    <FolderOpen className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                    Открыть
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void refreshList()}
-                    className="inline-flex items-center justify-center rounded-md border border-eve-border/75 bg-eve-surface/60 p-1.5 text-eve-muted shadow-glass-subtle hover:border-eve-muted/60 hover:text-eve-bright"
-                    title="Обновить список из exports/"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                </div>
-              </div>
-            </>
-          ) : null}
         </section>
       )}
 
@@ -878,10 +753,6 @@ export function ExportBar({
                 <option value="2">2</option>
               </select>
             </label>
-            <p className="@[450px]:col-span-3 text-[10px] text-eve-muted/90">
-              Выгрузка идёт в полном режиме: все страницы ордеров до исчерпания и все
-              доступные типы без ручных лимитов.
-            </p>
             <div className="@[450px]:col-span-3 glass-subtle flex items-center justify-between gap-3 px-2 py-1.5 text-xs">
               <div className="min-w-0">
                 <p className="font-semibold text-eve-bright/95">

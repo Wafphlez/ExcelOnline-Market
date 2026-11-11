@@ -13,16 +13,6 @@ const projectRoot = path.resolve(path.dirname(__filename), '.')
 const exportsDir = path.join(projectRoot, 'exports')
 const filtersFilePath = path.join(exportsDir, 'filters.json')
 
-function isSafeFileName(name: string): boolean {
-  return /^[a-zA-Z0-9._-]+\.(xlsx|xls)$/.test(name) && !name.includes('..')
-}
-
-function isUnderExportsDir(absolute: string): boolean {
-  const resolved = path.resolve(absolute)
-  const ed = path.resolve(exportsDir)
-  return resolved === ed || resolved.startsWith(ed + path.sep)
-}
-
 function parseMarketLogsDirPath(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const v = raw.trim()
@@ -85,36 +75,6 @@ function devExportPlugin(): Plugin {
           const opt = applyDevCors(req, res)
           if (opt.handled) return
           void (async () => {
-            if (req.method === 'GET' && pathname === '/__dev/export/list') {
-              try {
-                const names = await fs.readdir(exportsDir)
-                const out: { name: string; size: number; mtime: string }[] = []
-                for (const name of names) {
-                  if (name.startsWith('.')) continue
-                  if (!/\.(xlsx|xls)$/i.test(name)) continue
-                  const p = path.join(exportsDir, name)
-                  if (!isUnderExportsDir(p)) continue
-                  const st = await fs.stat(p)
-                  out.push({
-                    name,
-                    size: st.size,
-                    mtime: st.mtime.toISOString(),
-                  })
-                }
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(JSON.stringify({ files: out }))
-              } catch (e) {
-                res.statusCode = 500
-                res.setHeader('Content-Type', 'application/json; charset=utf-8')
-                res.end(
-                  JSON.stringify({
-                    error: e instanceof Error ? e.message : 'list failed',
-                  })
-                )
-              }
-              return
-            }
-
             if (req.method === 'GET' && pathname === '/__dev/export/marketlogs/stream') {
               const reqUrl = new URL(req.url, 'http://127.0.0.1')
               const dirPath = parseMarketLogsDirPath(reqUrl.searchParams.get('dirPath'))
@@ -275,37 +235,6 @@ function devExportPlugin(): Plugin {
                 res.statusCode = 404
                 return res.end('not found')
               }
-            }
-
-            if (req.method === 'GET' && pathname.startsWith('/__dev/export/file/')) {
-              const raw = decodeURIComponent(
-                pathname.slice('/__dev/export/file/'.length) ?? ''
-              )
-              if (!isSafeFileName(raw)) {
-                res.statusCode = 400
-                return res.end('bad filename')
-              }
-              const filePath = path.join(exportsDir, path.basename(raw))
-              if (!isUnderExportsDir(filePath) || !isSafeFileName(path.basename(filePath))) {
-                res.statusCode = 400
-                return res.end('bad path')
-              }
-              try {
-                const data = await fs.readFile(filePath)
-                res.setHeader(
-                  'Content-Type',
-                  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-                res.setHeader(
-                  'Content-Disposition',
-                  `inline; filename="${encodeURIComponent(path.basename(filePath))}"`
-                )
-                res.end(data)
-              } catch {
-                res.statusCode = 404
-                res.end('not found')
-              }
-              return
             }
 
             if (req.method === 'GET' && pathname === '/__dev/filters/load') {

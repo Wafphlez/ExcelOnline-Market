@@ -29,22 +29,15 @@ export function EveSsoLoginPanel(
         >
           <img
             src={ EVE_SSO_OFFICIAL_LOGIN_BUTTONS.largeWhite }
-            width={ 360 }
-            height={ 64 }
-            className="h-auto max-w-full"
+            width={ 270 }
+            height={ 45 }
+            className="h-[45px] w-[270px] max-w-full"
             alt="LOG IN with EVE Online"
             loading="eager"
             decoding="async"
             draggable={ false }
           />
         </button>
-        <p className="mt-1.5 max-w-[20rem] text-[10px] leading-snug text-eve-muted/80">
-          Используется официальная графика CCP для EVE SSO. Аккаунт и пароль вводятся только на
-          { ' ' }
-          <span className="whitespace-nowrap">login.eveonline.com</span>
-          { ' ' }
-          — приложению известен только токен с выбранными вами scope.
-        </p>
       </div>
 
       <div className="min-w-0 flex-1 rounded border border-eve-border/40 bg-eve-bg/30 p-2.5 shadow-eve-inset">
@@ -72,14 +65,6 @@ export function EveSsoLoginPanel(
             </li>
           )) }
         </ul>
-        <a
-          href="https://developers.eveonline.com/docs/services/sso/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 inline-block text-[10px] text-eve-accent/90 underline decoration-eve-border hover:text-eve-bright"
-        >
-          Документация CCP: EVE Single Sign-On
-        </a>
       </div>
     </div>
   )

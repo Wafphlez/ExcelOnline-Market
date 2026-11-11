@@ -1,6 +1,8 @@
 import
   {
+    EVE_SESSION_CHANGED_EVENT,
     LS_EVE_CHARACTER_ID,
+    LS_EVE_CHARACTER_NAME,
     LS_EVE_REFRESH,
     SS_EVE_ACCESS,
     SS_EVE_ACCESS_EXP,
@@ -122,6 +124,37 @@ export function setStoredCharacterId(id: number | null): void
   }
 }
 
+export function setStoredCharacterName(name: string | null): void
+{
+  try
+  {
+    const trimmed = name?.trim() ?? ''
+    if (!trimmed) localStorage.removeItem(LS_EVE_CHARACTER_NAME)
+    else localStorage.setItem(LS_EVE_CHARACTER_NAME, trimmed)
+  } catch
+  {
+    /* ignore */
+  }
+}
+
+export function getStoredCharacterName(): string | null
+{
+  try
+  {
+    const v = localStorage.getItem(LS_EVE_CHARACTER_NAME)?.trim() ?? ''
+    return v.length > 0 ? v : null
+  } catch
+  {
+    return null
+  }
+}
+
+export function notifyEveSessionChanged(): void
+{
+  if (globalThis.window === undefined) return
+  globalThis.window.dispatchEvent(new Event(EVE_SESSION_CHANGED_EVENT))
+}
+
 export function getStoredCharacterId(): number | null
 {
   try
@@ -142,4 +175,6 @@ export function clearAllEveSession(): void
   clearAccessToken()
   setRefreshToken(null)
   setStoredCharacterId(null)
+  setStoredCharacterName(null)
+  notifyEveSessionChanged()
 }

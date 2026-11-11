@@ -71,6 +71,9 @@ export const ESI_MAX_RETRIES = 12
 
 export const LS_EVE_REFRESH = 'excelMarket_eveSsoRefreshToken'
 export const LS_EVE_CHARACTER_ID = 'excelMarket_eveSsoCharacterId'
+export const LS_EVE_CHARACTER_NAME = 'excelMarket_eveSsoCharacterName'
+/** Шапка и дашборд перечитывают сессию после входа и выхода. */
+export const EVE_SESSION_CHANGED_EVENT = 'excelmarket:eve-session-changed'
 export const SS_EVE_ACCESS = 'excelMarket_eveSsoAccessToken'
 export const SS_EVE_ACCESS_EXP = 'excelMarket_eveSsoAccessExpMs'
 
